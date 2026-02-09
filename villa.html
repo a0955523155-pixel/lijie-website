@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五之一 VIP 別館 | 俐姐 Villa</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* --- 核心風格 --- */
+        :root {
+            --primary: #222;
+            --gold: #d4af37;
+            --gold-gradient: linear-gradient(135deg, #d4af37 0%, #f1c40f 100%);
+            --bg-light: #f9f9f9;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: "Helvetica Neue", "PingFang TC", sans-serif; color: var(--primary); background: #fff; }
+        a { text-decoration: none; color: inherit; }
+
+        /* --- 懸浮返回按鈕 (取代舊的頂部文字條) --- */
+        .floating-nav {
+            position: fixed; top: 20px; left: 20px; z-index: 1000;
+        }
+        .back-btn {
+            display: flex; align-items: center; gap: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px); /* 毛玻璃特效 */
+            padding: 12px 25px;
+            border-radius: 50px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            font-weight: bold; font-size: 0.95rem; color: #333;
+            transition: all 0.3s ease; border: 1px solid rgba(255,255,255,0.5);
+        }
+        .back-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+            background: #fff; color: var(--gold);
+        }
+        .back-btn i { transition: transform 0.3s; }
+        .back-btn:hover i { transform: translateX(-5px); }
+
+        /* --- Hero 主視覺 (美化版) --- */
+        .hero {
+            height: 75vh;
+            background-image: url('images/villa-hero.jpg'); 
+            background-size: cover; background-position: center;
+            display: flex; align-items: center; justify-content: center;
+            position: relative;
+        }
+        /* 漸層遮罩讓文字更清楚 */
+        .hero::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.3), rgba(0,0,0,0.6));
+        }
+
+        .hero-content {
+            position: relative; z-index: 2; text-align: center; color: #fff;
+            max-width: 800px; padding: 0 20px;
+        }
+
+        .sub-title {
+            font-size: 1rem; letter-spacing: 5px; text-transform: uppercase;
+            color: rgba(255,255,255,0.8); margin-bottom: 10px; display: block;
+        }
+
+        .main-title {
+            font-size: 4rem; font-weight: 300; margin-bottom: 20px;
+            /* 金色質感文字 */
+            background: var(--gold-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .desc-text {
+            font-size: 1.2rem; color: #ddd; font-weight: 300;
+            border-top: 1px solid rgba(255,255,255,0.3);
+            border-bottom: 1px solid rgba(255,255,255,0.3);
+            padding: 15px 0; display: inline-block;
+        }
+
+        /* --- 設施 Grid --- */
+        .container { max-width: 1100px; margin: 0 auto; padding: 80px 20px; }
+        .section-header { text-align: center; margin-bottom: 60px; }
+        .section-header h2 { font-size: 2.2rem; margin-bottom: 15px; }
+        .section-header p { color: #666; max-width: 600px; margin: 0 auto; }
+        
+        .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 40px; }
+        .feature-item { text-align: center; transition: transform 0.3s; }
+        .feature-item:hover { transform: translateY(-10px); }
+        
+        .feature-img { 
+            height: 250px; background: #eee; margin-bottom: 25px; 
+            border-radius: 15px; background-size: cover; background-position: center; 
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .feature-item h3 { margin-bottom: 10px; font-size: 1.4rem; color: #222; }
+        .feature-item p { color: #666; font-size: 0.95rem; line-height: 1.6; }
+
+        /* --- 呼籲行動 (CTA) --- */
+        .cta-box {
+            background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), url('images/pool.jpg');
+            background-size: cover; background-position: center; background-attachment: fixed;
+            padding: 80px 20px; text-align: center; color: #fff; margin-top: 50px;
+        }
+        .line-btn {
+            display: inline-block; background: #00c300; color: white;
+            padding: 15px 40px; border-radius: 50px; font-size: 1.2rem;
+            font-weight: bold; margin-top: 30px; 
+            box-shadow: 0 5px 20px rgba(0,195,0,0.4); transition: transform 0.2s;
+        }
+        .line-btn:hover { transform: scale(1.05); }
+        
+        footer { text-align: center; padding: 40px; font-size: 0.8rem; color: #999; background: #222; }
+
+        @media (max-width: 768px) {
+            .main-title { font-size: 2.5rem; }
+            .hero { height: 60vh; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="floating-nav">
+        <a href="index.html" class="back-btn">
+            <i class="fa-solid fa-arrow-left"></i> 返回五之一首頁
+        </a>
+    </div>
+
+    <section class="hero">
+        <div class="hero-content">
+            <span class="sub-title">PRIVATE VILLA ANNEX</span>
+            <h1 class="main-title">俐姐 Villa</h1>
+            <div class="desc-text">五之一民宿專屬管理 · 獨立泳池包棟別館</div>
+        </div>
+    </section>
+
+    <div class="container">
+        <div class="section-header">
+            <h2>極致隱私的度假體驗</h2>
+            <p>為了滿足多人聚會的需求，別館提供了比本館更豐富的娛樂設施。<br>一天僅接待一組貴賓，讓您享有完全的自由。</p>
+        </div>
+
+        <div class="feature-grid">
+            <div class="feature-item">
+                <div class="feature-img" style="background-image: url('images/pool.jpg');"></div>
+                <h3>網美戲水池</h3>
+                <p>別館限定！擁有專屬的戶外彩繪泳池，夏日玩水拍照不被打擾。</p>
+            </div>
+            <div class="feature-item">
+                <div class="feature-img" style="background-image: url('images/ktv.jpg');"></div>
+                <h3>獨立 KTV 包廂</h3>
+                <p>大螢幕與專業音響，讓客廳化身私人演唱會，盡情歡唱。</p>
+            </div>
+            <div class="feature-item">
+                <div class="feature-img" style="background-image: url('images/mahjong.jpg');"></div>
+                <h3>麻將娛樂區</h3>
+                <p>提供標準麻將設備，是親友團聚切磋牌技的最佳消遣。</p>
+            </div>
+            <div class="feature-item">
+                <div class="feature-img" style="background-image: url('images/room.jpg');"></div>
+                <h3>5 間獨立休憩房</h3>
+                <p>包含雙人與四人配置，每間皆有獨立衛浴，玩累了隨時休息。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="cta-box">
+        <h2 style="font-size: 2rem; margin-bottom: 10px;">想預約別館包棟？</h2>
+        <p style="color: #ccc;">別館採熟客預約制，請聯繫五之一民宿櫃台詢問檔期。</p>
+        <a href="#" class="line-btn">
+            <i class="fa-brands fa-line"></i> 聯繫五之一專人預約
+        </a>
+    </div>
+
+    <footer>
+        <p>&copy; 2024 Managed by Five Point One Homestay.</p>
+        <p>本頁面為別館設施介紹，訂房與金流由合法民宿櫃台承辦。</p>
+    </footer>
+
+</body>
+</html>
