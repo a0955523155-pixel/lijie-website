@@ -177,8 +177,7 @@
             background: #f4f6f8; padding: 4px 10px; border-radius: 4px; 
             display: flex; align-items: center; gap: 5px; font-weight: 500;
         }
-        .amenities-list span i { color: #888; font-size: 0.8rem; } /* Icon 顏色 */
-
+        .amenities-list span i { color: #888; font-size: 0.8rem; }
         .btn-book { margin-top: auto; display: block; width: 100%; text-align: center; background: var(--blue); color: #fff; padding: 12px; border-radius: 8px; font-weight: bold; transition: 0.2s; box-shadow: 0 5px 15px rgba(0,123,255,0.2); }
         .btn-book:hover { background: #0056b3; transform: translateY(-2px); }
 
@@ -252,7 +251,6 @@
         <div style="max-width: 1100px; margin: 0 auto;">
             <h2 class="section-title" style="text-align: center; margin-bottom: 50px;">設施與服務</h2>
             <div class="services-wrapper">
-                
                 <div class="service-category">
                     <h3><i class="fa-solid fa-star"></i> 熱門 & 交通</h3>
                     <ul>
@@ -263,7 +261,6 @@
                         <li><i class="fa-solid fa-language"></i> 中文服務人員</li>
                     </ul>
                 </div>
-
                 <div class="service-category">
                     <h3><i class="fa-solid fa-bell-concierge"></i> 接待 & 公共設施</h3>
                     <ul>
@@ -274,7 +271,6 @@
                         <li><i class="fa-solid fa-ban-smoking"></i> 全館禁煙房 (特定吸煙區)</li>
                     </ul>
                 </div>
-
                 <div class="service-category">
                     <h3><i class="fa-solid fa-bed"></i> 客房舒適設備</h3>
                     <ul>
@@ -285,7 +281,6 @@
                         <li><i class="fa-solid fa-wind"></i> 吹風機 / 鏡子</li>
                     </ul>
                 </div>
-
             </div>
         </div>
     </section>
@@ -302,15 +297,22 @@
         <div class="room-grid">
 
             <div class="room-card vip-card" data-tags="group">
-                <div class="room-tag tag-vip"><i class="fa-solid fa-crown"></i> 官網限定</div>
+                <div class="room-tag tag-vip"><i class="fa-solid fa-crown"></i> 私人會所</div>
                 <div class="carousel-container" data-room-source="villa-hero">
                     </div>
                 <div class="room-details">
-                    <div class="room-header"><div class="room-name">獨棟泳池別館 (俐姐 Villa)</div></div>
-                    <div class="room-meta"><span><i class="fa-solid fa-users"></i> 10-20 人</span><span><i class="fa-solid fa-house-lock"></i> 獨棟包場</span></div>
-                    <div class="amenities-list"><span><i class="fa-solid fa-microphone-lines"></i> KTV包廂</span><span><i class="fa-solid fa-dice"></i> 麻將間</span><span><i class="fa-solid fa-person-swimming"></i> 網美泳池</span></div>
-                    <p style="font-size:0.9rem; color:#aaa; margin-bottom:20px;">五之一民宿獨家管理。專為重視隱私的團體打造。</p>
-                    <a href="villa.html" class="btn-book">查看別館詳情</a>
+                    <div class="room-header"><div class="room-name">獨棟泳池私人會所 (俐姐 Villa)</div></div>
+                    <div class="room-meta">
+                        <span><i class="fa-solid fa-users"></i> 適合 10 人</span>
+                        <span><i class="fa-solid fa-house-lock"></i> 專屬場地包場</span>
+                    </div>
+                    <div class="amenities-list">
+                        <span><i class="fa-solid fa-microphone-lines"></i> KTV包廂</span>
+                        <span><i class="fa-solid fa-dice"></i> 麻將間</span>
+                        <span><i class="fa-solid fa-person-swimming"></i> 網美泳池</span>
+                    </div>
+                    <p style="font-size:0.9rem; color:#aaa; margin-bottom:20px;">由五之一物業團隊代管之私人場地。專為重視隱私的團體提供空間租借。</p>
+                    <a href="villa.html" class="btn-book">查看場地詳情</a>
                 </div>
             </div>
 
@@ -464,7 +466,6 @@
     </footer>
 
     <script>
-        // --- 1. 後台設定區 ---
         const websiteContent = {
             index: {
                 hero: ["images/main-hero.jpg"],
@@ -489,7 +490,6 @@
             }
         };
 
-        // --- 2. 程式邏輯區 ---
         document.addEventListener("DOMContentLoaded", function() {
             loadIndexContent(); 
             startAllAutoPlay(); 

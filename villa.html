@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>五之一 VIP 別館 | 俐姐 Villa</title>
+    <title>五之一物業代管 | 俐姐 Villa 私人會所</title>
     <meta name="robots" content="noindex, nofollow">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -32,83 +32,27 @@
         }
         .back-btn:hover { transform: translateY(-2px); color: var(--gold); background: #fff; }
 
-        /* --- Hero 主視覺 (修復按鈕點擊問題) --- */
-        .hero-section { 
-            position: relative; 
-            height: 85vh; 
-            overflow: hidden; 
-        }
-        
-        .hero-carousel { 
-            width: 100%; height: 100%; 
-            position: absolute; top: 0; left: 0; z-index: 1; 
-        }
-
-        .carousel-slide { 
-            width: 100%; height: 100%; 
-            position: absolute; top: 0; left: 0;
-            opacity: 0; transition: opacity 1s ease; 
-            z-index: 1;
-        }
+        /* --- Hero 主視覺 --- */
+        .hero-section { position: relative; height: 85vh; overflow: hidden; }
+        .hero-carousel { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+        .carousel-slide { width: 100%; height: 100%; position: absolute; top: 0; left: 0; opacity: 0; transition: opacity 1s ease; z-index: 1; }
         .carousel-slide.active { opacity: 1; z-index: 2; }
         .carousel-slide img { width: 100%; height: 100%; object-fit: cover; }
-
-        /* 右下角照片說明標籤 */
-        .slide-caption {
-            position: absolute; bottom: 30px; right: 30px;
-            background: rgba(0, 0, 0, 0.6); color: #fff;
-            padding: 5px 15px; border-radius: 4px;
-            font-size: 0.9rem; letter-spacing: 1px;
-            border-left: 3px solid var(--gold);
-            backdrop-filter: blur(4px);
-            z-index: 20; /* 確保標籤在最上層 */
-        }
-
-        /* 遮罩層：加入 pointer-events: none 讓點擊穿透 */
-        .hero-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.6));
-            z-index: 3; 
-            pointer-events: none; /* ★ 關鍵修復：讓滑鼠可以點穿遮罩 ★ */
-        }
-
-        /* 標題內容：加入 pointer-events: none */
-        .hero-content { 
-            position: absolute; 
-            top: 50%; left: 50%; 
-            transform: translate(-50%, -50%); 
-            z-index: 10; 
-            text-align: center; 
-            color: #fff; 
-            width: 100%; padding: 0 20px;
-            pointer-events: none; /* ★ 關鍵修復：讓滑鼠可以點穿文字層 ★ */
-        }
-
+        .slide-caption { position: absolute; bottom: 30px; right: 30px; background: rgba(0, 0, 0, 0.6); color: #fff; padding: 5px 15px; border-radius: 4px; font-size: 0.9rem; letter-spacing: 1px; border-left: 3px solid var(--gold); backdrop-filter: blur(4px); z-index: 20; }
+        
+        /* 遮罩層 & 標題 */
+        .hero-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.6)); z-index: 3; pointer-events: none; }
+        .hero-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; text-align: center; color: #fff; width: 100%; padding: 0 20px; pointer-events: none; }
         .sub-title { font-size: 1rem; letter-spacing: 4px; text-transform: uppercase; color: rgba(255,255,255,0.9); margin-bottom: 10px; display: block; }
-        .main-title {
-            font-size: clamp(2.5rem, 5vw, 4.5rem); 
-            font-weight: 300; margin-bottom: 20px; white-space: nowrap;
-            background: var(--gold-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            text-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
+        .main-title { font-size: clamp(2.5rem, 5vw, 4.5rem); font-weight: 300; margin-bottom: 20px; white-space: nowrap; background: var(--gold-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         .hero-tags { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
         .hero-tag { border: 1px solid rgba(255,255,255,0.4); padding: 5px 15px; border-radius: 20px; font-size: 0.9rem; letter-spacing: 1px; backdrop-filter: blur(5px); }
 
-        /* 按鈕：開啟 pointer-events: auto 讓它恢復可點擊 */
-        .carousel-btn {
-            position: absolute; top: 50%; transform: translateY(-50%);
-            background: rgba(0,0,0,0.3); color: white; border: none;
-            width: 45px; height: 45px; border-radius: 50%;
-            cursor: pointer; font-size: 1.2rem; z-index: 100; /* 提高層級 */
-            display: flex; align-items: center; justify-content: center;
-            transition: background 0.3s; 
-            opacity: 0; 
-            pointer-events: auto; /* ★ 關鍵修復：強制按鈕可點擊 ★ */
-        }
+        /* 按鈕 */
+        .carousel-btn { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.3); color: white; border: none; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; font-size: 1.2rem; z-index: 100; display: flex; align-items: center; justify-content: center; transition: background 0.3s; opacity: 0; pointer-events: auto; }
         .hero-section:hover .carousel-btn, .room-block:hover .carousel-btn { opacity: 1; }
         .carousel-btn:hover { background: rgba(212, 175, 55, 0.8); }
-        .prev-btn { left: 20px; }
-        .next-btn { right: 20px; }
+        .prev-btn { left: 20px; } .next-btn { right: 20px; }
 
         /* --- 通用區塊 --- */
         .container { max-width: 1100px; margin: 0 auto; padding: 80px 20px; }
@@ -140,7 +84,6 @@
         .room-info-box { padding: 40px; text-align: center; }
         .room-info-box h3 { font-size: 1.8rem; color: var(--primary); margin-bottom: 15px; }
         
-        /* 房間標籤 - 精品緞帶風格 */
         .room-badge { 
             background: linear-gradient(135deg, #d4af37 0%, #f1c40f 100%); 
             color: #fff; padding: 6px 20px; border-radius: 4px; font-size: 0.85rem; 
@@ -149,7 +92,7 @@
         }
         .room-info-box p { color: #666; font-size: 1.1rem; }
 
-        /* Location & Footer */
+        /* Location */
         .location-section { margin-top: 80px; background: var(--bg-light); padding: 80px 20px; }
         .location-grid { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px; }
         .loc-category { background: #fff; padding: 30px; border-radius: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.05); }
@@ -157,17 +100,15 @@
         .loc-list li { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 1rem; color: #555; }
         .loc-time { font-weight: bold; color: var(--gold); font-size: 0.9rem; background: #fff8e1; padding: 2px 8px; border-radius: 4px; }
 
-        /* --- 底部預約區：沉浸式黑金風格 (已更新) --- */
+        /* 預約區 */
         .cta-box {
-            background: linear-gradient(to bottom, rgba(30,30,30,0.9), rgba(20,20,20,0.95)), url('images/pool.jpg');
+            background: linear-gradient(to bottom, rgba(30,30,30,0.9), rgba(20,20,20,0.95)), url('images/villa-hero-2.jpg');
             background-size: cover; background-position: center; background-attachment: fixed;
             padding: 120px 20px; text-align: center; color: #fff; margin-top: 80px;
             position: relative; border-top: 1px solid rgba(255,255,255,0.1);
         }
         .cta-box h2 { font-size: 2.8rem; font-weight: 300; letter-spacing: 3px; margin-bottom: 15px; text-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         .cta-box p { color: #aaa; font-size: 1.1rem; letter-spacing: 1px; margin-bottom: 40px; }
-
-        /* 按鈕優化：流光金 */
         .phone-btn { 
             display: inline-flex; align-items: center; gap: 15px;
             background: linear-gradient(135deg, #d4af37 0%, #bb9226 100%);
@@ -199,7 +140,7 @@
         <div class="hero-carousel"></div>
         <div class="hero-overlay"></div>
         <div class="hero-content">
-            <span class="sub-title">PRIVATE VILLA ANNEX</span>
+            <span class="sub-title">PRIVATE VILLA SPACE</span>
             <h1 class="main-title">俐姐 Villa</h1>
             <div class="hero-tags">
                 <span class="hero-tag"><i class="fa-solid fa-star"></i> 遠離喧囂觀星</span>
@@ -231,17 +172,17 @@
 
         <div class="section-header" style="margin-top: 80px;">
             <h2>專屬邸宅格局</h2>
-            <p class="section-desc">全館提供 5 間客房，配置舒適雙人床，讓每位貴賓都能享有優質睡眠。</p>
+            <p class="section-desc">全館提供 5 間獨立休憩空間，配置舒適雙人床，讓每位貴賓都能享有舒適時光。</p>
         </div>
         <div class="single-room-section">
             <div class="room-block">
                 <div class="room-carousel-container">
                     </div>
                 <div class="room-info-box">
-                    <span class="room-badge">房間配置</span>
-                    <h3>5 間舒適雙人房</h3>
+                    <span class="room-badge">空間配置</span>
+                    <h3>5 間專屬臥室</h3>
                     <p>
-                        <i class="fa-solid fa-bed"></i> 10人入住 · 獨立衛浴設備<br>
+                        <i class="fa-solid fa-bed"></i> 建議容納 10-20 人 · 獨立衛浴設備<br>
                         <span style="font-size: 0.9rem; color: #999;">(含 4 間套房 + 1 間雅房)</span>
                     </p>
                 </div>
@@ -282,16 +223,19 @@
     </div>
 
     <div class="cta-box">
-        <h2>預約您的專屬假期</h2>
-        <p>五之一民宿團隊管理 · 俐姐 Villa</p>
+        <h2>預約您的專屬場地</h2>
+        <p>五之一物業團隊代管 · 俐姐 Villa</p>
         <a href="tel:0983784143" class="phone-btn">
             <i class="fa-solid fa-phone"></i> 預約專線：0983-784-143
         </a>
     </div>
 
-    <footer>
-        <p>&copy; 2024 Managed by Five Point One Homestay.</p>
-        <p>本頁面為別館設施展示</p>
+    <footer style="line-height: 1.8;">
+        <p>&copy; 2024 Managed by Five Point One Property Management.</p>
+        <p>本頁面為私人會所場地展示。</p>
+        <p style="font-size: 0.75rem; color: #555; margin-top: 15px; max-width: 800px; margin-left: auto; margin-right: auto;">
+            免責聲明：俐姐 Villa 為私人產權空間，提供場地租借與物業代管服務，非屬一般旅館或民宿營業場所，預約及使用規範依雙方場地租賃契約為準。
+        </p>
     </footer>
 
     <script>
