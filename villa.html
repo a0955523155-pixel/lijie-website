@@ -9,115 +9,181 @@
     <style>
         /* --- 核心風格 --- */
         :root {
-            --primary: #222;
+            --primary: #2c2c2c;
             --gold: #d4af37;
             --gold-gradient: linear-gradient(135deg, #d4af37 0%, #f1c40f 100%);
             --bg-light: #f9f9f9;
+            --text-gray: #666;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: "Helvetica Neue", "PingFang TC", sans-serif; color: var(--primary); background: #fff; }
+        body { font-family: "Helvetica Neue", "PingFang TC", "Microsoft JhengHei", sans-serif; color: var(--primary); background: #fff; line-height: 1.8; }
         a { text-decoration: none; color: inherit; }
 
-        /* --- 懸浮返回按鈕 (取代舊的頂部文字條) --- */
-        .floating-nav {
-            position: fixed; top: 20px; left: 20px; z-index: 1000;
-        }
+        /* --- 懸浮返回按鈕 --- */
+        .floating-nav { position: fixed; top: 20px; left: 20px; z-index: 1000; }
         .back-btn {
             display: flex; align-items: center; gap: 10px;
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px); /* 毛玻璃特效 */
-            padding: 12px 25px;
-            border-radius: 50px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            font-weight: bold; font-size: 0.95rem; color: #333;
-            transition: all 0.3s ease; border: 1px solid rgba(255,255,255,0.5);
+            background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(8px);
+            padding: 10px 20px; border-radius: 50px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            font-weight: bold; font-size: 0.9rem; color: #333;
+            transition: all 0.3s ease; border: 1px solid rgba(255,255,255,0.4);
         }
-        .back-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-            background: #fff; color: var(--gold);
-        }
-        .back-btn i { transition: transform 0.3s; }
-        .back-btn:hover i { transform: translateX(-5px); }
+        .back-btn:hover { transform: translateY(-2px); color: var(--gold); background: #fff; }
 
-        /* --- Hero 主視覺 (美化版) --- */
-        .hero {
-            height: 75vh;
-            background-image: url('images/villa-hero.jpg'); 
-            background-size: cover; background-position: center;
-            display: flex; align-items: center; justify-content: center;
-            position: relative;
+        /* --- Hero 主視覺 (修復按鈕點擊問題) --- */
+        .hero-section { 
+            position: relative; 
+            height: 85vh; 
+            overflow: hidden; 
         }
-        /* 漸層遮罩讓文字更清楚 */
-        .hero::after {
-            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.3), rgba(0,0,0,0.6));
+        
+        .hero-carousel { 
+            width: 100%; height: 100%; 
+            position: absolute; top: 0; left: 0; z-index: 1; 
         }
 
-        .hero-content {
-            position: relative; z-index: 2; text-align: center; color: #fff;
-            max-width: 800px; padding: 0 20px;
+        .carousel-slide { 
+            width: 100%; height: 100%; 
+            position: absolute; top: 0; left: 0;
+            opacity: 0; transition: opacity 1s ease; 
+            z-index: 1;
+        }
+        .carousel-slide.active { opacity: 1; z-index: 2; }
+        .carousel-slide img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* 右下角照片說明標籤 */
+        .slide-caption {
+            position: absolute; bottom: 30px; right: 30px;
+            background: rgba(0, 0, 0, 0.6); color: #fff;
+            padding: 5px 15px; border-radius: 4px;
+            font-size: 0.9rem; letter-spacing: 1px;
+            border-left: 3px solid var(--gold);
+            backdrop-filter: blur(4px);
+            z-index: 20; /* 確保標籤在最上層 */
         }
 
-        .sub-title {
-            font-size: 1rem; letter-spacing: 5px; text-transform: uppercase;
-            color: rgba(255,255,255,0.8); margin-bottom: 10px; display: block;
+        /* 遮罩層：加入 pointer-events: none 讓點擊穿透 */
+        .hero-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.6));
+            z-index: 3; 
+            pointer-events: none; /* ★ 關鍵修復：讓滑鼠可以點穿遮罩 ★ */
         }
 
+        /* 標題內容：加入 pointer-events: none */
+        .hero-content { 
+            position: absolute; 
+            top: 50%; left: 50%; 
+            transform: translate(-50%, -50%); 
+            z-index: 10; 
+            text-align: center; 
+            color: #fff; 
+            width: 100%; padding: 0 20px;
+            pointer-events: none; /* ★ 關鍵修復：讓滑鼠可以點穿文字層 ★ */
+        }
+
+        .sub-title { font-size: 1rem; letter-spacing: 4px; text-transform: uppercase; color: rgba(255,255,255,0.9); margin-bottom: 10px; display: block; }
         .main-title {
-            font-size: 4rem; font-weight: 300; margin-bottom: 20px;
-            /* 金色質感文字 */
-            background: var(--gold-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            font-size: clamp(2.5rem, 5vw, 4.5rem); 
+            font-weight: 300; margin-bottom: 20px; white-space: nowrap;
+            background: var(--gold-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
+        .hero-tags { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+        .hero-tag { border: 1px solid rgba(255,255,255,0.4); padding: 5px 15px; border-radius: 20px; font-size: 0.9rem; letter-spacing: 1px; backdrop-filter: blur(5px); }
 
-        .desc-text {
-            font-size: 1.2rem; color: #ddd; font-weight: 300;
-            border-top: 1px solid rgba(255,255,255,0.3);
-            border-bottom: 1px solid rgba(255,255,255,0.3);
-            padding: 15px 0; display: inline-block;
+        /* 按鈕：開啟 pointer-events: auto 讓它恢復可點擊 */
+        .carousel-btn {
+            position: absolute; top: 50%; transform: translateY(-50%);
+            background: rgba(0,0,0,0.3); color: white; border: none;
+            width: 45px; height: 45px; border-radius: 50%;
+            cursor: pointer; font-size: 1.2rem; z-index: 100; /* 提高層級 */
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.3s; 
+            opacity: 0; 
+            pointer-events: auto; /* ★ 關鍵修復：強制按鈕可點擊 ★ */
         }
+        .hero-section:hover .carousel-btn, .room-block:hover .carousel-btn { opacity: 1; }
+        .carousel-btn:hover { background: rgba(212, 175, 55, 0.8); }
+        .prev-btn { left: 20px; }
+        .next-btn { right: 20px; }
 
-        /* --- 設施 Grid --- */
+        /* --- 通用區塊 --- */
         .container { max-width: 1100px; margin: 0 auto; padding: 80px 20px; }
-        .section-header { text-align: center; margin-bottom: 60px; }
-        .section-header h2 { font-size: 2.2rem; margin-bottom: 15px; }
-        .section-header p { color: #666; max-width: 600px; margin: 0 auto; }
-        
-        .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 40px; }
-        .feature-item { text-align: center; transition: transform 0.3s; }
-        .feature-item:hover { transform: translateY(-10px); }
-        
-        .feature-img { 
-            height: 250px; background: #eee; margin-bottom: 25px; 
-            border-radius: 15px; background-size: cover; background-position: center; 
-            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-        }
-        .feature-item h3 { margin-bottom: 10px; font-size: 1.4rem; color: #222; }
-        .feature-item p { color: #666; font-size: 0.95rem; line-height: 1.6; }
+        .section-header { text-align: center; margin-bottom: 50px; }
+        .section-title { font-size: 2.2rem; margin-bottom: 20px; position: relative; display: inline-block; }
+        .section-title::after { content: ''; display: block; width: 60px; height: 3px; background: var(--gold); margin: 15px auto 0; }
+        .section-desc { color: var(--text-gray); max-width: 700px; margin: 0 auto; font-size: 1.05rem; }
 
-        /* --- 呼籲行動 (CTA) --- */
-        .cta-box {
-            background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), url('images/pool.jpg');
-            background-size: cover; background-position: center; background-attachment: fixed;
-            padding: 80px 20px; text-align: center; color: #fff; margin-top: 50px;
-        }
-        .line-btn {
-            display: inline-block; background: #00c300; color: white;
-            padding: 15px 40px; border-radius: 50px; font-size: 1.2rem;
-            font-weight: bold; margin-top: 30px; 
-            box-shadow: 0 5px 20px rgba(0,195,0,0.4); transition: transform 0.2s;
-        }
-        .line-btn:hover { transform: scale(1.05); }
+        .advantage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 40px; text-align: center; margin-bottom: 80px; }
+        .adv-item i { font-size: 2.5rem; color: var(--gold); margin-bottom: 15px; }
+        .adv-item h4 { font-size: 1.2rem; margin-bottom: 10px; }
+        .adv-item p { font-size: 0.9rem; color: #777; }
+
+        /* 設施卡片 */
+        .facility-img-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 30px; margin-bottom: 80px; }
+        .fac-card { background: #fff; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 20px rgba(0,0,0,0.05); transition: all 0.3s ease; border: 1px solid #eee; }
+        .fac-card:hover { transform: translateY(-5px); box-shadow: 0 15px 30px rgba(0,0,0,0.1); border-color: var(--gold); }
+        .fac-img { height: 200px; width: 100%; object-fit: cover; }
+        .fac-info { padding: 20px; text-align: center; }
+        .fac-info h3 { font-size: 1.2rem; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .fac-info p { color: #777; font-size: 0.95rem; }
+
+        /* 房間區塊 */
+        .single-room-section { margin-top: 40px; max-width: 800px; margin-left: auto; margin-right: auto; }
+        .room-block { background: #fff; border-radius: 20px; overflow: hidden; box-shadow: 0 15px 40px rgba(0,0,0,0.1); border: 1px solid #eee; position: relative;}
+        .room-carousel-container { position: relative; height: 450px; overflow: hidden; background: #eee; }
+        .room-slide { width: 100%; height: 100%; object-fit: cover; display: none; position: absolute; top:0; left:0; }
+        .room-slide.active { display: block; }
+        .room-info-box { padding: 40px; text-align: center; }
+        .room-info-box h3 { font-size: 1.8rem; color: var(--primary); margin-bottom: 15px; }
         
-        footer { text-align: center; padding: 40px; font-size: 0.8rem; color: #999; background: #222; }
+        /* 房間標籤 - 精品緞帶風格 */
+        .room-badge { 
+            background: linear-gradient(135deg, #d4af37 0%, #f1c40f 100%); 
+            color: #fff; padding: 6px 20px; border-radius: 4px; font-size: 0.85rem; 
+            display: inline-block; margin-bottom: 15px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+            box-shadow: 0 4px 10px rgba(212, 175, 55, 0.3); border: 1px solid rgba(255,255,255,0.2);
+        }
+        .room-info-box p { color: #666; font-size: 1.1rem; }
+
+        /* Location & Footer */
+        .location-section { margin-top: 80px; background: var(--bg-light); padding: 80px 20px; }
+        .location-grid { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px; }
+        .loc-category { background: #fff; padding: 30px; border-radius: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.05); }
+        .loc-title { font-size: 1.3rem; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid var(--gold); display: flex; align-items: center; gap: 10px; color: var(--primary); }
+        .loc-list li { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 1rem; color: #555; }
+        .loc-time { font-weight: bold; color: var(--gold); font-size: 0.9rem; background: #fff8e1; padding: 2px 8px; border-radius: 4px; }
+
+        /* --- 底部預約區：沉浸式黑金風格 (已更新) --- */
+        .cta-box {
+            background: linear-gradient(to bottom, rgba(30,30,30,0.9), rgba(20,20,20,0.95)), url('images/pool.jpg');
+            background-size: cover; background-position: center; background-attachment: fixed;
+            padding: 120px 20px; text-align: center; color: #fff; margin-top: 80px;
+            position: relative; border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        .cta-box h2 { font-size: 2.8rem; font-weight: 300; letter-spacing: 3px; margin-bottom: 15px; text-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .cta-box p { color: #aaa; font-size: 1.1rem; letter-spacing: 1px; margin-bottom: 40px; }
+
+        /* 按鈕優化：流光金 */
+        .phone-btn { 
+            display: inline-flex; align-items: center; gap: 15px;
+            background: linear-gradient(135deg, #d4af37 0%, #bb9226 100%);
+            color: #fff; padding: 18px 60px; border-radius: 50px;
+            font-size: 1.2rem; font-weight: 500; letter-spacing: 2px; text-decoration: none;
+            box-shadow: 0 10px 30px rgba(212, 175, 55, 0.3); transition: all 0.4s ease;
+            border: 1px solid rgba(255,255,255,0.2); position: relative; overflow: hidden;
+        }
+        .phone-btn:hover { transform: translateY(-5px) scale(1.02); box-shadow: 0 20px 40px rgba(212, 175, 55, 0.5); background: linear-gradient(135deg, #f1c40f 0%, #d4af37 100%); }
+
+        footer { background: #111; color: #666; padding: 50px 20px; text-align: center; font-size: 0.85rem; letter-spacing: 1px; border-top: 1px solid #222; }
 
         @media (max-width: 768px) {
-            .main-title { font-size: 2.5rem; }
-            .hero { height: 60vh; }
+            .hero-section { height: 70vh; }
+            .room-carousel-container { height: 300px; }
+            .slide-caption { bottom: 15px; right: 15px; font-size: 0.8rem; }
         }
     </style>
 </head>
@@ -129,56 +195,221 @@
         </a>
     </div>
 
-    <section class="hero">
+    <section class="hero-section">
+        <div class="hero-carousel"></div>
+        <div class="hero-overlay"></div>
         <div class="hero-content">
             <span class="sub-title">PRIVATE VILLA ANNEX</span>
             <h1 class="main-title">俐姐 Villa</h1>
-            <div class="desc-text">五之一民宿專屬管理 · 獨立泳池包棟別館</div>
+            <div class="hero-tags">
+                <span class="hero-tag"><i class="fa-solid fa-star"></i> 遠離喧囂觀星</span>
+                <span class="hero-tag"><i class="fa-solid fa-car"></i> 尊榮 8 車位</span>
+                <span class="hero-tag"><i class="fa-solid fa-fish"></i> 5分鐘吃生魚片</span>
+            </div>
         </div>
     </section>
 
     <div class="container">
         <div class="section-header">
-            <h2>極致隱私的度假體驗</h2>
-            <p>為了滿足多人聚會的需求，別館提供了比本館更豐富的娛樂設施。<br>一天僅接待一組貴賓，讓您享有完全的自由。</p>
+            <h2>國境之南的隱密天堂</h2>
+            <p class="section-desc">專為追求隱私與品質的團體打造。擁有寬敞的戶外場域，夜晚抬頭即是滿天星斗。</p>
         </div>
 
-        <div class="feature-grid">
-            <div class="feature-item">
-                <div class="feature-img" style="background-image: url('images/pool.jpg');"></div>
-                <h3>網美戲水池</h3>
-                <p>別館限定！擁有專屬的戶外彩繪泳池，夏日玩水拍照不被打擾。</p>
+        <div class="advantage-grid">
+            <div class="adv-item"><i class="fa-solid fa-car-side"></i><h4>超大停車空間</h4><p>專屬空地可停放 8 輛車</p></div>
+            <div class="adv-item"><i class="fa-solid fa-water"></i><h4>潛水聖地</h4><p>鄰近後壁湖，探索海底便利</p></div>
+            <div class="adv-item"><i class="fa-solid fa-utensils"></i><h4>海鮮天堂</h4><p>邱家生魚片近在咫尺</p></div>
+            <div class="adv-item"><i class="fa-solid fa-moon"></i><h4>靜謐觀星</h4><p>無光害環境享受星空</p></div>
+        </div>
+
+        <div class="section-header" style="margin-top: 80px;">
+            <h2>專屬娛樂設施</h2>
+            <p class="section-desc">動靜皆宜的度假配置，滿足團體聚會的所有想像。</p>
+        </div>
+        <div class="facility-img-grid">
             </div>
-            <div class="feature-item">
-                <div class="feature-img" style="background-image: url('images/ktv.jpg');"></div>
-                <h3>獨立 KTV 包廂</h3>
-                <p>大螢幕與專業音響，讓客廳化身私人演唱會，盡情歡唱。</p>
+
+        <div class="section-header" style="margin-top: 80px;">
+            <h2>專屬邸宅格局</h2>
+            <p class="section-desc">全館提供 5 間客房，配置舒適雙人床，讓每位貴賓都能享有優質睡眠。</p>
+        </div>
+        <div class="single-room-section">
+            <div class="room-block">
+                <div class="room-carousel-container">
+                    </div>
+                <div class="room-info-box">
+                    <span class="room-badge">房間配置</span>
+                    <h3>5 間舒適雙人房</h3>
+                    <p>
+                        <i class="fa-solid fa-bed"></i> 10人入住 · 獨立衛浴設備<br>
+                        <span style="font-size: 0.9rem; color: #999;">(含 4 間套房 + 1 間雅房)</span>
+                    </p>
+                </div>
             </div>
-            <div class="feature-item">
-                <div class="feature-img" style="background-image: url('images/mahjong.jpg');"></div>
-                <h3>麻將娛樂區</h3>
-                <p>提供標準麻將設備，是親友團聚切磋牌技的最佳消遣。</p>
+        </div>
+    </div>
+
+    <div class="location-section">
+        <div class="section-header" style="margin-bottom: 30px;">
+            <h2>周邊生活機能</h2>
+            <p class="section-desc">交通便利，開車輕鬆抵達各大景點。</p>
+        </div>
+        <div class="location-grid">
+            <div class="loc-category">
+                <div class="loc-title"><i class="fa-solid fa-store"></i> 便利生活</div>
+                <ul class="loc-list">
+                    <li><span>7-11 便利商店</span> <span class="loc-time">開車 3 分鐘</span></li>
+                    <li><span>萊爾富 Hi-Life</span> <span class="loc-time">開車 3 分鐘</span></li>
+                </ul>
             </div>
-            <div class="feature-item">
-                <div class="feature-img" style="background-image: url('images/room.jpg');"></div>
-                <h3>5 間獨立休憩房</h3>
-                <p>包含雙人與四人配置，每間皆有獨立衛浴，玩累了隨時休息。</p>
+            <div class="loc-category">
+                <div class="loc-title"><i class="fa-solid fa-utensils"></i> 在地美食</div>
+                <ul class="loc-list">
+                    <li><span>阿利海產</span> <span class="loc-time">開車 2 分鐘</span></li>
+                    <li><span>漁之香海產</span> <span class="loc-time">開車 2 分鐘</span></li>
+                    <li><span>邱家生魚片</span> <span class="loc-time">開車 5 分鐘</span></li>
+                </ul>
+            </div>
+            <div class="loc-category">
+                <div class="loc-title"><i class="fa-solid fa-umbrella-beach"></i> 熱門景點</div>
+                <ul class="loc-list">
+                    <li><span>大光沙灘</span> <span class="loc-time">開車 4 分鐘</span></li>
+                    <li><span>後壁湖漁港</span> <span class="loc-time">開車 5 分鐘</span></li>
+                    <li><span>觀光半潛艇</span> <span class="loc-time">開車 5 分鐘</span></li>
+                </ul>
             </div>
         </div>
     </div>
 
     <div class="cta-box">
-        <h2 style="font-size: 2rem; margin-bottom: 10px;">想預約別館包棟？</h2>
-        <p style="color: #ccc;">別館採熟客預約制，請聯繫五之一民宿櫃台詢問檔期。</p>
-        <a href="#" class="line-btn">
-            <i class="fa-brands fa-line"></i> 聯繫五之一專人預約
+        <h2>預約您的專屬假期</h2>
+        <p>五之一民宿團隊管理 · 俐姐 Villa</p>
+        <a href="tel:0983784143" class="phone-btn">
+            <i class="fa-solid fa-phone"></i> 預約專線：0983-784-143
         </a>
     </div>
 
     <footer>
         <p>&copy; 2024 Managed by Five Point One Homestay.</p>
-        <p>本頁面為別館設施介紹，訂房與金流由合法民宿櫃台承辦。</p>
+        <p>本頁面為別館設施展示</p>
     </footer>
 
+    <script>
+        const websiteContent = {
+            villa: {
+                hero: [
+                    { img: "images/villa-hero-1.jpg", text: "隱密私人別墅" },
+                    { img: "images/villa-hero-2.jpg", text: "專屬歡唱空間" },
+                    { img: "images/villa-hero-3.jpg", text: "舒適沙發座椅" },
+                    { img: "images/villa-hero-4.jpg", text: "舒適標準雙人床" },
+                    { img: "images/villa-hero-5.jpg", text: "衛浴設備齊全" }
+                ],
+                rooms: [
+                    "images/villa-room-1.jpg",
+                    "images/villa-room-2.jpg",
+                    "images/villa-room-3.jpg",
+                    "images/villa-room-4.jpg",
+                    "images/villa-room-5.jpg",
+                    "images/villa-room-6.jpg",
+                    "images/villa-room-7.jpg",
+                    "images/villa-room-8.jpg"
+                ],
+                facilities: [
+                    { img: "images/fac-ktv.jpg", title: "專屬 KTV", icon: "fa-microphone-lines", color: "#e74c3c", desc: "大螢幕與專業音響，盡情歡唱。" },
+                    { img: "images/fac-mahjong.jpg", title: "麻將娛樂", icon: "fa-dice", color: "#2ecc71", desc: "提供標準麻將桌，切磋牌技。" },
+                    { img: "images/fac-pool.jpg", title: "網美戲水區", icon: "fa-person-swimming", color: "#3498db", desc: "夏日消暑，拍照打卡最佳點。" },
+                    { img: "images/fac-bbq.jpg", title: "戶外饗宴區", icon: "fa-fire-burner", color: "#e67e22", desc: "含烤肉爐與洗菜台，享受BBQ樂趣。" }
+                ]
+            }
+        };
+
+        document.addEventListener("DOMContentLoaded", function() {
+            loadVillaContent(); 
+            initCarousels();    
+        });
+
+        function loadVillaContent() {
+            const data = websiteContent.villa;
+
+            // 1. 生成 Hero 輪播
+            const heroContainer = document.querySelector('.hero-carousel');
+            let heroHTML = '';
+            data.hero.forEach((item, index) => {
+                const activeClass = index === 0 ? 'active' : '';
+                heroHTML += `
+                    <div class="carousel-slide ${activeClass}">
+                        <img src="${item.img}">
+                        <div class="slide-caption">${item.text}</div>
+                    </div>`;
+            });
+            heroHTML += `<button class="carousel-btn prev-btn" onclick="moveHeroSlide(-1)">&#10094;</button>
+                         <button class="carousel-btn next-btn" onclick="moveHeroSlide(1)">&#10095;</button>`;
+            heroContainer.innerHTML = heroHTML;
+
+            // 2. 生成房間輪播
+            const roomContainer = document.querySelector('.room-carousel-container');
+            let roomHTML = '';
+            data.rooms.forEach((imgSrc, index) => {
+                const activeClass = index === 0 ? 'active' : '';
+                roomHTML += `<img src="${imgSrc}" class="room-slide ${activeClass}">`;
+            });
+            roomHTML += `<button class="carousel-btn prev-btn" onclick="moveRoomSlide(-1)">&#10094;</button>
+                         <button class="carousel-btn next-btn" onclick="moveRoomSlide(1)">&#10095;</button>`;
+            roomContainer.innerHTML = roomHTML;
+
+            // 3. 生成設施卡片
+            const facContainer = document.querySelector('.facility-img-grid');
+            let facHTML = '';
+            data.facilities.forEach(fac => {
+                facHTML += `
+                    <div class="fac-card">
+                        <img src="${fac.img}" alt="${fac.title}" class="fac-img">
+                        <div class="fac-info">
+                            <h3><i class="fa-solid ${fac.icon}" style="color:${fac.color}"></i> ${fac.title}</h3>
+                            <p>${fac.desc}</p>
+                        </div>
+                    </div>
+                `;
+            });
+            facContainer.innerHTML = facHTML;
+        }
+
+        // 輪播邏輯
+        function initCarousels() {
+            startAutoPlay('.hero-carousel', 5000); 
+            startAutoPlay('.room-carousel-container', 4000);
+        }
+
+        function startAutoPlay(selector, time) {
+            let container = document.querySelector(selector);
+            if (!container) return;
+            let interval = setInterval(() => changeSlideAuto(container, 1), time);
+            container.addEventListener('mouseenter', () => clearInterval(interval));
+            container.addEventListener('mouseleave', () => interval = setInterval(() => changeSlideAuto(container, 1), time));
+        }
+
+        function changeSlideAuto(container, dir) {
+            let slides = container.querySelectorAll('.carousel-slide, .room-slide');
+            if(slides.length === 0) return;
+            let activeIndex = -1;
+            for(let i=0; i<slides.length; i++) {
+                if(slides[i].classList.contains('active')) { activeIndex = i; break; }
+            }
+            if (activeIndex !== -1) slides[activeIndex].classList.remove('active');
+            let newIndex = activeIndex + dir;
+            if (newIndex >= slides.length) newIndex = 0;
+            if (newIndex < 0) newIndex = slides.length - 1;
+            slides[newIndex].classList.add('active');
+        }
+
+        function moveHeroSlide(dir) {
+            let container = document.querySelector('.hero-carousel');
+            changeSlideAuto(container, dir);
+        }
+        function moveRoomSlide(dir) {
+            let container = document.querySelector('.room-carousel-container');
+            changeSlideAuto(container, dir);
+        }
+    </script>
 </body>
 </html>
