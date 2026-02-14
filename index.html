@@ -4,6 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>五之一民宿 (Five Point One) | 墾丁大街高CP值住宿</title>
+    
+    <meta name="description" content="五之一民宿位於墾丁大街旁，提供高CP值的雙人房、家庭房及背包客棧。交通便利，步行即達夜市，提供免費停車、寵物友善服務。墾丁住宿首選。">
+    <meta name="keywords" content="墾丁民宿, 墾丁住宿, 墾丁大街民宿, 墾丁寵物友善, 墾丁背包客棧, 五之一民宿, 恆春住宿">
+    
+    <meta property="og:title" content="五之一民宿 | 墾丁大街高CP值住宿推薦">
+    <meta property="og:description" content="就在墾丁大街旁！工業風設計，免費停車、寵物友善，給您最熱情的國境之南體驗。">
+    <meta property="og:image" content="images/main-hero.jpg">
+    <meta property="og:url" content="https://www.您的網址.com">
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* --- 核心變數 --- */
@@ -178,6 +187,7 @@
             display: flex; align-items: center; gap: 5px; font-weight: 500;
         }
         .amenities-list span i { color: #888; font-size: 0.8rem; }
+
         .btn-book { margin-top: auto; display: block; width: 100%; text-align: center; background: var(--blue); color: #fff; padding: 12px; border-radius: 8px; font-weight: bold; transition: 0.2s; box-shadow: 0 5px 15px rgba(0,123,255,0.2); }
         .btn-book:hover { background: #0056b3; transform: translateY(-2px); }
 
@@ -251,6 +261,7 @@
         <div style="max-width: 1100px; margin: 0 auto;">
             <h2 class="section-title" style="text-align: center; margin-bottom: 50px;">設施與服務</h2>
             <div class="services-wrapper">
+                
                 <div class="service-category">
                     <h3><i class="fa-solid fa-star"></i> 熱門 & 交通</h3>
                     <ul>
@@ -261,6 +272,7 @@
                         <li><i class="fa-solid fa-language"></i> 中文服務人員</li>
                     </ul>
                 </div>
+
                 <div class="service-category">
                     <h3><i class="fa-solid fa-bell-concierge"></i> 接待 & 公共設施</h3>
                     <ul>
@@ -271,6 +283,7 @@
                         <li><i class="fa-solid fa-ban-smoking"></i> 全館禁煙房 (特定吸煙區)</li>
                     </ul>
                 </div>
+
                 <div class="service-category">
                     <h3><i class="fa-solid fa-bed"></i> 客房舒適設備</h3>
                     <ul>
@@ -281,6 +294,7 @@
                         <li><i class="fa-solid fa-wind"></i> 吹風機 / 鏡子</li>
                     </ul>
                 </div>
+
             </div>
         </div>
     </section>
@@ -297,13 +311,13 @@
         <div class="room-grid">
 
             <div class="room-card vip-card" data-tags="group">
-                <div class="room-tag tag-vip"><i class="fa-solid fa-crown"></i> 私人會所</div>
+                <div class="room-tag tag-vip"><i class="fa-solid fa-crown"></i> 私人別邸</div>
                 <div class="carousel-container" data-room-source="villa-hero">
                     </div>
                 <div class="room-details">
-                    <div class="room-header"><div class="room-name">獨棟泳池私人會所 (俐姐 Villa)</div></div>
+                    <div class="room-header"><div class="room-name">獨棟泳池私人別邸 (俐姐 Villa)</div></div>
                     <div class="room-meta">
-                        <span><i class="fa-solid fa-users"></i> 適合 10 人</span>
+                        <span><i class="fa-solid fa-users"></i> 適合 10-20 人</span>
                         <span><i class="fa-solid fa-house-lock"></i> 專屬場地包場</span>
                     </div>
                     <div class="amenities-list">
@@ -466,6 +480,7 @@
     </footer>
 
     <script>
+        // --- 1. 後台設定區 (您可以直接在這裡改照片) ---
         const websiteContent = {
             index: {
                 hero: ["images/main-hero.jpg"],
@@ -479,6 +494,7 @@
                     dorm: ["images/room-dorm.jpg"]
                 }
             },
+            // 別館資料 (這裡也備份一份，確保首頁能讀到別館封面)
             villa: {
                 hero: [
                     { img: "images/villa-hero-1.jpg", text: "隱密私人別墅" },
@@ -490,19 +506,23 @@
             }
         };
 
+        // --- 2. 程式邏輯區 ---
         document.addEventListener("DOMContentLoaded", function() {
             loadIndexContent(); 
             startAllAutoPlay(); 
         });
 
+        // 讀取設定並填入畫面
         function loadIndexContent() {
             const data = websiteContent.index;
             const villaData = websiteContent.villa;
 
+            // 1. 設定 Hero 背景
             if(data.hero && data.hero.length > 0) {
                 document.getElementById('index-hero').style.backgroundImage = `url('${data.hero[0]}')`;
             }
 
+            // 2. 載入各房型照片 (只顯示第一張，不加按鈕)
             for (const [key, images] of Object.entries(data.rooms)) {
                 const container = document.querySelector(`.carousel-container[data-cms-id="${key}"]`);
                 if(container && images.length > 0) {
@@ -511,6 +531,7 @@
                 }
             }
 
+            // 3. 特殊處理：Villa 卡片 (保留完整輪播功能)
             const villaContainer = document.querySelector('.carousel-container[data-room-source="villa-hero"]');
             if(villaContainer && villaData.hero.length > 0) {
                 let imgHTML = '';
@@ -518,6 +539,7 @@
                     let active = idx === 0 ? 'active' : '';
                     imgHTML += `<img src="${item.img}" class="carousel-slide ${active}">`;
                 });
+                // 補上按鈕
                 imgHTML += `
                     <button class="carousel-btn prev-btn" onclick="moveSlide(this, -1)">&#10094;</button>
                     <button class="carousel-btn next-btn" onclick="moveSlide(this, 1)">&#10095;</button>
@@ -526,9 +548,11 @@
             }
         }
 
+        // --- 輪播邏輯 ---
         function startAllAutoPlay() {
             let carousels = document.querySelectorAll('.carousel-container');
             carousels.forEach(container => {
+                // 檢查如果只有 1 張圖 (一般房型)，就不啟動自動播放
                 if (container.querySelectorAll('.carousel-slide').length > 1) {
                     startContainerTimer(container);
                     container.addEventListener('mouseenter', () => stopContainerTimer(container));
@@ -552,7 +576,7 @@
 
         function moveSlideAuto(container, dir) {
             let slides = container.querySelectorAll('.carousel-slide');
-            if(slides.length <= 1) return; 
+            if(slides.length <= 1) return; // 只有一張圖不做事
 
             let activeIndex = -1;
             for(let i=0; i<slides.length; i++) {
@@ -569,12 +593,14 @@
             slides[newIndex].classList.add('active');
         }
 
+        // 手動按鈕控制
         function moveSlide(btn, dir) {
             let container = btn.parentElement;
             moveSlideAuto(container, dir);
             stopContainerTimer(container);
         }
 
+        // Modal 與篩選
         function openModal() {
             document.getElementById('welcomeModal').classList.remove('hidden');
             document.body.classList.add('modal-open');
