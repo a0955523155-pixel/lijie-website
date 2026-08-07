@@ -23,7 +23,7 @@
   <header class="hero" id="top">
     <nav class="nav">
       <a class="brand" href="#top">LIJIE'S HOME <b>俐姐的家</b></a>
-      <a class="back" href="https://line.me/ti/p/~080meayj" target="_blank" rel="noopener noreferrer">LINE 洽詢 →</a>
+      
     </nav>
     <div class="slides" aria-label="場地相片輪播">
       <div class="slide active" style="background-image:url('images/villa-hero-1-new.jpg')"></div>
@@ -36,12 +36,9 @@
       <p class="eyebrow">LIJIE’S HOME · HENGCHUN</p>
       <h1>今天，<br>不安排得太滿。</h1>
       <p class="hero-copy">俐姐的家，是一個讓人放下時間表的地方。帶著想見的人來，聊天、吃飯、放空，把今天過成你們自己的樣子。</p>
-      <div class="hero-actions">
-        <a class="button button-primary" href="https://line.me/ti/p/~080meayj" target="_blank" rel="noopener noreferrer">官方 LINE 洽詢 <span>→</span></a>
-        <a class="button button-ghost" href="#space">探索場地 <span>↓</span></a>
-      </div>
+      
     </div>
-    <div class="hero-meta"><span>SCROLL TO EXPLORE</span><div class="dots" aria-label="切換相片"><button class="dot active" aria-label="第 1 張"></button><button class="dot" aria-label="第 2 張"></button><button class="dot" aria-label="第 3 張"></button><button class="dot" aria-label="第 4 張"></button><button class="dot" aria-label="第 5 張"></button></div></div>
+    <div class="hero-meta"><span>慢慢往下看</span></div>
   </header>
   <main>
     <section class="section intro" id="space">
@@ -56,10 +53,8 @@
   </main>
   <footer><p>© 2026 俐姐的家 · PRIVATE GATHERING SPACE</p><p>本頁僅為私人團體活動場地資訊展示，採預約洽詢制。使用日期、時段、活動內容、可使用區域及現場規範，以雙方確認內容為準；如涉及住宿、餐飲或其他受管制服務，請依當地法令及所需許可另行安排。</p></footer>
   <script>
-    const slides=[...document.querySelectorAll('.slide')],dots=[...document.querySelectorAll('.dot')];let current=0,timer;
-    function showSlide(next){slides[current].classList.remove('active');dots[current].classList.remove('active');current=(next+slides.length)%slides.length;slides[current].classList.add('active');dots[current].classList.add('active')}
-    function restart(){clearInterval(timer);timer=setInterval(()=>showSlide(current+1),5000)}
-    dots.forEach((dot,i)=>dot.addEventListener('click',()=>{showSlide(i);restart()}));restart();
+    const slides=[...document.querySelectorAll('.slide')];let current=0;
+    setInterval(()=>{slides[current].classList.remove('active');current=(current+1)%slides.length;slides[current].classList.add('active')},5000);
   </script>
 </body>
 </html>
