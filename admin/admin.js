@@ -119,8 +119,8 @@ function libraryImage(asset) {
 }
 
 async function registerLibraryAsset({ url, storagePath, file }) {
-  const assetId = crypto.randomUUID();
-  await setDoc(doc(db, "imageLibrary", assetId), {
+  const asset = {
+    id: crypto.randomUUID(),
     url,
     storagePath,
     fileName: file.name,
@@ -128,19 +128,22 @@ async function registerLibraryAsset({ url, storagePath, file }) {
     size: file.size,
     contentType: file.type,
     createdBy: auth.currentUser.uid,
-    createdAt: serverTimestamp()
-  });
-  return assetId;
+    createdAt: new Date().toISOString()
+  };
+  draft._mediaLibrary ??= [];
+  draft._mediaLibrary.unshift(asset);
+  libraryAssets = draft._mediaLibrary;
+  await saveDraft("照片已加入素材庫。", { quietLibrary: true });
+  return asset.id;
 }
 
 async function loadLibrary() {
-  try {
-    const snap = await getDocs(query(collection(db, "imageLibrary"), orderBy("createdAt", "desc"), limit(300)));
-    libraryAssets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderLibrary();
-  } catch (error) {
-    message("#libraryMessage", error.message || "素材庫載入失敗。", "error");
-  }
+  // V5.2 compatibility mode: keep the media index inside the already-authorized
+  // siteContentDrafts/home document. This avoids requiring a new imageLibrary
+  // Firestore collection/rule deployment just to browse the library.
+  draft._mediaLibrary ??= [];
+  libraryAssets = draft._mediaLibrary;
+  renderLibrary();
 }
 
 function filteredLibrary(term = "") {
@@ -164,8 +167,9 @@ function makeLibraryCard(asset, picker = false) {
   name.title = asset.fileName || "";
   const meta = document.createElement("div");
   meta.className = "library-card-meta";
-  const date = asset.createdAt?.toDate?.();
-  meta.textContent = `${asset.category || "其他"} · ${asset.size ? formatBytes(asset.size) : ""}${date ? ` · ${new Intl.DateTimeFormat("zh-TW", {month:"numeric",day:"numeric"}).format(date)}` : ""}`;
+  const date = asset.createdAt?.toDate?.() || (asset.createdAt ? new Date(asset.createdAt) : null);
+  const validDate = date && !Number.isNaN(date.getTime());
+  meta.textContent = `${asset.category || "其他"} · ${asset.size ? formatBytes(asset.size) : ""}${validDate ? ` · ${new Intl.DateTimeFormat("zh-TW", {month:"numeric",day:"numeric"}).format(date)}` : ""}`;
   body.append(name, meta);
   if (picker) {
     const actions = document.createElement("div"); actions.className = "library-card-actions";
@@ -180,8 +184,9 @@ function makeLibraryCard(asset, picker = false) {
     const remove = document.createElement("button"); remove.type="button"; remove.className="danger"; remove.textContent="移出素材庫";
     remove.addEventListener("click", async () => {
       if (!confirm(`確定將「${asset.fileName || "這張照片"}」移出素材庫嗎？網站目前使用中的圖片不會被刪除。`)) return;
-      await deleteDoc(doc(db,"imageLibrary",asset.id));
-      libraryAssets = libraryAssets.filter(x => x.id !== asset.id);
+      draft._mediaLibrary = (draft._mediaLibrary || []).filter(x => x.id !== asset.id);
+      libraryAssets = draft._mediaLibrary;
+      await saveDraft("素材庫已更新。", { quietLibrary: true });
       renderLibrary();
       message("#libraryMessage","已移出素材庫；實際圖片檔保留，避免影響已發布網站。","success");
     });
@@ -391,10 +396,17 @@ function renderPhotos() {
   grid.append(imageCard(draft.ctaPhoto, "頁尾背景", { target: { type: "ctaPhoto" }, onRemove: () => message("#uploadProgress", "固定區塊請直接上傳新照片覆蓋。", "error") }));
 }
 
-async function saveDraft(successText = "草稿已儲存。") {
+async function saveDraft(successText = "草稿已儲存。", options = {}) {
   await setDoc(doc(db, "siteContentDrafts", "home"), { content: draft, updatedAt: serverTimestamp() }, { merge: true });
   message("#saveMessage", successText, "success");
   message("#uploadProgress", successText, "success");
+  if (!options.quietLibrary && $("#libraryMessage")) message("#libraryMessage", successText, "success");
+}
+
+function publicContentFromDraft() {
+  const value = clone(draft);
+  delete value._mediaLibrary;
+  return value;
 }
 
 async function loadDraft() {
@@ -425,7 +437,10 @@ async function loadRevisions() {
       restore.className = "secondary";
       restore.textContent = "載入為草稿";
       restore.addEventListener("click", async () => {
+        const currentLibrary = clone(draft._mediaLibrary || []);
         draft = clone(value.content);
+        draft._mediaLibrary = currentLibrary;
+        libraryAssets = draft._mediaLibrary;
         await saveDraft("舊版本已載入為草稿，確認後可重新發布。");
         fillForm(); renderPhotos();
         message("#publishMessage", "舊版本已載入為草稿，尚未影響官網。", "success");
@@ -621,7 +636,10 @@ function bindEvents() {
   $("#restoreButton").addEventListener("click", async () => {
     const snapshot = await getDoc(doc(db, "publishedContent", "home"));
     if (!snapshot.exists()) return message("#publishMessage", "目前還沒有已發布版本。", "error");
+    const currentLibrary = clone(draft._mediaLibrary || []);
     draft = clone(snapshot.data().content);
+    draft._mediaLibrary = currentLibrary;
+    libraryAssets = draft._mediaLibrary;
     await saveDraft("草稿已恢復為目前官網版本。");
     fillForm(); renderPhotos();
     message("#publishMessage", "草稿已恢復，尚未重新發布。", "success");
@@ -631,9 +649,10 @@ function bindEvents() {
     message("#publishMessage", "正在發布…");
     try {
       await saveDraft();
+      const publicContent = publicContentFromDraft();
       const batch = writeBatch(db);
-      batch.set(doc(db, "publishedContent", "home"), { content: draft, publishedAt: serverTimestamp() });
-      batch.set(doc(collection(db, "siteRevisions")), { slug: "home", content: draft, publishedBy: auth.currentUser.uid, createdAt: serverTimestamp() });
+      batch.set(doc(db, "publishedContent", "home"), { content: publicContent, publishedAt: serverTimestamp() });
+      batch.set(doc(collection(db, "siteRevisions")), { slug: "home", content: publicContent, publishedBy: auth.currentUser.uid, createdAt: serverTimestamp() });
       await batch.commit();
       message("#publishMessage", "發布完成，訪客重新整理後即可看到新版內容。", "success");
       await loadRevisions();
