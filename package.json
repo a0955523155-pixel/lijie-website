@@ -1,0 +1,9 @@
+{
+  "name": "lijie-website-admin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "preview": "npx serve ."
+  }
+}
