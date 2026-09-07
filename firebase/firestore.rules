@@ -71,6 +71,24 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+
+    // 圖片素材庫：只有管理員可以查看與管理素材索引；圖片本身由 Storage 提供。
+    match /imageLibrary/{assetId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['url','storagePath','fileName','category','size','contentType','createdBy','createdAt'])
+        && request.resource.data.url is string
+        && request.resource.data.storagePath is string
+        && request.resource.data.fileName is string
+        && request.resource.data.category is string
+        && request.resource.data.size is int
+        && request.resource.data.contentType is string
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
     match /{document=**} { allow read, write: if false; }
   }
 }

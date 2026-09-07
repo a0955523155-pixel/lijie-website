@@ -18,6 +18,8 @@ let previewUrls = [];
 let adminCalendarCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let adminSelectedDate = "";
 let adminMonthStates = new Map();
+let libraryAssets = [];
+let libraryPickerTarget = null;
 
 function message(selector, text, type = "") {
   const node = $(selector);
@@ -111,6 +113,191 @@ function clearSelectedFiles() {
   renderSelectionPreview();
 }
 
+
+function libraryImage(asset) {
+  return { url: asset.url, alt: (asset.fileName || "網站照片").replace(/\.[^.]+$/, ""), storagePath: asset.storagePath || "" };
+}
+
+async function registerLibraryAsset({ url, storagePath, file }) {
+  const assetId = crypto.randomUUID();
+  await setDoc(doc(db, "imageLibrary", assetId), {
+    url,
+    storagePath,
+    fileName: file.name,
+    category: $("#libraryUploadCategory")?.value || "其他",
+    size: file.size,
+    contentType: file.type,
+    createdBy: auth.currentUser.uid,
+    createdAt: serverTimestamp()
+  });
+  return assetId;
+}
+
+async function loadLibrary() {
+  try {
+    const snap = await getDocs(query(collection(db, "imageLibrary"), orderBy("createdAt", "desc"), limit(300)));
+    libraryAssets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderLibrary();
+  } catch (error) {
+    message("#libraryMessage", error.message || "素材庫載入失敗。", "error");
+  }
+}
+
+function filteredLibrary(term = "") {
+  const q = term.trim().toLowerCase();
+  if (!q) return libraryAssets;
+  return libraryAssets.filter(a => `${a.fileName || ""} ${a.category || ""}`.toLowerCase().includes(q));
+}
+
+function makeLibraryCard(asset, picker = false) {
+  const card = document.createElement("article");
+  card.className = "library-card";
+  const img = document.createElement("img");
+  img.src = asset.url;
+  img.alt = asset.fileName || "素材庫照片";
+  img.loading = "lazy";
+  const body = document.createElement("div");
+  body.className = "library-card-body";
+  const name = document.createElement("strong");
+  name.className = "library-card-name";
+  name.textContent = asset.fileName || "未命名照片";
+  name.title = asset.fileName || "";
+  const meta = document.createElement("div");
+  meta.className = "library-card-meta";
+  const date = asset.createdAt?.toDate?.();
+  meta.textContent = `${asset.category || "其他"} · ${asset.size ? formatBytes(asset.size) : ""}${date ? ` · ${new Intl.DateTimeFormat("zh-TW", {month:"numeric",day:"numeric"}).format(date)}` : ""}`;
+  body.append(name, meta);
+  if (picker) {
+    const actions = document.createElement("div"); actions.className = "library-card-actions";
+    const choose = document.createElement("button"); choose.type="button"; choose.className="primary"; choose.textContent="選這張";
+    choose.addEventListener("click", (e) => { e.stopPropagation(); applyLibraryAsset(asset); });
+    actions.append(choose); body.append(actions);
+    card.addEventListener("dblclick", () => applyLibraryAsset(asset));
+  } else {
+    const actions = document.createElement("div"); actions.className = "library-card-actions";
+    const use = document.createElement("button"); use.type="button"; use.className="secondary"; use.textContent="套用到網站";
+    use.addEventListener("click", () => openLibraryPicker({type:"choose-target", asset}));
+    const remove = document.createElement("button"); remove.type="button"; remove.className="danger"; remove.textContent="移出素材庫";
+    remove.addEventListener("click", async () => {
+      if (!confirm(`確定將「${asset.fileName || "這張照片"}」移出素材庫嗎？網站目前使用中的圖片不會被刪除。`)) return;
+      await deleteDoc(doc(db,"imageLibrary",asset.id));
+      libraryAssets = libraryAssets.filter(x => x.id !== asset.id);
+      renderLibrary();
+      message("#libraryMessage","已移出素材庫；實際圖片檔保留，避免影響已發布網站。","success");
+    });
+    actions.append(use,remove); body.append(actions);
+  }
+  card.append(img,body);
+  return card;
+}
+
+function renderLibrary() {
+  const grid = $("#libraryGrid");
+  if (!grid) return;
+  grid.replaceChildren();
+  const assets = filteredLibrary($("#librarySearch")?.value || "");
+  if (!assets.length) { const e=document.createElement("div"); e.className="library-empty"; e.textContent="素材庫目前沒有符合的照片。先從上方一次上傳常用照片。"; grid.append(e); return; }
+  assets.forEach(a => grid.append(makeLibraryCard(a,false)));
+}
+
+function renderPickerLibrary() {
+  const grid=$("#pickerGrid"); if(!grid) return; grid.replaceChildren();
+  const assets=filteredLibrary($("#pickerSearch")?.value || "");
+  if(!assets.length){const e=document.createElement("div");e.className="library-empty";e.textContent="找不到符合的素材。";grid.append(e);return;}
+  assets.forEach(a=>grid.append(makeLibraryCard(a,true)));
+}
+
+function targetLabel(target) {
+  if (!target) return "網站照片";
+  if (target.type === "hero-add") return "新增首頁封面";
+  if (target.type === "hero-replace") return `更換封面 ${target.index + 1}`;
+  if (target.type === "facility") return `更換 ${draft.facilities[target.index]?.name || "空間照片"}`;
+  if (target.type === "usePhoto") return "更換中段主照片";
+  if (target.type === "ctaPhoto") return "更換頁尾背景";
+  return "選擇套用位置";
+}
+
+function openLibraryPicker(target) {
+  if (target?.type === "choose-target") {
+    const asset = target.asset;
+    const choices = ["新增首頁封面", ...draft.hero.images.map((_,i)=>`替換封面 ${i+1}`), ...draft.facilities.map(f=>`更換 ${f.name}`), "更換中段主照片", "更換頁尾背景"];
+    const answer = prompt(`要把「${asset.fileName}」套用到哪裡？\n\n${choices.map((x,i)=>`${i+1}. ${x}`).join("\n")}\n\n請輸入編號：`);
+    const n=Number(answer); if(!Number.isInteger(n)||n<1||n>choices.length) return;
+    if(n===1) libraryPickerTarget={type:"hero-add"};
+    else if(n<=1+draft.hero.images.length) libraryPickerTarget={type:"hero-replace",index:n-2};
+    else if(n<=1+draft.hero.images.length+draft.facilities.length) libraryPickerTarget={type:"facility",index:n-2-draft.hero.images.length};
+    else if(n===2+draft.hero.images.length+draft.facilities.length) libraryPickerTarget={type:"usePhoto"};
+    else libraryPickerTarget={type:"ctaPhoto"};
+    applyLibraryAsset(asset); return;
+  }
+  libraryPickerTarget = target;
+  $("#libraryPickerTitle").textContent = targetLabel(target);
+  $("#pickerHint").textContent = "點「選這張」即可套用到草稿；正式發布前不會影響官網。";
+  $("#pickerSearch").value = "";
+  renderPickerLibrary();
+  $("#libraryPickerDialog").showModal();
+}
+
+async function applyLibraryAsset(asset) {
+  const target=libraryPickerTarget; if(!target) return;
+  const image=libraryImage(asset);
+  if(target.type==="hero-add") {
+    if(draft.hero.images.length>=5) return message("#uploadProgress","首頁封面最多 5 張。","error");
+    draft.hero.images.push(image);
+  } else if(target.type==="hero-replace") draft.hero.images[target.index]=image;
+  else if(target.type==="facility") draft.facilities[target.index].image=image;
+  else if(target.type==="usePhoto") draft.usePhoto=image;
+  else if(target.type==="ctaPhoto") draft.ctaPhoto=image;
+  await saveDraft(`已從素材庫套用「${asset.fileName || "照片"}」到草稿。`);
+  renderPhotos();
+  if($("#libraryPickerDialog")?.open) $("#libraryPickerDialog").close();
+}
+
+async function uploadFilesToLibrary(files) {
+  if (!files.length) return message("#libraryMessage","請先選擇照片。","error");
+  const button=$("#libraryUploadButton"); button.disabled=true;
+  try {
+    let done=0;
+    for(const file of files){
+      if(!allowedTypes.has(file.type)) throw new Error(`${file.name} 格式不支援。`);
+      if(file.size>8*1024*1024) throw new Error(`${file.name} 超過 8 MB。`);
+      const extension=file.type==="image/jpeg"?"jpg":file.type.split("/")[1];
+      const storagePath=`site-images/library/${crypto.randomUUID()}.${extension}`;
+      message("#libraryMessage",`正在上傳 ${file.name}（${done+1}/${files.length}）…`);
+      const fileRef=ref(storage,storagePath);
+      await uploadBytes(fileRef,file,{contentType:file.type,cacheControl:"public,max-age=31536000,immutable"});
+      const url=await getDownloadURL(fileRef);
+      await registerLibraryAsset({url,storagePath,file});
+      done++;
+    }
+    $("#libraryInput").value="";
+    message("#libraryMessage",`${done} 張照片已加入素材庫。之後換圖可直接挑選。`,"success");
+    await loadLibrary();
+  } catch(error){message("#libraryMessage",error.message||"素材庫上傳失敗。","error");}
+  finally{button.disabled=false;}
+}
+
+async function uploadLocalReplacement(file, target) {
+  if(!allowedTypes.has(file.type)) return message("#uploadProgress",`${file.name} 格式不支援。`,"error");
+  if(file.size>8*1024*1024) return message("#uploadProgress",`${file.name} 超過 8 MB。`,"error");
+  try{
+    const extension=file.type==="image/jpeg"?"jpg":file.type.split("/")[1];
+    const storagePath=`site-images/library/${crypto.randomUUID()}.${extension}`;
+    message("#uploadProgress",`正在上傳 ${file.name}…`);
+    const fileRef=ref(storage,storagePath);
+    await uploadBytes(fileRef,file,{contentType:file.type,cacheControl:"public,max-age=31536000,immutable"});
+    const url=await getDownloadURL(fileRef);
+    await registerLibraryAsset({url,storagePath,file});
+    const image={url,alt:file.name.replace(/\.[^.]+$/,""),storagePath};
+    if(target.type==="hero-replace") draft.hero.images[target.index]=image;
+    else if(target.type==="facility") draft.facilities[target.index].image=image;
+    else if(target.type==="usePhoto") draft.usePhoto=image;
+    else if(target.type==="ctaPhoto") draft.ctaPhoto=image;
+    await saveDraft("新照片已上傳、加入素材庫並套用到草稿。");
+    renderPhotos(); await loadLibrary();
+  }catch(error){message("#uploadProgress",error.message||"照片上傳失敗。","error");}
+}
+
 function imageCard(image, label, options = {}) {
   const card = document.createElement("article");
   card.className = "photo-card";
@@ -120,6 +307,8 @@ function imageCard(image, label, options = {}) {
   const img = document.createElement("img");
   img.src = image.url;
   img.alt = image.alt || label;
+  img.title = "點圖片從素材庫更換";
+  if (options.target) img.addEventListener("click", () => openLibraryPicker(options.target));
   const meta = document.createElement("div");
   meta.className = "photo-meta";
   const title = document.createElement("strong");
@@ -130,6 +319,9 @@ function imageCard(image, label, options = {}) {
   alt.value = image.alt || "";
   alt.setAttribute("aria-label", `${label}替代文字`);
   alt.addEventListener("change", () => { image.alt = alt.value.trim(); });
+  const hintText = document.createElement("p");
+  hintText.className = "photo-change-hint";
+  hintText.textContent = "點照片可從素材庫更換";
   const actions = document.createElement("div");
   actions.className = "photo-actions";
   if (options.draggable) {
@@ -140,13 +332,23 @@ function imageCard(image, label, options = {}) {
     hint.title = "也可直接拖曳整張照片";
     actions.append(hint);
   }
+  if (options.target) {
+    const choose = document.createElement("button");
+    choose.type = "button"; choose.className = "choose-library"; choose.textContent = "從素材庫更換";
+    choose.addEventListener("click", () => openLibraryPicker(options.target));
+    const localId = `local-${crypto.randomUUID()}`;
+    const localLabel = document.createElement("label"); localLabel.className = "photo-local-label"; localLabel.htmlFor = localId; localLabel.textContent = "從本機更換";
+    const localInput = document.createElement("input"); localInput.id=localId; localInput.className="photo-local-input"; localInput.type="file"; localInput.accept="image/jpeg,image/png,image/webp";
+    localInput.addEventListener("change", () => { const file=localInput.files?.[0]; if(file) uploadLocalReplacement(file, options.target); });
+    actions.append(choose, localLabel, localInput);
+  }
   const remove = document.createElement("button");
   remove.type = "button";
   remove.className = "danger";
   remove.textContent = "從草稿移除";
   remove.addEventListener("click", options.onRemove);
   actions.append(remove);
-  meta.append(title, alt, actions);
+  meta.append(title, alt, hintText, actions);
   card.append(img, meta);
 
   if (options.draggable) {
@@ -173,6 +375,7 @@ function renderPhotos() {
   draft.hero.images.forEach((image, index) => grid.append(imageCard(image, `封面 ${index + 1}${index === 0 ? "（首頁主圖）" : ""}`, {
     draggable: true,
     index,
+    target: { type: "hero-replace", index },
     onRemove: async () => {
       if (draft.hero.images.length <= 1) return message("#uploadProgress", "首頁至少需要保留一張封面。", "error");
       draft.hero.images.splice(index, 1);
@@ -180,11 +383,12 @@ function renderPhotos() {
       await saveDraft("照片已從草稿移除；正式發布前官網不受影響。");
     }
   })));
-  draft.facilities.forEach((facility) => grid.append(imageCard(facility.image, facility.name, {
+  draft.facilities.forEach((facility, index) => grid.append(imageCard(facility.image, facility.name, {
+    target: { type: "facility", index },
     onRemove: () => message("#uploadProgress", "固定區塊請直接上傳新照片覆蓋，避免官網出現空白。", "error")
   })));
-  grid.append(imageCard(draft.usePhoto, "中段主照片", { onRemove: () => message("#uploadProgress", "固定區塊請直接上傳新照片覆蓋。", "error") }));
-  grid.append(imageCard(draft.ctaPhoto, "頁尾背景", { onRemove: () => message("#uploadProgress", "固定區塊請直接上傳新照片覆蓋。", "error") }));
+  grid.append(imageCard(draft.usePhoto, "中段主照片", { target: { type: "usePhoto" }, onRemove: () => message("#uploadProgress", "固定區塊請直接上傳新照片覆蓋。", "error") }));
+  grid.append(imageCard(draft.ctaPhoto, "頁尾背景", { target: { type: "ctaPhoto" }, onRemove: () => message("#uploadProgress", "固定區塊請直接上傳新照片覆蓋。", "error") }));
 }
 
 async function saveDraft(successText = "草稿已儲存。") {
@@ -200,6 +404,7 @@ async function loadDraft() {
   fillForm();
   renderPhotos();
   await loadRevisions();
+  await loadLibrary();
 }
 
 async function loadRevisions() {
@@ -262,7 +467,9 @@ async function uploadPhotos() {
       message("#uploadProgress", `正在上傳 ${file.name}…`);
       const fileRef = ref(storage, storagePath);
       await uploadBytes(fileRef, file, { contentType: file.type, cacheControl: "public,max-age=31536000,immutable" });
-      const image = { url: await getDownloadURL(fileRef), alt: file.name.replace(/\.[^.]+$/, ""), storagePath };
+      const url = await getDownloadURL(fileRef);
+      await registerLibraryAsset({ url, storagePath, file });
+      const image = { url, alt: file.name.replace(/\.[^.]+$/, ""), storagePath };
       if (target === "hero") draft.hero.images.push(image);
       else if (target.startsWith("facility-")) draft.facilities[Number(target.split("-")[1])].image = image;
       else draft[target] = image;
@@ -270,6 +477,7 @@ async function uploadPhotos() {
     await saveDraft(`${files.length} 張照片已上傳並存入草稿。`);
     clearSelectedFiles();
     renderPhotos();
+    await loadLibrary();
   } catch (error) { message("#uploadProgress", error.message || "照片上傳失敗，請稍後再試。", "error"); }
   finally { button.disabled = false; }
 }
@@ -369,8 +577,9 @@ function bindEvents() {
   $("#logoutButton").addEventListener("click", async () => { await signOut(auth); location.reload(); });
   document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab === button));
-    ["photos", "calendar", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
+    ["photos", "library", "calendar", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
     if (button.dataset.tab === "calendar") renderAdminCalendar().catch((e)=>message("#bookingMessage",e.message,"error"));
+    if (button.dataset.tab === "library") loadLibrary();
   }));
   $("#photoInput").addEventListener("change", (event) => {
     selectedFiles = [...event.target.files];
@@ -382,6 +591,11 @@ function bindEvents() {
     message("#uploadProgress", "已清除選取照片。");
   });
   $("#uploadButton").addEventListener("click", uploadPhotos);
+  $("#addHeroFromLibrary").addEventListener("click", () => openLibraryPicker({type:"hero-add"}));
+  $("#libraryUploadButton").addEventListener("click", () => uploadFilesToLibrary([...( $("#libraryInput").files || [] )]));
+  $("#librarySearch").addEventListener("input", renderLibrary);
+  $("#pickerSearch").addEventListener("input", renderPickerLibrary);
+  $("#closeLibraryPicker").addEventListener("click", () => $("#libraryPickerDialog").close());
   $("#adminCalPrev").addEventListener("click",()=>{adminCalendarCursor=new Date(adminCalendarCursor.getFullYear(),adminCalendarCursor.getMonth()-1,1);renderAdminCalendar();});
   $("#adminCalNext").addEventListener("click",()=>{adminCalendarCursor=new Date(adminCalendarCursor.getFullYear(),adminCalendarCursor.getMonth()+1,1);renderAdminCalendar();});
   $("#bookingStatus").addEventListener("change",toggleBookingPrivateFields);

@@ -37,13 +37,14 @@
 
       <nav class="tabs" aria-label="後台分類">
         <button class="tab active" data-tab="photos" type="button">照片管理</button>
+        <button class="tab" data-tab="library" type="button">圖片素材庫</button>
         <button class="tab" data-tab="calendar" type="button">預約日曆</button>
         <button class="tab" data-tab="copy" type="button">文字與資訊</button>
         <button class="tab" data-tab="publish" type="button">預覽與發布</button>
       </nav>
 
       <section id="photosPanel" class="panel">
-        <div class="panel-heading"><div><h2>照片管理</h2><p>可上傳 JPG、PNG、WebP，單張最多 8 MB。拖曳封面照片可調整順序。</p></div></div>
+        <div class="panel-heading"><div><h2>照片管理</h2><p>點目前照片即可更換；可以從本機上傳，也可以直接從圖片素材庫挑選。拖曳封面照片可調整順序。</p></div><div class="panel-heading-actions"><button id="addHeroFromLibrary" class="secondary" type="button">＋ 從素材庫新增封面</button></div></div>
         <div class="upload-row">
           <label>照片位置<select id="uploadTarget"><option value="hero">首頁封面輪播</option><option value="facility-0">KTV 空間</option><option value="facility-1">休閒／麻將空間</option><option value="facility-2">泳池空間</option><option value="facility-3">戶外料理區</option><option value="usePhoto">中段主照片</option><option value="ctaPhoto">頁尾背景</option></select></label>
           <label class="file-button">選擇照片<input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>
@@ -60,6 +61,18 @@
         <div id="photoGrid" class="photo-grid"></div>
       </section>
 
+
+      <section id="libraryPanel" class="panel hidden">
+        <div class="panel-heading"><div><p class="eyebrow">MEDIA LIBRARY</p><h2>圖片素材庫</h2><p>先把常用照片上傳到這裡。之後更換封面、泳池、KTV 等圖片時，可以直接挑選，不必再從電腦找檔案。</p></div></div>
+        <div class="library-toolbar">
+          <label>分類<select id="libraryUploadCategory"><option value="其他">其他</option><option value="封面">封面</option><option value="房間">房間</option><option value="泳池">泳池</option><option value="KTV">KTV</option><option value="戶外">戶外</option><option value="餐廳">餐廳</option></select></label>
+          <label class="file-button">選擇照片<input id="libraryInput" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>
+          <button id="libraryUploadButton" class="primary" type="button">上傳到素材庫</button>
+          <label class="library-search">搜尋<input id="librarySearch" type="search" placeholder="搜尋檔名或分類"></label>
+        </div>
+        <p id="libraryMessage" class="message" aria-live="polite"></p>
+        <div id="libraryGrid" class="library-grid"></div>
+      </section>
 
       <section id="calendarPanel" class="panel hidden">
         <div class="panel-heading"><div><p class="eyebrow">BOOKING CONTROL</p><h2>預約日曆</h2><p>直接在自己的網站管理日期，不再依賴 Google 日曆。前台只會顯示日期狀態，客人姓名與電話不會公開。</p></div></div>
@@ -119,6 +132,7 @@
       </section>
     </section>
   </main>
+  <dialog id="libraryPickerDialog" class="picker-dialog"><div class="dialog-head"><div><p class="eyebrow">CHOOSE FROM LIBRARY</p><h2 id="libraryPickerTitle">從素材庫選擇</h2></div><button id="closeLibraryPicker" class="secondary" type="button">關閉</button></div><div class="picker-body"><label class="picker-search">搜尋素材<input id="pickerSearch" type="search" placeholder="搜尋檔名或分類"></label><p id="pickerHint" class="muted"></p><div id="pickerGrid" class="library-grid picker-grid"></div></div></dialog>
   <dialog id="previewDialog"><div class="dialog-head"><h2>草稿預覽</h2><button id="closePreview" class="secondary" type="button">關閉</button></div><iframe id="previewFrame" title="網站草稿預覽"></iframe></dialog>
   <script type="module" src="/admin/admin.js"></script>
 </body>
