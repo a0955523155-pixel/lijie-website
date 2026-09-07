@@ -9,6 +9,13 @@ if (grid) {
   const selectedCard = document.querySelector("#selectedDateCard");
   const selectedText = document.querySelector("#selectedDateText");
   const selectedLine = document.querySelector("#selectedDateLine");
+  const dateSheet = document.querySelector("#dateSheet");
+  const dateSheetBackdrop = document.querySelector("#dateSheetBackdrop");
+  const dateSheetTitle = document.querySelector("#dateSheetTitle");
+  const dateSheetLine = document.querySelector("#dateSheetLine");
+  const dateSheetCopy = document.querySelector("#dateSheetCopy");
+  const lineBase = selectedLine?.href?.split("?")[0] || "https://line.me/ti/p/~287ppyfa";
+  let selectedMessage = "";
   const formatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long" });
   const fullFormatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
   const today = new Date(); today.setHours(0,0,0,0);
@@ -32,6 +39,23 @@ if (grid) {
       console.warn("Availability unavailable", error);
       throw error;
     }
+  }
+
+  function closeDateSheet() {
+    dateSheet?.classList.remove("open");
+    dateSheetBackdrop?.classList.remove("open");
+    dateSheet?.setAttribute("aria-hidden", "true");
+    dateSheetBackdrop?.setAttribute("aria-hidden", "true");
+  }
+
+  function openDateSheet(d, key) {
+    selectedMessage = `您好，我想詢問俐姐的家 ${key} 是否可以預約？`;
+    if (dateSheetTitle) dateSheetTitle.textContent = fullFormatter.format(d);
+    if (dateSheetLine) dateSheetLine.href = lineBase;
+    dateSheet?.classList.add("open");
+    dateSheetBackdrop?.classList.add("open");
+    dateSheet?.setAttribute("aria-hidden", "false");
+    dateSheetBackdrop?.setAttribute("aria-hidden", "false");
   }
 
   async function render() {
@@ -64,9 +88,10 @@ if (grid) {
       if (!btn.disabled) btn.addEventListener("click", () => {
         selectedKey = key;
         selectedText.textContent = fullFormatter.format(d);
-        const base = selectedLine.href.split("?")[0];
-        selectedLine.href = `${base}?text=${encodeURIComponent(`您好，我想詢問俐姐的家 ${key} 是否可以預約？`)}`;
+        selectedMessage = `您好，我想詢問俐姐的家 ${key} 是否可以預約？`;
+        selectedLine.href = lineBase;
         selectedCard.classList.remove("hidden");
+        openDateSheet(d, key);
         render();
       });
       grid.append(btn);
@@ -75,5 +100,13 @@ if (grid) {
 
   document.querySelector("#calendarPrev")?.addEventListener("click", () => { cursor = new Date(cursor.getFullYear(), cursor.getMonth()-1, 1); render(); });
   document.querySelector("#calendarNext")?.addEventListener("click", () => { cursor = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1); render(); });
+  document.querySelector("#dateSheetClose")?.addEventListener("click", closeDateSheet);
+  dateSheetBackdrop?.addEventListener("click", closeDateSheet);
+  document.querySelector("#dateSheetCalendar")?.addEventListener("click", () => { closeDateSheet(); document.querySelector("#booking")?.scrollIntoView({ behavior: "smooth", block: "center" }); });
+  dateSheetCopy?.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(selectedMessage); dateSheetCopy.textContent = "已複製，可貼到 LINE ✓"; setTimeout(() => dateSheetCopy.textContent = "複製詢問文字", 1800); }
+    catch { dateSheetCopy.textContent = selectedMessage; }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDateSheet(); });
   render();
 }

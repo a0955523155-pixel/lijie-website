@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#173a35">
+  <meta name="robots" content="noindex,follow">
+  <title>LINE 預約｜俐姐的家</title>
+  <meta name="description" content="俐姐的家 LINE 預約日曆。查看可詢問日期、選擇日期並傳送預約資料。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/line-booking.css">
+</head>
+<body>
+  <main class="app">
+    <header class="hero">
+      <div class="brand"><img src="images/lijie-home-mark.svg" alt=""><b>俐姐的家</b><span>LIJIE'S HOME</span></div>
+      <h1>把想來的日子，<br>先留給彼此。</h1>
+      <p>直接在 LINE 裡查看目前可安排日期。選好日期與基本資料後，會把完整預約內容傳回官方 LINE，由俐姐協助最後確認。</p>
+      <div class="line-badge"><i class="dot"></i><span id="lineModeText">LINE 預約模式準備中</span></div>
+    </header>
+
+    <div class="content">
+      <section class="card" aria-labelledby="cal-title">
+        <div class="toolbar">
+          <button id="prev" class="nav" type="button" aria-label="上個月">←</button>
+          <div class="month"><p class="section-kicker">SELECT YOUR DATES</p><strong id="monthLabel">—</strong></div>
+          <button id="next" class="nav" type="button" aria-label="下個月">→</button>
+        </div>
+        <div class="week" aria-hidden="true"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+        <div id="calendar" class="grid" role="grid" aria-label="預約日期"></div>
+        <div class="legend"><span><i class="a"></i>可詢問</span><span><i class="b"></i>已預約</span><span><i class="c"></i>暫停開放</span></div>
+        <div class="selection">
+          <div class="box"><span>開始日期</span><strong id="startText">請選擇</strong></div><div class="arrow">→</div><div class="box"><span>結束日期</span><strong id="endText">請選擇</strong></div>
+        </div>
+        <p id="selectionNote" class="selection-note">先點開始日期，再點結束日期；若只詢問單日，可連續點同一天兩次。</p>
+        <div id="dateError" class="error hidden"></div>
+      </section>
+
+      <section class="card" aria-labelledby="form-title">
+        <p class="section-kicker">RESERVATION REQUEST</p>
+        <h2 id="form-title" class="section-title">留下預約資料</h2>
+        <div class="form-grid" style="margin-top:18px">
+          <div class="field"><label for="guestName">姓名</label><input id="guestName" autocomplete="name" maxlength="40" placeholder="怎麼稱呼您"></div>
+          <div class="field"><label for="phone">聯絡電話</label><input id="phone" inputmode="tel" autocomplete="tel" maxlength="24" placeholder="09xx-xxx-xxx"></div>
+          <div class="field"><label for="people">預計人數</label><input id="people" type="number" inputmode="numeric" min="1" max="30" placeholder="例如 8"></div>
+          <div class="field"><label for="purpose">活動類型</label><input id="purpose" maxlength="40" placeholder="朋友聚會／家庭聚會"></div>
+          <div class="field full"><label for="notes">備註</label><textarea id="notes" maxlength="300" placeholder="可以告訴我們大約抵達時間、是否需要 KTV／戶外料理區，或其他需求。"></textarea></div>
+        </div>
+        <p class="privacy">送出後會將以上內容整理成一則 LINE 訊息傳回官方帳號。此頁不會直接把姓名、電話公開寫入可查詢的日曆資料庫；實際是否成立仍以官方 LINE 確認為準。</p>
+        <div id="summary" class="summary hidden"></div>
+        <button id="sendBtn" class="primary" type="button" disabled><span>LINE</span> 傳送預約申請</button>
+        <button id="copyBtn" class="secondary" type="button">複製預約內容</button>
+        <p id="sendStatus" class="status">請先選擇日期並填寫姓名。</p>
+      </section>
+    </div>
+
+    <footer class="footer">© 2026 俐姐的家 · LINE 預約日曆<br>日期狀態由網站後台同步；實際安排以雙方確認為準。</footer>
+  </main>
+
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script type="module" src="js/line-booking.js"></script>
+</body>
+</html>
