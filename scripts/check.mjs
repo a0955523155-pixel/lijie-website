@@ -42,6 +42,20 @@ try { JSON.parse(await readFile(join(root, "vercel.json"), "utf8")); }
 catch { problems.push("vercel.json 格式錯誤"); }
 try { JSON.parse(await readFile(join(root, "firebase.json"), "utf8")); }
 catch { problems.push("firebase.json 格式錯誤"); }
+
+for (const path of ["index.html", "villa.html", "admin/index.html"]) {
+  const content = await readFile(join(root, path), "utf8");
+  const metaCsp = content.match(/<meta\s+http-equiv=["']Content-Security-Policy["'][^>]*>/i)?.[0] ?? "";
+  if (!metaCsp.includes("wss://*.googleapis.com") || !metaCsp.includes("wss://*.firebaseio.com")) {
+    problems.push(`CSP 缺少 Firebase WebSocket 白名單：${path}`);
+  }
+  if (metaCsp.includes("frame-ancestors")) problems.push(`frame-ancestors 不應放在 meta CSP：${path}`);
+}
+
+const vercelConfig = await readFile(join(root, "vercel.json"), "utf8");
+if (!vercelConfig.includes("wss://*.googleapis.com") || !vercelConfig.includes("frame-ancestors 'none'")) {
+  problems.push("Vercel CSP 標頭不完整");
+}
 if (problems.length) {
   console.error(problems.join("\n"));
   process.exit(1);
