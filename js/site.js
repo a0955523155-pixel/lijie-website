@@ -65,7 +65,6 @@ function applyContent(content) {
   const ctaUrl = safeImageUrl(content.ctaPhoto?.url);
   if (cta && ctaUrl) cta.style.backgroundImage = `linear-gradient(90deg,rgba(8,27,24,.93),rgba(8,27,24,.72)),url("${ctaUrl}")`;
 
-  setHref('a[href*="calendar.app.google"]', content.contact?.calendarUrl);
   setHref('a[href*="line.me"]', content.contact?.lineUrl);
   setHref('a[href*="google.com/maps"]', content.contact?.mapUrl);
   const phone = content.contact?.phone;

@@ -40,6 +40,37 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+
+    // 公開預約狀態：訪客只能讀取日期狀態，不能看到客人資料。
+    match /availability/{dateId} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['status', 'bookingId', 'updatedAt'])
+        && request.resource.data.status in ['booked', 'blocked']
+        && (request.resource.data.bookingId == null || request.resource.data.bookingId is string)
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isAdmin();
+    }
+
+    // 私人預約資料：姓名、電話、備註僅管理員可存取。
+    match /bookings/{bookingId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['startDate','endDate','guestName','phone','people','deposit','notes','createdBy','createdAt','updatedAt'])
+        && request.resource.data.startDate is string
+        && request.resource.data.endDate is string
+        && request.resource.data.guestName is string
+        && request.resource.data.phone is string
+        && (request.resource.data.people == null || request.resource.data.people is int)
+        && request.resource.data.deposit is string
+        && request.resource.data.notes is string
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
     match /{document=**} { allow read, write: if false; }
   }
 }

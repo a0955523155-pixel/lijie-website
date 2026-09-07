@@ -37,6 +37,7 @@
 
       <nav class="tabs" aria-label="後台分類">
         <button class="tab active" data-tab="photos" type="button">照片管理</button>
+        <button class="tab" data-tab="calendar" type="button">預約日曆</button>
         <button class="tab" data-tab="copy" type="button">文字與資訊</button>
         <button class="tab" data-tab="publish" type="button">預覽與發布</button>
       </nav>
@@ -57,6 +58,33 @@
         </section>
         <div id="uploadProgress" class="message" aria-live="polite"></div>
         <div id="photoGrid" class="photo-grid"></div>
+      </section>
+
+
+      <section id="calendarPanel" class="panel hidden">
+        <div class="panel-heading"><div><p class="eyebrow">BOOKING CONTROL</p><h2>預約日曆</h2><p>直接在自己的網站管理日期，不再依賴 Google 日曆。前台只會顯示日期狀態，客人姓名與電話不會公開。</p></div></div>
+        <div class="booking-admin-layout">
+          <div class="admin-calendar-card">
+            <div class="admin-calendar-toolbar"><button id="adminCalPrev" class="secondary" type="button">←</button><h3 id="adminCalMonth">—</h3><button id="adminCalNext" class="secondary" type="button">→</button></div>
+            <div class="admin-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+            <div id="adminCalendar" class="admin-calendar-grid"></div>
+            <div class="admin-calendar-legend"><span><i class="status-dot available"></i>可詢問</span><span><i class="status-dot booked"></i>已預約</span><span><i class="status-dot blocked"></i>暫停開放</span></div>
+          </div>
+          <form id="bookingForm" class="booking-editor">
+            <div><p class="eyebrow">DATE SETTINGS</p><h3>設定日期狀態</h3><p class="muted">可設定單日或一段日期；例如連續 3 天已被預約，可一次鎖定。</p></div>
+            <div class="booking-date-row"><label>開始日期<input id="bookingStart" type="date" required></label><label>結束日期<input id="bookingEnd" type="date" required></label></div>
+            <label>狀態<select id="bookingStatus"><option value="booked">已預約</option><option value="blocked">暫停開放</option><option value="available">恢復可詢問</option></select></label>
+            <div id="bookingPrivateFields" class="booking-private-fields">
+              <label>客人姓名<input id="bookingGuest" type="text" maxlength="60" placeholder="僅後台可見"></label>
+              <label>聯絡電話<input id="bookingPhone" type="tel" maxlength="40" placeholder="僅後台可見"></label>
+              <label>人數<input id="bookingPeople" type="number" min="1" max="50" placeholder="例如 10"></label>
+              <label>訂金／收款<input id="bookingDeposit" type="text" maxlength="40" placeholder="例如 已收 3,000"></label>
+              <label class="wide">備註<textarea id="bookingNotes" rows="3" maxlength="500" placeholder="活動內容、特殊需求、付款狀態等；僅後台可見"></textarea></label>
+            </div>
+            <div class="booking-editor-actions"><button class="primary" type="submit">儲存日期</button><button id="clearBookingForm" class="secondary" type="button">清空資料</button></div>
+            <p id="bookingMessage" class="message" aria-live="polite"></p>
+          </form>
+        </div>
       </section>
 
       <section id="copyPanel" class="panel hidden">
@@ -80,7 +108,6 @@
           <fieldset><legend>聯絡方式</legend>
             <label>電話<input data-path="contact.phone" type="tel" maxlength="30"></label>
             <label>LINE 網址<input data-path="contact.lineUrl" type="url" maxlength="300"></label>
-            <label>預約日曆網址<input data-path="contact.calendarUrl" type="url" maxlength="300"></label>
             <label class="wide">Google 地圖網址<input data-path="contact.mapUrl" type="url" maxlength="500"></label>
           </fieldset>
           <button class="primary" type="submit">儲存草稿</button><p id="saveMessage" class="message" aria-live="polite"></p>

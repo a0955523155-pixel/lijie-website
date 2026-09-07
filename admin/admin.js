@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, query, where, documentId, orderBy, limit, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-storage.js";
 import { firebaseConfig, isConfigured } from "../js/config.js";
 import { DEFAULT_CONTENT } from "../js/default-content.js";
@@ -15,6 +15,9 @@ let draft = clone(DEFAULT_CONTENT);
 let draggedIndex = null;
 let selectedFiles = [];
 let previewUrls = [];
+let adminCalendarCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let adminSelectedDate = "";
+let adminMonthStates = new Map();
 
 function message(selector, text, type = "") {
   const node = $(selector);
@@ -238,6 +241,7 @@ async function ensureAdmin(user) {
   $("#loginView").classList.add("hidden");
   $("#dashboardView").classList.remove("hidden");
   await loadDraft();
+  clearBookingEditor();
 }
 
 async function uploadPhotos() {
@@ -270,6 +274,91 @@ async function uploadPhotos() {
   finally { button.disabled = false; }
 }
 
+
+function dateKey(date) { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`; }
+function localDateFromKey(key) { const [y,m,d] = key.split("-").map(Number); return new Date(y,m-1,d); }
+function eachDate(startKey, endKey) {
+  const start = localDateFromKey(startKey), end = localDateFromKey(endKey), out = [];
+  if (end < start) throw new Error("結束日期不能早於開始日期。");
+  const span = Math.round((end-start)/86400000)+1;
+  if (span > 90) throw new Error("一次最多設定 90 天，避免誤操作。");
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)) out.push(dateKey(d));
+  return out;
+}
+async function loadAdminMonthStates() {
+  const first = new Date(adminCalendarCursor.getFullYear(), adminCalendarCursor.getMonth(), 1);
+  const last = new Date(adminCalendarCursor.getFullYear(), adminCalendarCursor.getMonth()+1, 0);
+  const q = query(collection(db,"availability"), where(documentId(),">=",dateKey(first)), where(documentId(),"<=",dateKey(last)));
+  const snap = await getDocs(q);
+  adminMonthStates = new Map(snap.docs.map(d => [d.id, d.data()]));
+}
+async function renderAdminCalendar() {
+  const grid = $("#adminCalendar");
+  if (!grid || !db) return;
+  await loadAdminMonthStates();
+  const first = new Date(adminCalendarCursor.getFullYear(), adminCalendarCursor.getMonth(), 1);
+  $("#adminCalMonth").textContent = new Intl.DateTimeFormat("zh-TW",{year:"numeric",month:"long"}).format(first);
+  grid.replaceChildren();
+  const start = new Date(first); start.setDate(1-first.getDay());
+  const labels = {booked:"已預約",blocked:"暫停",available:"可詢問"};
+  for (let i=0;i<42;i++) {
+    const d = new Date(start); d.setDate(start.getDate()+i);
+    const key = dateKey(d), data = adminMonthStates.get(key), status = data?.status || "available";
+    const btn = document.createElement("button"); btn.type="button";
+    btn.className = `admin-day ${d.getMonth()!==adminCalendarCursor.getMonth()?"outside":""} ${status} ${key===adminSelectedDate?"selected":""}`.trim();
+    btn.innerHTML = `<span>${d.getDate()}</span><small>${labels[status] || "可詢問"}</small>`;
+    btn.addEventListener("click", async () => {
+      adminSelectedDate = key;
+      $("#bookingStart").value = key; $("#bookingEnd").value = key;
+      $("#bookingStatus").value = status;
+      ["#bookingGuest","#bookingPhone","#bookingPeople","#bookingDeposit","#bookingNotes"].forEach(sel => $(sel).value = "");
+      if (data?.bookingId) {
+        const booking = await getDoc(doc(db,"bookings",data.bookingId));
+        if (booking.exists()) {
+          const b = booking.data();
+          $("#bookingGuest").value = b.guestName || ""; $("#bookingPhone").value = b.phone || "";
+          $("#bookingPeople").value = b.people || ""; $("#bookingDeposit").value = b.deposit || ""; $("#bookingNotes").value = b.notes || "";
+          if (b.startDate) $("#bookingStart").value = b.startDate; if (b.endDate) $("#bookingEnd").value = b.endDate;
+        }
+      }
+      toggleBookingPrivateFields(); renderAdminCalendar();
+    });
+    grid.append(btn);
+  }
+}
+function toggleBookingPrivateFields() {
+  $("#bookingPrivateFields")?.classList.toggle("hidden", $("#bookingStatus")?.value !== "booked");
+}
+function clearBookingEditor() {
+  const key = adminSelectedDate || dateKey(new Date());
+  $("#bookingStart").value = key; $("#bookingEnd").value = key; $("#bookingStatus").value = "booked";
+  ["#bookingGuest","#bookingPhone","#bookingPeople","#bookingDeposit","#bookingNotes"].forEach(sel => $(sel).value = "");
+  toggleBookingPrivateFields();
+}
+async function saveBookingDates(event) {
+  event.preventDefault();
+  const startDate=$("#bookingStart").value, endDate=$("#bookingEnd").value, status=$("#bookingStatus").value;
+  if (!startDate || !endDate) return message("#bookingMessage","請先選擇日期。","error");
+  let dates; try { dates = eachDate(startDate,endDate); } catch (e) { return message("#bookingMessage",e.message,"error"); }
+  if (!confirm(`確定要將 ${startDate} ～ ${endDate} 設為「${status==='booked'?'已預約':status==='blocked'?'暫停開放':'可詢問'}」嗎？`)) return;
+  message("#bookingMessage","正在儲存…");
+  try {
+    const batch=writeBatch(db); let bookingId="";
+    if (status === "booked") {
+      bookingId=crypto.randomUUID();
+      batch.set(doc(db,"bookings",bookingId),{startDate,endDate,guestName:$("#bookingGuest").value.trim(),phone:$("#bookingPhone").value.trim(),people:Number($("#bookingPeople").value)||null,deposit:$("#bookingDeposit").value.trim(),notes:$("#bookingNotes").value.trim(),createdBy:auth.currentUser.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
+    }
+    for (const key of dates) {
+      const refDoc=doc(db,"availability",key);
+      if (status === "available") batch.delete(refDoc);
+      else batch.set(refDoc,{status,bookingId:bookingId || null,updatedAt:serverTimestamp()});
+    }
+    await batch.commit();
+    adminSelectedDate=startDate; message("#bookingMessage",`${dates.length} 天已更新。前台重新整理後就會看到新狀態。`,"success");
+    await renderAdminCalendar();
+  } catch (error) { message("#bookingMessage",error.message || "日期儲存失敗。","error"); }
+}
+
 function bindEvents() {
   $("#loginForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -280,7 +369,8 @@ function bindEvents() {
   $("#logoutButton").addEventListener("click", async () => { await signOut(auth); location.reload(); });
   document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab === button));
-    ["photos", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
+    ["photos", "calendar", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
+    if (button.dataset.tab === "calendar") renderAdminCalendar().catch((e)=>message("#bookingMessage",e.message,"error"));
   }));
   $("#photoInput").addEventListener("change", (event) => {
     selectedFiles = [...event.target.files];
@@ -292,6 +382,11 @@ function bindEvents() {
     message("#uploadProgress", "已清除選取照片。");
   });
   $("#uploadButton").addEventListener("click", uploadPhotos);
+  $("#adminCalPrev").addEventListener("click",()=>{adminCalendarCursor=new Date(adminCalendarCursor.getFullYear(),adminCalendarCursor.getMonth()-1,1);renderAdminCalendar();});
+  $("#adminCalNext").addEventListener("click",()=>{adminCalendarCursor=new Date(adminCalendarCursor.getFullYear(),adminCalendarCursor.getMonth()+1,1);renderAdminCalendar();});
+  $("#bookingStatus").addEventListener("change",toggleBookingPrivateFields);
+  $("#bookingForm").addEventListener("submit",saveBookingDates);
+  $("#clearBookingForm").addEventListener("click",clearBookingEditor);
   $("#contentForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {

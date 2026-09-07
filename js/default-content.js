@@ -24,7 +24,6 @@ export const DEFAULT_CONTENT = {
   contact: {
     phone: "0800-666-738",
     lineUrl: "https://line.me/ti/p/~287ppyfa",
-    calendarUrl: "https://calendar.app.google/A1UpjLBEeZcj3Tzd6",
     mapUrl: "https://www.google.com/maps?q=21.945560514053177,120.73903972238396"
   },
   facilities: [
