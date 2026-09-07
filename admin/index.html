@@ -48,6 +48,13 @@
           <label class="file-button">選擇照片<input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>
           <button id="uploadButton" class="primary" type="button">上傳到草稿</button>
         </div>
+        <section id="selectionPreview" class="selection-preview hidden" aria-live="polite">
+          <div class="selection-head">
+            <div><strong id="selectionCount">已選擇 0 張</strong><p>先看縮圖確認照片，選錯可直接移除，不會先上傳。</p></div>
+            <button id="clearSelection" class="secondary" type="button">清除全部</button>
+          </div>
+          <div id="selectionGrid" class="selection-grid"></div>
+        </section>
         <div id="uploadProgress" class="message" aria-live="polite"></div>
         <div id="photoGrid" class="photo-grid"></div>
       </section>

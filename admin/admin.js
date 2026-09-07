@@ -13,6 +13,8 @@ let db;
 let storage;
 let draft = clone(DEFAULT_CONTENT);
 let draggedIndex = null;
+let selectedFiles = [];
+let previewUrls = [];
 
 function message(selector, text, type = "") {
   const node = $(selector);
@@ -37,6 +39,73 @@ function validateHttps(value) {
 
 function fillForm() {
   document.querySelectorAll("[data-path]").forEach((input) => { input.value = getPath(draft, input.dataset.path); });
+}
+
+
+function formatBytes(bytes) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function clearPreviewUrls() {
+  previewUrls.forEach((url) => URL.revokeObjectURL(url));
+  previewUrls = [];
+}
+
+function renderSelectionPreview() {
+  const panel = $("#selectionPreview");
+  const grid = $("#selectionGrid");
+  clearPreviewUrls();
+  grid.replaceChildren();
+
+  if (!selectedFiles.length) {
+    panel.classList.add("hidden");
+    $("#selectionCount").textContent = "已選擇 0 張";
+    return;
+  }
+
+  panel.classList.remove("hidden");
+  $("#selectionCount").textContent = `已選擇 ${selectedFiles.length} 張`;
+  selectedFiles.forEach((file, index) => {
+    const card = document.createElement("article");
+    card.className = "selection-card";
+    const img = document.createElement("img");
+    const url = URL.createObjectURL(file);
+    previewUrls.push(url);
+    img.src = url;
+    img.alt = file.name;
+
+    const info = document.createElement("div");
+    info.className = "selection-info";
+    const name = document.createElement("strong");
+    name.className = "selection-name";
+    name.textContent = file.name;
+    name.title = file.name;
+    const size = document.createElement("span");
+    size.className = "selection-size";
+    size.textContent = formatBytes(file.size);
+    info.append(name, size);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "selection-remove";
+    remove.textContent = "×";
+    remove.title = `移除 ${file.name}`;
+    remove.setAttribute("aria-label", `移除 ${file.name}`);
+    remove.addEventListener("click", () => {
+      selectedFiles.splice(index, 1);
+      renderSelectionPreview();
+      message("#uploadProgress", selectedFiles.length ? `目前保留 ${selectedFiles.length} 張，確認後再上傳。` : "已清除選取照片。");
+    });
+    card.append(img, info, remove);
+    grid.append(card);
+  });
+}
+
+function clearSelectedFiles() {
+  selectedFiles = [];
+  $("#photoInput").value = "";
+  renderSelectionPreview();
 }
 
 function imageCard(image, label, options = {}) {
@@ -172,13 +241,14 @@ async function ensureAdmin(user) {
 }
 
 async function uploadPhotos() {
-  const files = [...$("#photoInput").files];
+  const files = [...selectedFiles];
   if (!files.length) return message("#uploadProgress", "請先選擇照片。", "error");
   const target = $("#uploadTarget").value;
   const button = $("#uploadButton");
   button.disabled = true;
   try {
-    if (target === "hero" && draft.hero.images.length + files.length > 5) throw new Error("首頁封面最多 5 張；請先移除不需要的照片。");
+    if (target === "hero" && draft.hero.images.length + files.length > 5) throw new Error(`首頁封面最多 5 張，目前還可新增 ${Math.max(0, 5 - draft.hero.images.length)} 張。請在上方縮圖移除多餘照片。`);
+    if (target !== "hero" && files.length > 1) throw new Error("這個照片位置一次只能放 1 張。請先看縮圖，再移除到只剩要使用的那張。");
     for (const file of files) {
       if (!allowedTypes.has(file.type)) throw new Error(`${file.name} 格式不支援。`);
       if (file.size > 8 * 1024 * 1024) throw new Error(`${file.name} 超過 8 MB。`);
@@ -194,7 +264,7 @@ async function uploadPhotos() {
       else draft[target] = image;
     }
     await saveDraft(`${files.length} 張照片已上傳並存入草稿。`);
-    $("#photoInput").value = "";
+    clearSelectedFiles();
     renderPhotos();
   } catch (error) { message("#uploadProgress", error.message || "照片上傳失敗，請稍後再試。", "error"); }
   finally { button.disabled = false; }
@@ -212,6 +282,15 @@ function bindEvents() {
     document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab === button));
     ["photos", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
   }));
+  $("#photoInput").addEventListener("change", (event) => {
+    selectedFiles = [...event.target.files];
+    renderSelectionPreview();
+    if (selectedFiles.length) message("#uploadProgress", `已選擇 ${selectedFiles.length} 張。請先確認上方縮圖，再按「上傳到草稿」。`);
+  });
+  $("#clearSelection").addEventListener("click", () => {
+    clearSelectedFiles();
+    message("#uploadProgress", "已清除選取照片。");
+  });
   $("#uploadButton").addEventListener("click", uploadPhotos);
   $("#contentForm").addEventListener("submit", async (event) => {
     event.preventDefault();
