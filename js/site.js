@@ -55,6 +55,23 @@ function applyContent(content) {
     if (image?.alt) node.alt = image.alt;
   });
 
+  const roomSlides = [...document.querySelectorAll(".room-slide")];
+  roomSlides.forEach((slide, index) => {
+    const room = content.rooms?.[index];
+    if (!room) return;
+    const img = slide.querySelector(".room-photo img");
+    const url = safeImageUrl(room.image?.url);
+    if (img && url) img.src = url;
+    if (img && room.image?.alt) img.alt = room.image.alt;
+    const kicker = slide.querySelector(".room-kicker");
+    const title = slide.querySelector(".room-copy h3");
+    const description = slide.querySelector(".room-copy p");
+    if (kicker && room.kicker) kicker.textContent = room.kicker;
+    if (title && room.name) title.textContent = room.name;
+    if (description && room.description) description.textContent = room.description;
+  });
+  document.dispatchEvent(new CustomEvent("lijie:rooms-updated"));
+
   const usePhoto = document.querySelector(".use-photo");
   const useUrl = safeImageUrl(content.usePhoto?.url);
   if (usePhoto && useUrl) {

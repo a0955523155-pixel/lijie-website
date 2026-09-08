@@ -217,6 +217,7 @@ function targetLabel(target) {
   if (target.type === "hero-add") return "新增首頁封面";
   if (target.type === "hero-replace") return `更換封面 ${target.index + 1}`;
   if (target.type === "facility") return `更換 ${draft.facilities[target.index]?.name || "空間照片"}`;
+  if (target.type === "room") return `更換 ${draft.rooms?.[target.index]?.name || `房間 ${target.index + 1}`}`;
   if (target.type === "usePhoto") return "更換中段主照片";
   if (target.type === "ctaPhoto") return "更換頁尾背景";
   return "選擇套用位置";
@@ -225,13 +226,14 @@ function targetLabel(target) {
 function openLibraryPicker(target) {
   if (target?.type === "choose-target") {
     const asset = target.asset;
-    const choices = ["新增首頁封面", ...draft.hero.images.map((_,i)=>`替換封面 ${i+1}`), ...draft.facilities.map(f=>`更換 ${f.name}`), "更換中段主照片", "更換頁尾背景"];
+    const choices = ["新增首頁封面", ...draft.hero.images.map((_,i)=>`替換封面 ${i+1}`), ...draft.facilities.map(f=>`更換 ${f.name}`), ...draft.rooms.map((r,i)=>`更換 ${r.name || `房間 ${i+1}`}`), "更換中段主照片", "更換頁尾背景"];
     const answer = prompt(`要把「${asset.fileName}」套用到哪裡？\n\n${choices.map((x,i)=>`${i+1}. ${x}`).join("\n")}\n\n請輸入編號：`);
     const n=Number(answer); if(!Number.isInteger(n)||n<1||n>choices.length) return;
     if(n===1) libraryPickerTarget={type:"hero-add"};
     else if(n<=1+draft.hero.images.length) libraryPickerTarget={type:"hero-replace",index:n-2};
     else if(n<=1+draft.hero.images.length+draft.facilities.length) libraryPickerTarget={type:"facility",index:n-2-draft.hero.images.length};
-    else if(n===2+draft.hero.images.length+draft.facilities.length) libraryPickerTarget={type:"usePhoto"};
+    else if(n<=1+draft.hero.images.length+draft.facilities.length+draft.rooms.length) libraryPickerTarget={type:"room",index:n-2-draft.hero.images.length-draft.facilities.length};
+    else if(n===2+draft.hero.images.length+draft.facilities.length+draft.rooms.length) libraryPickerTarget={type:"usePhoto"};
     else libraryPickerTarget={type:"ctaPhoto"};
     applyLibraryAsset(asset); return;
   }
@@ -251,6 +253,7 @@ async function applyLibraryAsset(asset) {
     draft.hero.images.push(image);
   } else if(target.type==="hero-replace") draft.hero.images[target.index]=image;
   else if(target.type==="facility") draft.facilities[target.index].image=image;
+  else if(target.type==="room") draft.rooms[target.index].image=image;
   else if(target.type==="usePhoto") draft.usePhoto=image;
   else if(target.type==="ctaPhoto") draft.ctaPhoto=image;
   await saveDraft(`已從素材庫套用「${asset.fileName || "照片"}」到草稿。`);
@@ -296,6 +299,7 @@ async function uploadLocalReplacement(file, target) {
     const image={url,alt:file.name.replace(/\.[^.]+$/,""),storagePath};
     if(target.type==="hero-replace") draft.hero.images[target.index]=image;
     else if(target.type==="facility") draft.facilities[target.index].image=image;
+    else if(target.type==="room") draft.rooms[target.index].image=image;
     else if(target.type==="usePhoto") draft.usePhoto=image;
     else if(target.type==="ctaPhoto") draft.ctaPhoto=image;
     await saveDraft("新照片已上傳、加入素材庫並套用到草稿。");
@@ -392,6 +396,10 @@ function renderPhotos() {
     target: { type: "facility", index },
     onRemove: () => message("#uploadProgress", "固定區塊請直接上傳新照片覆蓋，避免官網出現空白。", "error")
   })));
+  draft.rooms.forEach((room, index) => grid.append(imageCard(room.image, `房間輪播 ${index + 1}｜${room.name || "未命名房間"}`, {
+    target: { type: "room", index },
+    onRemove: () => message("#uploadProgress", "房間輪播請直接更換照片，避免前台輪播出現空白。", "error")
+  })));
   grid.append(imageCard(draft.usePhoto, "中段主照片", { target: { type: "usePhoto" }, onRemove: () => message("#uploadProgress", "固定區塊請直接上傳新照片覆蓋。", "error") }));
   grid.append(imageCard(draft.ctaPhoto, "頁尾背景", { target: { type: "ctaPhoto" }, onRemove: () => message("#uploadProgress", "固定區塊請直接上傳新照片覆蓋。", "error") }));
 }
@@ -412,6 +420,7 @@ function publicContentFromDraft() {
 async function loadDraft() {
   const snapshot = await getDoc(doc(db, "siteContentDrafts", "home"));
   draft = clone(snapshot.exists() ? snapshot.data().content : DEFAULT_CONTENT);
+  ensureDraftShape();
   if (!snapshot.exists()) await saveDraft("初始草稿已建立。");
   fillForm();
   renderPhotos();
@@ -439,6 +448,7 @@ async function loadRevisions() {
       restore.addEventListener("click", async () => {
         const currentLibrary = clone(draft._mediaLibrary || []);
         draft = clone(value.content);
+        ensureDraftShape();
         draft._mediaLibrary = currentLibrary;
         libraryAssets = draft._mediaLibrary;
         await saveDraft("舊版本已載入為草稿，確認後可重新發布。");
@@ -477,7 +487,7 @@ async function uploadPhotos() {
       if (!allowedTypes.has(file.type)) throw new Error(`${file.name} 格式不支援。`);
       if (file.size > 8 * 1024 * 1024) throw new Error(`${file.name} 超過 8 MB。`);
       const extension = file.type === "image/jpeg" ? "jpg" : file.type.split("/")[1];
-      const section = target.startsWith("facility") ? "facility" : target;
+      const section = target.startsWith("facility") ? "facility" : target.startsWith("room-") ? "room" : target;
       const storagePath = `site-images/${section}/${crypto.randomUUID()}.${extension}`;
       message("#uploadProgress", `正在上傳 ${file.name}…`);
       const fileRef = ref(storage, storagePath);
@@ -487,6 +497,7 @@ async function uploadPhotos() {
       const image = { url, alt: file.name.replace(/\.[^.]+$/, ""), storagePath };
       if (target === "hero") draft.hero.images.push(image);
       else if (target.startsWith("facility-")) draft.facilities[Number(target.split("-")[1])].image = image;
+      else if (target.startsWith("room-")) draft.rooms[Number(target.split("-")[1])].image = image;
       else draft[target] = image;
     }
     await saveDraft(`${files.length} 張照片已上傳並存入草稿。`);
@@ -638,6 +649,7 @@ function bindEvents() {
     if (!snapshot.exists()) return message("#publishMessage", "目前還沒有已發布版本。", "error");
     const currentLibrary = clone(draft._mediaLibrary || []);
     draft = clone(snapshot.data().content);
+    ensureDraftShape();
     draft._mediaLibrary = currentLibrary;
     libraryAssets = draft._mediaLibrary;
     await saveDraft("草稿已恢復為目前官網版本。");
