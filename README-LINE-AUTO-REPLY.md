@@ -41,3 +41,29 @@ LINE 官方帳號圖文選單的「立即預約／查看空房」連到 LIFF URL
 
 ## 安全
 Webhook 會驗證 `x-line-signature`，只有通過 LINE Channel Secret 驗證的請求才會被處理。Webhook 只對以 `【俐姐的家｜預約申請】` 開頭的訊息自動回覆，不會搶回一般客人聊天訊息。
+
+## V6.14 重要設定（避免舊的自動回覆搶先回覆）
+
+如果客人送出預約後收到「最多 10 人／NT$10,000／押金 NT$3,000」等舊訊息，這不是網站程式送出的，而是 LINE Official Account Manager 內原本的「回應訊息／自動回覆」。
+
+請到 LINE Official Account Manager → 設定 → 回應設定：
+- Webhook：開啟
+- 回應訊息／自動回覆：關閉（或刪除舊的預約自動回覆）
+- 聊天：可維持開啟，方便人工接手
+- 歡迎訊息：可自行保留
+
+LINE Developers → Messaging API 頻道：
+- Webhook URL：https://5-1bbs.com/api/line-webhook
+- Verify：必須成功
+- Use webhook：開啟
+
+Vercel Environment Variables：
+- LINE_CHANNEL_ACCESS_TOKEN：Messaging API 頻道的 Channel access token
+- LINE_CHANNEL_SECRET：Messaging API 頻道的 Channel secret
+- LINE_MINIAPP_CHANNEL_ID=2011502071
+
+LINE MINI App → Web app settings：
+- Add friend option：On (normal)
+- Linked / Default LINE Official Account：選擇「俐姐的家」
+
+V6.14 會先使用 liff.getFriendship() 檢查好友狀態；尚未加入或已封鎖時，優先使用 liff.requestFriendship() 顯示 LINE 原生加入好友視窗，再送出預約。

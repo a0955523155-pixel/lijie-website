@@ -198,6 +198,26 @@ function canSendToCurrentChat(){
   return ["utou","group","room"].includes(type) && window.liff.isApiAvailable?.("sendMessages") !== false;
 }
 
+async function ensureOfficialAccountFriend(){
+  if (!liffReady || !window.liff?.isLoggedIn?.()) return false;
+  try {
+    const friendship = await window.liff.getFriendship?.();
+    if (friendship?.friendFlag) return true;
+  } catch (e) {
+    console.warn("getFriendship failed", e);
+  }
+  try {
+    if (typeof window.liff.requestFriendship === "function") {
+      await window.liff.requestFriendship();
+      const friendship = await window.liff.getFriendship?.();
+      return !!friendship?.friendFlag;
+    }
+  } catch (e) {
+    console.warn("requestFriendship failed", e);
+  }
+  return false;
+}
+
 async function submitViaOfficialAccount(){
   if (!liffReady || !window.liff.isLoggedIn()) throw new Error("LINE_LOGIN_REQUIRED");
   const idToken = window.liff.getIDToken?.();
@@ -211,6 +231,7 @@ async function submitViaOfficialAccount(){
   if (!response.ok) {
     const err = new Error(data?.error || `BOOKING_SUBMIT_${response.status}`);
     err.code = data?.code;
+    err.status = response.status;
     throw err;
   }
   return data;
@@ -228,22 +249,30 @@ async function sendMessage(){
       return;
     }
 
-    // 從官網直接導入 MINI App 時沒有聊天室 context，改由後端安全驗證 LINE ID Token，
-    // 再由官方帳號 Messaging API 回覆同一位客人。
+    // 從官網直接導入 MINI App 時沒有聊天室 context。
+    // 先確認已加入俐姐的家官方帳號，必要時由 LINE 原生視窗要求加入/解除封鎖，
+    // 再由後端驗證 LINE ID Token，使用 Messaging API 將確認內容推送給本人。
+    const isFriend = await ensureOfficialAccountFriend();
+    if (!isFriend) {
+      const err = new Error("LINE_FRIEND_REQUIRED");
+      err.code = "LINE_FRIEND_REQUIRED";
+      throw err;
+    }
     await submitViaOfficialAccount();
-    els.status.textContent="預約申請已送出，官方 LINE 已回覆您的日期與入住須知。";
+    els.status.textContent="預約申請已送出，請回官方 LINE 查看確認訊息與入住須知。";
     setTimeout(()=>{
       try { window.location.href = lineConfig.officialLineUrl; } catch {}
     }, 1200);
   }catch(e){
     console.warn(e);
-    await navigator.clipboard.writeText(msg).catch(()=>{});
-    if (e?.code === "LINE_PUSH_FAILED") {
-      els.status.textContent="請先加入俐姐的家官方 LINE；加入後回到此頁再按一次送出。";
-      setTimeout(()=>{ window.location.href=lineConfig.officialLineUrl; },900);
+    if (e?.code === "LINE_FRIEND_REQUIRED" || e?.code === "LINE_PUSH_FAILED") {
+      els.status.textContent="需要先加入或解除封鎖『俐姐的家』官方 LINE，完成後回來再按一次送出。";
+      setTimeout(()=>{ window.location.href=lineConfig.officialLineUrl; },1200);
+    } else if (String(e?.message || "").includes("LINE_CHANNEL_ACCESS_TOKEN")) {
+      els.status.textContent="LINE 自動回覆尚未完成後端設定，請管理員檢查 Vercel 的 Messaging API 環境變數。";
     } else {
-      els.status.textContent="目前無法自動送出，已幫你複製預約內容；請貼到官方 LINE。";
-      setTimeout(()=>{ window.location.href=lineConfig.officialLineUrl; },900);
+      await navigator.clipboard.writeText(msg).catch(()=>{});
+      els.status.textContent="自動送出未完成，已保留預約內容；請稍後重試。";
     }
   } finally {
     setTimeout(refreshForm,2200);

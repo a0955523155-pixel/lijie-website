@@ -67,6 +67,8 @@ function customerMessages(b) {
     "【入住須知】",
     `• 入住時間：${BOOKING_RULES.checkInFrom} 起`,
     `• 退房時間：${BOOKING_RULES.checkOutBy} 前`,
+    `• 付款方式：${BOOKING_RULES.payment.depositMethod}；${BOOKING_RULES.payment.balanceMethods}。`,
+    `• 匯款資訊：${BOOKING_RULES.payment.accountStatus}。`,
     ...BOOKING_RULES.notes.map(x => `• ${x}`),
     "",
     "此為預約申請，實際訂房成立仍以俐姐於官方 LINE 最終確認為準。"
