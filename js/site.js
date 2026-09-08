@@ -58,7 +58,8 @@ function applyContent(content) {
   const roomSlides = [...document.querySelectorAll(".room-slide")];
   roomSlides.forEach((slide, index) => {
     const room = content.rooms?.[index];
-    if (!room) return;
+    if (!room) { slide.hidden = true; return; }
+    slide.hidden = false;
     const img = slide.querySelector(".room-photo img");
     const url = safeImageUrl(room.image?.url);
     if (img && url) img.src = url;
@@ -66,9 +67,11 @@ function applyContent(content) {
     const kicker = slide.querySelector(".room-kicker");
     const title = slide.querySelector(".room-copy h3");
     const description = slide.querySelector(".room-copy p");
-    if (kicker && room.kicker) kicker.textContent = room.kicker;
-    if (title && room.name) title.textContent = room.name;
+    const indexBadge = slide.querySelector(".room-index");
+    if (kicker) kicker.textContent = room.kicker || `ROOM ${room.number || String(index + 1).padStart(2, "0")}`;
+    if (title) title.textContent = room.alias || `${room.number || String(index + 1).padStart(2, "0")}號${room.name || "房間"}`;
     if (description && room.description) description.textContent = room.description;
+    if (indexBadge) indexBadge.textContent = `${room.number || String(index + 1).padStart(2, "0")} / ${String(content.rooms.length).padStart(2, "0")}`;
   });
   document.dispatchEvent(new CustomEvent("lijie:rooms-updated"));
 

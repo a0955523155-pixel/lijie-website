@@ -40,11 +40,17 @@ const getPath = (target, path) => path.split(".").reduce((value, part) => value?
 function ensureDraftShape() {
   draft.hero ??= clone(DEFAULT_CONTENT.hero);
   draft.facilities ??= clone(DEFAULT_CONTENT.facilities);
-  draft.rooms ??= clone(DEFAULT_CONTENT.rooms);
-  if (!Array.isArray(draft.rooms) || draft.rooms.length < DEFAULT_CONTENT.rooms.length) {
-    const current = Array.isArray(draft.rooms) ? draft.rooms : [];
-    draft.rooms = DEFAULT_CONTENT.rooms.map((fallback, index) => ({ ...clone(fallback), ...(current[index] || {}), image: { ...clone(fallback.image), ...(current[index]?.image || {}) } }));
-  }
+  const currentRooms = Array.isArray(draft.rooms) ? draft.rooms : [];
+  draft.rooms = DEFAULT_CONTENT.rooms.map((fallback, index) => {
+    const current = currentRooms[index] || {};
+    const merged = { ...clone(fallback), ...current, image: { ...clone(fallback.image), ...(current.image || {}) } };
+    // V6.1 migration: the property has exactly four double rooms and one quad room.
+    merged.number = fallback.number;
+    merged.name = fallback.name;
+    if (!current.alias || ["三人房","家庭房","標準房 A","標準房 B","多人房"].includes(current.name)) merged.alias = fallback.alias;
+    if (!current.kicker || ["TRIPLE ROOM","FAMILY ROOM","STANDARD ROOM A","STANDARD ROOM B","GROUP ROOM"].includes(current.kicker)) merged.kicker = fallback.kicker;
+    return merged;
+  });
   draft._mediaLibrary ??= [];
 }
 
