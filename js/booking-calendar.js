@@ -15,7 +15,7 @@ if (grid) {
   const dateSheetHint = document.querySelector("#dateSheetHint");
   const dateSheetLine = document.querySelector("#dateSheetLine");
   const dateSheetCopy = document.querySelector("#dateSheetCopy");
-  const officialLineUrl = "https://lin.ee/w28dW98A";
+  const miniAppBaseUrl = "https://miniapp.line.me/2011502071-EM878xNE";
   const formatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long" });
   const fullFormatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
   const today = new Date(); today.setHours(0,0,0,0);
@@ -88,14 +88,24 @@ if (grid) {
     return `您好，我想詢問俐姐的家住宿預約\n入住日期：${keyOf(startDate)}\n退房日期：${keyOf(endDate)}\n住宿晚數：${nights} 晚\n入住時間：15:00 起\n退房時間：12:00 前\n想確認這段日期是否可以預約，謝謝。`;
   }
 
+  function miniAppBookingUrl() {
+    if (!startDate || !endDate) return miniAppBaseUrl;
+    const params = new URLSearchParams({
+      start: keyOf(startDate),
+      end: keyOf(endDate),
+      source: "website"
+    });
+    return `${miniAppBaseUrl}?${params.toString()}`;
+  }
+
   function openRangeSheet() {
     if (!startDate || !endDate) return;
     const nights = nightsBetween(startDate,endDate);
     selectedMessage = buildMessage();
     if (dateSheetTitle) dateSheetTitle.textContent = `${keyOf(startDate)} → ${keyOf(endDate)}`;
-    if (dateSheetHint) dateSheetHint.textContent = `共 ${nights} 晚｜入住 15:00 起｜退房 12:00 前。可先複製預約內容，再前往官方 LINE。`;
+    if (dateSheetHint) dateSheetHint.textContent = `共 ${nights} 晚｜入住 15:00 起｜退房 12:00 前。前往 LINE 後會自動帶入這組日期，不用重新選擇。`;
     if (dateSheetLine) {
-      dateSheetLine.href = officialLineUrl;
+      dateSheetLine.href = miniAppBookingUrl();
       dateSheetLine.removeAttribute("target");
     }
     dateSheet?.classList.add("open");
@@ -112,8 +122,8 @@ if (grid) {
     selectedCard?.classList.remove("hidden");
     if (selectedText) selectedText.textContent = rangeLabel();
     if (selectedLine) {
-      selectedLine.href = endDate ? officialLineUrl : "#";
-      selectedLine.textContent = endDate ? "前往官方 LINE 預約 →" : "再選擇退房日期";
+      selectedLine.href = endDate ? miniAppBookingUrl() : "#";
+      selectedLine.textContent = endDate ? "前往 LINE 完成預約 →" : "再選擇退房日期";
       selectedLine.removeAttribute("target");
     }
   }
@@ -145,7 +155,7 @@ if (grid) {
         return;
       }
       const nights = nightsBetween(startDate,endDate);
-      statusNode.textContent = `已選 ${nights} 晚，確認後可前往官方 LINE 預約。`;
+      statusNode.textContent = `已選 ${nights} 晚，確認後可前往 LINE 完成預約。`;
       updateSelectionUI();
       openRangeSheet();
     } catch (error) {

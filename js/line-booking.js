@@ -16,7 +16,7 @@ const els = {
 const today = new Date(); today.setHours(0,0,0,0);
 const params = new URLSearchParams(location.search);
 let cursor = new Date(today.getFullYear(), today.getMonth(), 1);
-let startDate = null, endDate = null, monthStates = new Map(), liffReady = false, inLine = false;
+let startDate = null, endDate = null, monthStates = new Map(), liffReady = false, inLine = false, lineContext = null;
 const stateCache = new Map();
 const loadedMonths = new Set();
 let db = null;
@@ -35,8 +35,15 @@ async function initLiff(){
   if (!hasLiffId()) { els.mode.textContent = "LINE 頁面已完成・等待填入 LIFF ID"; return; }
   try {
     await window.liff.init({ liffId: lineConfig.liffId });
-    liffReady = true; inLine = window.liff.isInClient();
-    els.mode.textContent = inLine ? "已在官方 LINE 內開啟" : "LINE 預約頁面";
+    if (!window.liff.isLoggedIn()) {
+      els.mode.textContent = "正在連接 LINE…";
+      window.liff.login({ redirectUri: location.href });
+      return;
+    }
+    liffReady = true;
+    inLine = window.liff.isInClient();
+    lineContext = window.liff.getContext?.() || null;
+    els.mode.textContent = inLine ? "已在 LINE MINI App 內開啟" : "LINE 預約頁面";
   } catch (e) {
     console.warn("LIFF init failed", e); els.mode.textContent = "LINE 連線暫時不可用・仍可複製內容詢問";
   }
@@ -171,21 +178,76 @@ function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;","
 
 async function copyMessage(){const msg=buildMessage();if(!msg){els.status.textContent="請先選擇日期。";return}try{await navigator.clipboard.writeText(msg);els.status.textContent="已複製預約內容，可貼到官方 LINE。"}catch{els.status.textContent="瀏覽器無法自動複製，請長按選取內容。"}}
 
+function bookingPayload(){
+  return {
+    checkIn: keyOf(startDate),
+    checkOut: keyOf(endDate),
+    nights: nightsCount(),
+    name: els.name.value.trim(),
+    phone: els.phone.value.trim(),
+    people: els.people.value.trim(),
+    purpose: els.purpose.value.trim(),
+    notes: els.notes.value.trim(),
+    source: params.get("source") || "miniapp"
+  };
+}
+
+function canSendToCurrentChat(){
+  if (!liffReady || !inLine) return false;
+  const type = lineContext?.type;
+  return ["utou","group","room"].includes(type) && window.liff.isApiAvailable?.("sendMessages") !== false;
+}
+
+async function submitViaOfficialAccount(){
+  if (!liffReady || !window.liff.isLoggedIn()) throw new Error("LINE_LOGIN_REQUIRED");
+  const idToken = window.liff.getIDToken?.();
+  if (!idToken) throw new Error("LINE_ID_TOKEN_UNAVAILABLE");
+  const response = await fetch("/api/line-booking-submit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken, booking: bookingPayload() })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(data?.error || `BOOKING_SUBMIT_${response.status}`);
+    err.code = data?.code;
+    throw err;
+  }
+  return data;
+}
+
 async function sendMessage(){
   const msg=buildMessage(); if(!msg)return;
-  els.send.disabled=true; els.status.textContent="正在準備 LINE 預約訊息…";
+  els.send.disabled=true; els.status.textContent="正在送出預約申請…";
   try{
-    if(liffReady&&inLine){
+    // 從官方帳號聊天室的 Rich Menu 開啟時：由客人本人送出訊息，Webhook 立即自動回覆。
+    if(canSendToCurrentChat()){
       await window.liff.sendMessages([{type:"text",text:msg}]);
-      els.status.textContent="已傳送到 LINE 聊天室，請等待俐姐確認。";
-      setTimeout(()=>{try{window.liff.closeWindow()}catch{}},900);
-    } else {
-      await navigator.clipboard.writeText(msg).catch(()=>{});
-      els.status.textContent="已複製預約內容，現在為你開啟官方 LINE，貼上訊息即可。";
-      window.location.href=lineConfig.officialLineUrl;
+      els.status.textContent="已送出預約申請，官方 LINE 會立即回覆您。";
+      setTimeout(()=>{try{window.liff.closeWindow()}catch{}},1000);
+      return;
     }
-  }catch(e){console.warn(e);await navigator.clipboard.writeText(msg).catch(()=>{});els.status.textContent="無法直接傳送，已幫你複製內容；請貼到官方 LINE。";window.location.href=lineConfig.officialLineUrl;}
-  finally{setTimeout(refreshForm,1200)}
+
+    // 從官網直接導入 MINI App 時沒有聊天室 context，改由後端安全驗證 LINE ID Token，
+    // 再由官方帳號 Messaging API 回覆同一位客人。
+    await submitViaOfficialAccount();
+    els.status.textContent="預約申請已送出，官方 LINE 已回覆您的日期與入住須知。";
+    setTimeout(()=>{
+      try { window.location.href = lineConfig.officialLineUrl; } catch {}
+    }, 1200);
+  }catch(e){
+    console.warn(e);
+    await navigator.clipboard.writeText(msg).catch(()=>{});
+    if (e?.code === "LINE_PUSH_FAILED") {
+      els.status.textContent="請先加入俐姐的家官方 LINE；加入後回到此頁再按一次送出。";
+      setTimeout(()=>{ window.location.href=lineConfig.officialLineUrl; },900);
+    } else {
+      els.status.textContent="目前無法自動送出，已幫你複製預約內容；請貼到官方 LINE。";
+      setTimeout(()=>{ window.location.href=lineConfig.officialLineUrl; },900);
+    }
+  } finally {
+    setTimeout(refreshForm,2200);
+  }
 }
 
 els.prev.addEventListener("click",()=>{cursor=new Date(cursor.getFullYear(),cursor.getMonth()-1,1);render()});
