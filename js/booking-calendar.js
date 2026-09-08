@@ -15,7 +15,7 @@ if (grid) {
   const dateSheetHint = document.querySelector("#dateSheetHint");
   const dateSheetLine = document.querySelector("#dateSheetLine");
   const dateSheetCopy = document.querySelector("#dateSheetCopy");
-  const miniAppBaseUrl = "https://miniapp.line.me/2011502071-EM878xNE";
+  const bookingPageBaseUrl = "https://www.5-1bbs.com/line-booking.html";
   const formatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long" });
   const fullFormatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
   const today = new Date(); today.setHours(0,0,0,0);
@@ -89,13 +89,13 @@ if (grid) {
   }
 
   function miniAppBookingUrl() {
-    if (!startDate || !endDate) return miniAppBaseUrl;
+    if (!startDate || !endDate) return bookingPageBaseUrl;
     const params = new URLSearchParams({
       start: keyOf(startDate),
       end: keyOf(endDate),
       source: "website"
     });
-    return `${miniAppBaseUrl}?${params.toString()}`;
+    return `${bookingPageBaseUrl}?${params.toString()}`;
   }
 
   function openRangeSheet() {

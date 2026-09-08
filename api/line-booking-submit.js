@@ -39,6 +39,28 @@ function normalizeBooking(input={}){
   const name=clean(input.name,60); if(!name) throw new Error("NAME_REQUIRED");
   return {checkIn:a.s,checkOut:b.s,nights,name,phone:clean(input.phone,40),people,purpose:clean(input.purpose,120),notes:clean(input.notes,500),source:clean(input.source,40)||"official-line-secure-link"};
 }
+
+function actionSecret(){ return process.env.BOOKING_SESSION_SECRET || process.env.LINE_CHANNEL_SECRET || ""; }
+function makeActionToken(payload){
+  const body=Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const sig=crypto.createHmac("sha256", actionSecret()).update(body).digest("base64url");
+  return `${body}.${sig}`;
+}
+function bookingId(){ return `B${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(3).toString("hex").toUpperCase()}`; }
+function ownerFlex(b, uid, id){
+  const token=makeActionToken({uid,id,ci:b.checkIn,co:b.checkOut,n:b.name,exp:Date.now()+7*24*60*60*1000});
+  return {type:"flex",altText:`新預約 ${id}｜${b.checkIn} → ${b.checkOut}`,contents:{type:"bubble",size:"mega",
+    header:{type:"box",layout:"vertical",backgroundColor:"#173A35",paddingAll:"18px",contents:[
+      {type:"text",text:"俐姐的家｜新預約申請",color:"#FFFFFF",weight:"bold",size:"lg"},
+      {type:"text",text:`編號 ${id}`,color:"#D7E4DF",size:"xs"}]},
+    body:{type:"box",layout:"vertical",paddingAll:"18px",spacing:"sm",contents:[
+      {type:"text",text:`${b.checkIn} → ${b.checkOut}（${b.nights} 晚）`,weight:"bold",size:"lg",color:"#173A35",wrap:true},
+      {type:"text",text:`姓名｜${b.name}\n電話｜${b.phone||"未填"}\n人數｜${b.people?b.people+" 人":"未填"}\n需求｜${b.purpose||"未填"}\n備註｜${b.notes||"沒有"}`,size:"sm",wrap:true,color:"#26332F"}]},
+    footer:{type:"box",layout:"vertical",paddingAll:"14px",spacing:"sm",contents:[
+      {type:"button",style:"primary",color:"#173A35",action:{type:"postback",label:"確認預約",data:`booking_action=confirm&token=${encodeURIComponent(token)}`,displayText:`確認預約 ${id}`}},
+      {type:"button",style:"secondary",action:{type:"postback",label:"取消預約",data:`booking_action=cancel&token=${encodeURIComponent(token)}`,displayText:`取消預約 ${id}`}}]}}};
+}
+
 function messages(b){
   const flex={
     type:"flex",altText:`俐姐的家｜預約申請已收到 ${b.checkIn} → ${b.checkOut}`,
@@ -75,14 +97,15 @@ export default async function handler(req,res){
     const cookieSession = parseCookies(req)[COOKIE_NAME] || "";
     const session = explicit ? verifySession(explicit, secret) : verifyCookieSession(cookieSession);
     const booking=normalizeBooking(body.booking);
+    const id=bookingId();
     console.log("booking-secure-submit",{userId:String(session.uid).slice(0,8)+"…",checkIn:booking.checkIn,checkOut:booking.checkOut,people:booking.people});
     await push(session.uid,messages(booking),token);
     const notifyTo=process.env.LINE_BOOKING_NOTIFY_TO;
     if(notifyTo&&notifyTo!==session.uid){
-      try{await push(notifyTo,[{type:"text",text:`【新預約申請】\n${booking.name}\n${booking.checkIn} → ${booking.checkOut}（${booking.nights} 晚）\n${booking.people?booking.people+" 人":"人數未填"}\n${booking.phone||"電話未填"}`}],token);}catch(e){console.warn("owner notify failed",e);}
+      try{await push(notifyTo,[ownerFlex(booking,session.uid,id)],token);}catch(e){console.warn("owner notify failed",e);}
     }
     console.log("booking-secure-push-success",{checkIn:booking.checkIn,checkOut:booking.checkOut});
-    return res.status(200).json({ok:true});
+    return res.status(200).json({ok:true,bookingId:id});
   }catch(e){
     console.error("booking secure submit error",e);
     const code=String(e?.message||"UNKNOWN_ERROR");

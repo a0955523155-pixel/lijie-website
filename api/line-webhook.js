@@ -21,6 +21,36 @@ function bookingButtonMessage(url) {
   };
 }
 
+
+function actionSecret(){ return process.env.BOOKING_SESSION_SECRET || process.env.LINE_CHANNEL_SECRET || ""; }
+function verifyActionToken(token){
+  const [body,sig,extra]=String(token||"").split(".");
+  if(!body||!sig||extra) throw new Error("ACTION_TOKEN_INVALID");
+  const expected=crypto.createHmac("sha256",actionSecret()).update(body).digest("base64url");
+  const a=Buffer.from(sig), b=Buffer.from(expected);
+  if(a.length!==b.length || !crypto.timingSafeEqual(a,b)) throw new Error("ACTION_TOKEN_INVALID");
+  const payload=JSON.parse(Buffer.from(body,"base64url").toString("utf8"));
+  if(!payload?.uid||!payload?.id||!payload?.exp||Date.now()>Number(payload.exp)) throw new Error("ACTION_TOKEN_EXPIRED");
+  return payload;
+}
+async function pushLine(to,messages,token){
+  const normalized=(Array.isArray(messages)?messages:[messages]).map(m=>typeof m==="string"?{type:"text",text:m}:m);
+  const r=await fetch("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify({to,messages:normalized.slice(0,5)})});
+  if(!r.ok) throw new Error(`LINE push failed: ${r.status} ${await r.text()}`);
+}
+function customerStatusFlex(p,status){
+  const confirmed=status==="confirm";
+  return {type:"flex",altText:`俐姐的家｜${confirmed?"預約已確認":"預約已取消"}`,contents:{type:"bubble",
+    header:{type:"box",layout:"vertical",paddingAll:"18px",backgroundColor:confirmed?"#173A35":"#6B3C3C",contents:[
+      {type:"text",text:"俐姐的家",color:"#FFFFFF",weight:"bold",size:"xl"},
+      {type:"text",text:confirmed?"預約已確認":"預約已取消",color:"#FFFFFF",size:"sm"}]},
+    body:{type:"box",layout:"vertical",paddingAll:"18px",spacing:"sm",contents:[
+      {type:"text",text:`${p.ci} → ${p.co}`,weight:"bold",size:"lg",color:"#173A35",wrap:true},
+      {type:"text",text:`預約編號｜${p.id}\n姓名｜${p.n||"未填"}`,size:"sm",wrap:true,color:"#394743"},
+      {type:"separator",margin:"md"},
+      {type:"text",text:confirmed?"✅ 日期已由俐姐確認。接下來請依官方 LINE 提供的訂金方式完成轉帳，完成後再回傳末五碼。":"預約已取消，本次日期不再保留。如需重新預約，可再次開啟預約日曆。",size:"sm",wrap:true,color:"#394743",margin:"md"}]}}};
+}
+
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -278,7 +308,35 @@ export default async function handler(req, res) {
         continue;
       }
 
+      if (event.type === "postback") {
+        const ownerId=process.env.LINE_BOOKING_NOTIFY_TO || "";
+        if(!ownerId || event.source?.userId !== ownerId){
+          await replyLine(event.replyToken,"此操作僅限俐姐管理帳號使用。",token);
+          continue;
+        }
+        const q=new URLSearchParams(event.postback?.data||"");
+        const action=q.get("booking_action");
+        if(action!=="confirm" && action!=="cancel") continue;
+        try{
+          const payload=verifyActionToken(q.get("token"));
+          await pushLine(payload.uid,customerStatusFlex(payload,action),token);
+          const adminText=action==="confirm"
+            ? `✅ 已確認預約 ${payload.id}\n${payload.ci} → ${payload.co}\n客人：${payload.n||"未填"}\n已通知客人。`
+            : `❌ 已取消預約 ${payload.id}\n${payload.ci} → ${payload.co}\n客人：${payload.n||"未填"}\n已通知客人。`;
+          await replyLine(event.replyToken,adminText,token);
+        }catch(e){
+          console.error("booking action failed",e);
+          await replyLine(event.replyToken,"這個預約操作連結已失效，請以最新的預約通知卡操作。",token);
+        }
+        continue;
+      }
+
       if (event.type !== "message" || event.message?.type !== "text") continue;
+
+      if (/^(管理者ID|我的LINEID|我的LINE ID)$/i.test(String(event.message.text||"").trim())) {
+        await replyLine(event.replyToken, `你的 LINE userId：\n${event.source?.userId||"無法取得"}\n\n請把這個值放到 Vercel 的 LINE_BOOKING_NOTIFY_TO。`, token);
+        continue;
+      }
 
       const booking = parseBooking(event.message.text);
       if (booking) {
