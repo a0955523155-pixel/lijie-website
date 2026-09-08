@@ -52,66 +52,28 @@ async function verifyIdToken(idToken, clientId) {
 }
 
 function customerMessages(b) {
-  const alt = `俐姐的家預約申請｜${b.checkIn} → ${b.checkOut}（${b.nights} 晚）`;
-  const flex = {
-    type: "flex",
-    altText: alt,
-    contents: {
-      type: "bubble",
-      size: "mega",
-      header: {
-        type: "box", layout: "vertical", spacing: "sm", paddingAll: "20px",
-        contents: [
-          { type: "text", text: "俐姐的家", weight: "bold", size: "xl", color: "#FFFFFF" },
-          { type: "text", text: "預約申請已收到", size: "sm", color: "#DDEDE7" }
-        ],
-        backgroundColor: "#153C35"
-      },
-      body: {
-        type: "box", layout: "vertical", spacing: "md", paddingAll: "20px",
-        contents: [
-          { type: "text", text: `${b.checkIn}  →  ${b.checkOut}`, weight: "bold", size: "xl", color: "#153C35", wrap: true },
-          { type: "text", text: `${b.nights} 晚｜${b.people ? `${b.people} 人` : "人數未填"}`, size: "sm", color: "#6B7773" },
-          { type: "separator", margin: "md" },
-          { type: "box", layout: "vertical", spacing: "sm", margin: "md", contents: [
-            { type: "box", layout: "baseline", contents: [{type:"text",text:"姓名",size:"sm",color:"#7B8582",flex:2},{type:"text",text:b.name,size:"sm",weight:"bold",color:"#202725",flex:5,wrap:true}] },
-            { type: "box", layout: "baseline", contents: [{type:"text",text:"電話",size:"sm",color:"#7B8582",flex:2},{type:"text",text:b.phone || "未填",size:"sm",color:"#202725",flex:5,wrap:true}] },
-            { type: "box", layout: "baseline", contents: [{type:"text",text:"需求",size:"sm",color:"#7B8582",flex:2},{type:"text",text:b.purpose || "未填",size:"sm",color:"#202725",flex:5,wrap:true}] },
-            { type: "box", layout: "baseline", contents: [{type:"text",text:"備註",size:"sm",color:"#7B8582",flex:2},{type:"text",text:b.notes || "沒有",size:"sm",color:"#202725",flex:5,wrap:true}] }
-          ]},
-          { type: "separator", margin: "md" },
-          { type: "text", text: "入住須知", weight: "bold", size: "md", color: "#153C35", margin: "md" },
-          { type: "text", text: `入住 ${BOOKING_RULES.checkInFrom} 起｜退房 ${BOOKING_RULES.checkOutBy} 前`, size: "sm", color: "#202725", wrap: true },
-          { type: "text", text: `訂金需先轉帳；${BOOKING_RULES.payment.balanceMethods}。`, size: "sm", color: "#202725", wrap: true },
-          { type: "text", text: "整棟最多入住 12 人；實際成立以官方 LINE 最終確認為準。", size: "xs", color: "#6B7773", wrap: true }
-        ]
-      },
-      footer: {
-        type: "box", layout: "vertical", paddingAll: "16px",
-        contents: [
-          { type: "box", layout: "vertical", paddingAll: "12px", backgroundColor: "#EEF5F2", cornerRadius: "8px", contents: [
-            { type: "text", text: "🟡 等待俐姐確認", weight: "bold", size: "sm", color: "#8A6400", align: "center" }
-          ]}
-        ]
-      }
-    }
-  };
-  const fallback = {
-    type: "text",
-    text: [
-      "【俐姐的家｜預約申請】",
-      `入住：${b.checkIn}`,
-      `退房：${b.checkOut}（${b.nights} 晚）`,
-      `姓名：${b.name}`,
-      `電話：${b.phone || "未填"}`,
-      `人數：${b.people ? `${b.people} 人` : "未填"}`,
-      `需求：${b.purpose || "未填"}`,
-      `備註：${b.notes || "沒有"}`,
-      "",
-      "此為預約申請，請協助確認日期與安排，謝謝。"
-    ].join("\n")
-  };
-  return [flex, fallback];
+  const details = [
+    "🌿 俐姐的家｜預約申請已收到",
+    "",
+    `入住日期：${b.checkIn}`,
+    `退房日期：${b.checkOut}`,
+    `住宿晚數：${b.nights} 晚`,
+    `入住人數：${b.people ? `${b.people} 人` : "未填"}`,
+    b.purpose ? `住宿需求：${b.purpose}` : null,
+    b.notes ? `備註：${b.notes}` : null
+  ].filter(Boolean).join("\n");
+
+  const rules = [
+    "【入住須知】",
+    `• 入住時間：${BOOKING_RULES.checkInFrom} 起`,
+    `• 退房時間：${BOOKING_RULES.checkOutBy} 前`,
+    `• 付款方式：${BOOKING_RULES.payment.depositMethod}；${BOOKING_RULES.payment.balanceMethods}。`,
+    `• 匯款資訊：${BOOKING_RULES.payment.accountStatus}。`,
+    ...BOOKING_RULES.notes.map(x => `• ${x}`),
+    "",
+    "此為預約申請，實際訂房成立仍以俐姐於官方 LINE 最終確認為準。"
+  ].join("\n");
+  return [{ type: "text", text: details }, { type: "text", text: rules }];
 }
 
 function ownerMessage(b, userId) {
@@ -165,9 +127,7 @@ export default async function handler(req, res) {
     const booking = normalizeBooking(body.booking);
     const userId = verified.sub;
 
-    console.log("booking-submit", { userId: userId.slice(0, 8) + "…", checkIn: booking.checkIn, checkOut: booking.checkOut, people: booking.people, source: booking.source });
     await pushMessages(userId, customerMessages(booking), accessToken);
-    console.log("booking-push-success", { checkIn: booking.checkIn, checkOut: booking.checkOut });
 
     const notifyTo = process.env.LINE_BOOKING_NOTIFY_TO;
     if (notifyTo && notifyTo !== userId) {

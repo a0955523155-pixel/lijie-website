@@ -1,0 +1,10 @@
+.git
+.github
+*.docx
+*.xlsx
+*.xls
+*.pdf
+*.zip
+.env
+.env.*
+node_modules

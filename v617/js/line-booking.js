@@ -282,24 +282,7 @@ async function sendMessage(){
 els.prev.addEventListener("click",()=>{cursor=new Date(cursor.getFullYear(),cursor.getMonth()-1,1);render()});
 els.next.addEventListener("click",()=>{cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,1);render()});
 [els.name,els.phone,els.people,els.purpose,els.notes].forEach(e=>e.addEventListener("input",refreshForm));
-els.copy.addEventListener("click", copyMessage);
-let submitInFlight = false;
-async function triggerSend(e){
-  if(e){ e.preventDefault(); e.stopPropagation(); }
-  if(submitInFlight || els.send.disabled) return;
-  submitInFlight = true;
-  // iOS Safari / LINE 內建瀏覽器在鍵盤開啟時，第一下常只負責收鍵盤。
-  // 先主動 blur，再直接執行送出，避免看起來「按了沒反應」。
-  try { document.activeElement?.blur?.(); } catch {}
-  els.send.classList.add("sending");
-  try { await sendMessage(); } finally {
-    submitInFlight = false;
-    els.send.classList.remove("sending");
-  }
-}
-els.send.addEventListener("pointerup", triggerSend);
-els.send.addEventListener("click", triggerSend);
-els.send.addEventListener("touchend", triggerSend, {passive:false});
+els.copy.addEventListener("click",copyMessage);els.send.addEventListener("click",sendMessage);
 
 const presetStart = params.get("start");
 const presetEnd = params.get("end");

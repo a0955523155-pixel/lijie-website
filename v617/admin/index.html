@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#102d29">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: https://firebasestorage.googleapis.com https://*.googleusercontent.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://www.gstatic.com; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebasestorage.googleapis.com wss://*.googleapis.com wss://*.firebaseio.com; frame-src 'self' https://*.firebaseapp.com https://*.web.app; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+  <title>俐姐的家｜網站管理</title>
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+  <main class="shell">
+    <section id="configNotice" class="notice hidden" role="alert">
+      尚未連接 Firebase。請依照壓縮檔內的「安裝說明.md」從建立專案開始完成一次性設定。
+    </section>
+
+    <section id="loginView" class="login-card">
+      <div class="brand-mark" aria-hidden="true">俐</div>
+      <p class="eyebrow">LIJIE'S HOME</p>
+      <h1>網站管理後台</h1>
+      <p class="muted">使用已授權的管理信箱登入。</p>
+      <form id="loginForm">
+        <label>管理信箱<input id="email" name="email" type="email" autocomplete="username" required></label>
+        <label>密碼<input id="password" name="password" type="password" autocomplete="current-password" minlength="10" required></label>
+        <button class="primary" type="submit">登入</button>
+      </form>
+      <p id="loginMessage" class="message" aria-live="polite"></p>
+    </section>
+
+    <section id="dashboardView" class="dashboard hidden">
+      <header class="topbar">
+        <div><p class="eyebrow">CONTENT STUDIO</p><h1>俐姐的家</h1><p id="accountEmail" class="muted"></p></div>
+        <div class="top-actions"><a class="secondary" href="../" target="_blank" rel="noopener noreferrer">查看官網</a><button id="logoutButton" class="secondary" type="button">登出</button></div>
+      </header>
+
+      <nav class="tabs" aria-label="後台分類">
+        <button class="tab active" data-tab="photos" type="button">照片管理</button>
+        <button class="tab" data-tab="library" type="button">圖片素材庫</button>
+        <button class="tab" data-tab="calendar" type="button">預約日曆</button>
+        <button class="tab" data-tab="copy" type="button">文字與資訊</button>
+        <button class="tab" data-tab="publish" type="button">預覽與發布</button>
+      </nav>
+
+      <section id="photosPanel" class="panel">
+        <div class="panel-heading"><div><h2>照片管理</h2><p>點目前照片即可更換；可以從本機上傳，也可以直接從圖片素材庫挑選。拖曳封面照片可調整順序。</p></div><div class="panel-heading-actions"><button id="addHeroFromLibrary" class="secondary" type="button">＋ 從素材庫新增封面</button></div></div>
+        <div class="upload-row">
+          <label>照片位置<select id="uploadTarget"><option value="hero">首頁封面輪播</option><option value="facility-0">KTV 空間</option><option value="facility-1">休閒／麻將空間</option><option value="facility-2">泳池空間</option><option value="facility-3">戶外料理區</option><option value="room-0">房間 01／雙人房</option><option value="room-1">房間 02／雙人房</option><option value="room-2">房間 03／雙人房</option><option value="room-3">房間 04／雙人房</option><option value="room-4">房間 05／四人房</option><option value="usePhoto">中段主照片</option><option value="ctaPhoto">頁尾背景</option></select></label>
+          <label class="file-button">選擇照片<input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>
+          <button id="uploadButton" class="primary" type="button">上傳到草稿</button>
+        </div>
+        <section id="selectionPreview" class="selection-preview hidden" aria-live="polite">
+          <div class="selection-head">
+            <div><strong id="selectionCount">已選擇 0 張</strong><p>先看縮圖確認照片，選錯可直接移除，不會先上傳。</p></div>
+            <button id="clearSelection" class="secondary" type="button">清除全部</button>
+          </div>
+          <div id="selectionGrid" class="selection-grid"></div>
+        </section>
+        <div id="uploadProgress" class="message" aria-live="polite"></div>
+        <div id="photoGrid" class="photo-grid"></div>
+      </section>
+
+
+      <section id="libraryPanel" class="panel hidden">
+        <div class="panel-heading"><div><p class="eyebrow">MEDIA LIBRARY</p><h2>圖片素材庫</h2><p>先把常用照片上傳到這裡。之後更換封面、泳池、KTV 等圖片時，可以直接挑選，不必再從電腦找檔案。</p></div></div>
+        <div class="library-toolbar">
+          <label>分類<select id="libraryUploadCategory"><option value="其他">其他</option><option value="封面">封面</option><option value="房間">房間</option><option value="泳池">泳池</option><option value="KTV">KTV</option><option value="戶外">戶外</option><option value="餐廳">餐廳</option></select></label>
+          <label class="file-button">選擇照片<input id="libraryInput" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>
+          <button id="libraryUploadButton" class="primary" type="button">上傳到素材庫</button>
+          <label class="library-search">搜尋<input id="librarySearch" type="search" placeholder="搜尋檔名或分類"></label>
+        </div>
+        <p id="libraryMessage" class="message" aria-live="polite"></p>
+        <div id="libraryGrid" class="library-grid"></div>
+      </section>
+
+      <section id="calendarPanel" class="panel hidden">
+        <div class="panel-heading"><div><p class="eyebrow">BOOKING CONTROL</p><h2>預約日曆</h2><p>直接在自己的網站管理日期，不再依賴 Google 日曆。前台只會顯示日期狀態，客人姓名與電話不會公開。</p></div></div>
+        <div class="booking-admin-layout">
+          <div class="admin-calendar-card">
+            <div class="admin-calendar-toolbar"><button id="adminCalPrev" class="secondary" type="button">←</button><h3 id="adminCalMonth">—</h3><button id="adminCalNext" class="secondary" type="button">→</button></div>
+            <div class="admin-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+            <div id="adminCalendar" class="admin-calendar-grid"></div>
+            <div class="admin-calendar-legend"><span><i class="status-dot available"></i>可詢問</span><span><i class="status-dot booked"></i>已預約</span><span><i class="status-dot blocked"></i>暫停開放</span></div>
+          </div>
+          <form id="bookingForm" class="booking-editor">
+            <div><p class="eyebrow">DATE SETTINGS</p><h3>設定日期狀態</h3><p class="muted">可設定單日或一段日期；例如連續 3 天已被預約，可一次鎖定。</p></div>
+            <div class="booking-date-row"><label>開始日期<input id="bookingStart" type="date" required></label><label>結束日期<input id="bookingEnd" type="date" required></label></div>
+            <label>狀態<select id="bookingStatus"><option value="booked">已預約</option><option value="blocked">暫停開放</option><option value="available">恢復可詢問</option></select></label>
+            <div id="bookingPrivateFields" class="booking-private-fields">
+              <label>客人姓名<input id="bookingGuest" type="text" maxlength="60" placeholder="僅後台可見"></label>
+              <label>聯絡電話<input id="bookingPhone" type="tel" maxlength="40" placeholder="僅後台可見"></label>
+              <label>人數<input id="bookingPeople" type="number" min="1" max="50" placeholder="例如 10"></label>
+              <label>訂金／收款<input id="bookingDeposit" type="text" maxlength="40" placeholder="例如 已收 3,000"></label>
+              <label class="wide">備註<textarea id="bookingNotes" rows="3" maxlength="500" placeholder="活動內容、特殊需求、付款狀態等；僅後台可見"></textarea></label>
+            </div>
+            <div class="booking-editor-actions"><button class="primary" type="submit">儲存日期</button><button id="clearBookingForm" class="secondary" type="button">清空資料</button></div>
+            <p id="bookingMessage" class="message" aria-live="polite"></p>
+          </form>
+        </div>
+      </section>
+
+      <section id="copyPanel" class="panel hidden">
+        <div class="panel-heading"><div><h2>文字與資訊</h2><p>修改後先儲存為草稿，不會立刻影響官網。</p></div></div>
+        <form id="contentForm" class="form-grid">
+          <fieldset><legend>首頁主視覺</legend>
+            <label>小標<input data-path="hero.eyebrow" type="text" maxlength="80"></label>
+            <label>主標第一行<input data-path="hero.titleLine1" type="text" maxlength="40"></label>
+            <label>主標第二行<input data-path="hero.titleLine2" type="text" maxlength="40"></label>
+            <label class="wide">介紹文字<textarea data-path="hero.description" maxlength="300" rows="4"></textarea></label>
+          </fieldset>
+          <fieldset><legend>費用與使用資訊</legend>
+            <label>建議人數<input data-path="details.capacity" type="text" maxlength="30"></label>
+            <label>使用方式<input data-path="details.schedule" type="text" maxlength="30"></label>
+            <label>服務時段<input data-path="details.hours" type="text" maxlength="30"></label>
+            <label>場地使用費<input data-path="details.price" type="text" maxlength="30"></label>
+            <label>押金<input data-path="details.deposit" type="text" maxlength="30"></label>
+            <label>付款方式<input data-path="details.payment" type="text" maxlength="30"></label>
+            <label>停車<input data-path="details.parking" type="text" maxlength="30"></label>
+          </fieldset>
+          <fieldset><legend>房間介紹輪播（全館 5 間｜最多 12 人）</legend>
+            <label>房間 01 編號<input data-path="rooms.0.number" type="text" maxlength="10"></label><label>房間 01 別名<input data-path="rooms.0.alias" type="text" maxlength="40"></label><label>房型<input data-path="rooms.0.name" type="text" maxlength="40" readonly></label><label>小標<input data-path="rooms.0.kicker" type="text" maxlength="50"></label><label class="wide">房間 01 介紹<textarea data-path="rooms.0.description" maxlength="220" rows="3"></textarea></label>
+            <label>房間 02 編號<input data-path="rooms.1.number" type="text" maxlength="10"></label><label>房間 02 別名<input data-path="rooms.1.alias" type="text" maxlength="40"></label><label>房型<input data-path="rooms.1.name" type="text" maxlength="40" readonly></label><label>小標<input data-path="rooms.1.kicker" type="text" maxlength="50"></label><label class="wide">房間 02 介紹<textarea data-path="rooms.1.description" maxlength="220" rows="3"></textarea></label>
+            <label>房間 03 編號<input data-path="rooms.2.number" type="text" maxlength="10"></label><label>房間 03 別名<input data-path="rooms.2.alias" type="text" maxlength="40"></label><label>房型<input data-path="rooms.2.name" type="text" maxlength="40" readonly></label><label>小標<input data-path="rooms.2.kicker" type="text" maxlength="50"></label><label class="wide">房間 03 介紹<textarea data-path="rooms.2.description" maxlength="220" rows="3"></textarea></label>
+            <label>房間 04 編號<input data-path="rooms.3.number" type="text" maxlength="10"></label><label>房間 04 別名<input data-path="rooms.3.alias" type="text" maxlength="40"></label><label>房型<input data-path="rooms.3.name" type="text" maxlength="40" readonly></label><label>小標<input data-path="rooms.3.kicker" type="text" maxlength="50"></label><label class="wide">房間 04 介紹<textarea data-path="rooms.3.description" maxlength="220" rows="3"></textarea></label>
+            <label>房間 05 編號<input data-path="rooms.4.number" type="text" maxlength="10"></label><label>房間 05 別名<input data-path="rooms.4.alias" type="text" maxlength="40"></label><label>房型<input data-path="rooms.4.name" type="text" maxlength="40" readonly></label><label>小標<input data-path="rooms.4.kicker" type="text" maxlength="50"></label><label class="wide">房間 05 介紹<textarea data-path="rooms.4.description" maxlength="220" rows="3"></textarea></label>
+          </fieldset>
+          <fieldset><legend>聯絡方式</legend>
+            <label>電話<input data-path="contact.phone" type="tel" maxlength="30"></label>
+            <label>LINE 網址<input data-path="contact.lineUrl" type="url" maxlength="300"></label>
+            <label class="wide">Google 地圖網址<input data-path="contact.mapUrl" type="url" maxlength="500"></label>
+          </fieldset>
+          <button class="primary" type="submit">儲存草稿</button><p id="saveMessage" class="message" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section id="publishPanel" class="panel hidden">
+        <div class="publish-card"><p class="eyebrow">READY TO PUBLISH</p><h2>確認後再更新官網</h2><p>「儲存草稿」只會保存在後台；按下發布後，訪客才會看到新內容。</p><div class="publish-actions"><button id="previewButton" class="secondary" type="button">預覽草稿</button><button id="restoreButton" class="secondary" type="button">恢復已發布版本</button><button id="publishButton" class="primary" type="button">正式發布</button></div><p id="publishMessage" class="message" aria-live="polite"></p><div class="revision-block"><h3>最近發布版本</h3><div id="revisionList" class="revision-list">正在載入…</div></div></div>
+      </section>
+    </section>
+  </main>
+  <dialog id="libraryPickerDialog" class="picker-dialog"><div class="dialog-head"><div><p class="eyebrow">CHOOSE FROM LIBRARY</p><h2 id="libraryPickerTitle">從素材庫選擇</h2></div><button id="closeLibraryPicker" class="secondary" type="button">關閉</button></div><div class="picker-body"><label class="picker-search">搜尋素材<input id="pickerSearch" type="search" placeholder="搜尋檔名或分類"></label><p id="pickerHint" class="muted"></p><div id="pickerGrid" class="library-grid picker-grid"></div></div></dialog>
+  <dialog id="previewDialog"><div class="dialog-head"><h2>草稿預覽</h2><button id="closePreview" class="secondary" type="button">關閉</button></div><iframe id="previewFrame" title="網站草稿預覽"></iframe></dialog>
+  <script type="module" src="/admin/admin.js"></script>
+</body>
+</html>
