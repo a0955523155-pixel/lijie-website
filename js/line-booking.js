@@ -2,16 +2,19 @@ import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.18
 import { getFirestore, collection, query, where, documentId, getDocs } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 import { firebaseConfig, isConfigured } from "./config.js";
 import { lineConfig, hasLiffId } from "./line-config.js";
+import { BOOKING_RULES } from "./booking-rules.js";
 
 const $ = (s) => document.querySelector(s);
 const els = {
   cal: $("#calendar"), month: $("#monthLabel"), prev: $("#prev"), next: $("#next"),
   start: $("#startText"), end: $("#endText"), note: $("#selectionNote"), error: $("#dateError"),
   name: $("#guestName"), phone: $("#phone"), people: $("#people"), purpose: $("#purpose"), notes: $("#notes"),
-  send: $("#sendBtn"), copy: $("#copyBtn"), status: $("#sendStatus"), summary: $("#summary"), mode: $("#lineModeText")
+  send: $("#sendBtn"), copy: $("#copyBtn"), status: $("#sendStatus"), summary: $("#summary"), mode: $("#lineModeText"),
+  checkInTime: $("#checkInTime"), checkOutTime: $("#checkOutTime"), stayRulesList: $("#stayRulesList")
 };
 
 const today = new Date(); today.setHours(0,0,0,0);
+const params = new URLSearchParams(location.search);
 let cursor = new Date(today.getFullYear(), today.getMonth(), 1);
 let startDate = null, endDate = null, monthStates = new Map(), liffReady = false, inLine = false;
 let db = null;
@@ -73,10 +76,14 @@ async function rangeIsAvailable(a,b){
 async function pickDate(d){
   hideError();
   if(!startDate||endDate){startDate=new Date(d);endDate=null;}
-  else if(d<startDate){startDate=new Date(d);endDate=null;}
-  else {
-    const ok=await rangeIsAvailable(startDate,d);
-    if(!ok){showError("這段日期中有已預約或暫停開放的日期，請重新選擇。");startDate=new Date(d);endDate=null;}
+  else if(d<=startDate){
+    startDate=new Date(d);endDate=null;
+    showError("退房日期需晚於入住日期，請再選一天。");
+  } else {
+    // 退房當日本身可作為離店日；住宿夜晚是入住日起至退房日前一日。
+    const lastNight=new Date(d); lastNight.setDate(lastNight.getDate()-1);
+    const ok=await rangeIsAvailable(startDate,lastNight);
+    if(!ok){showError("住宿期間有已預約或暫停開放的日期，請重新選擇。");startDate=new Date(d);endDate=null;}
     else endDate=new Date(d);
   }
   updateSelection(); await render();
@@ -84,11 +91,17 @@ async function pickDate(d){
 
 function hideError(){els.error.classList.add("hidden")}
 function showError(msg){els.error.textContent=msg;els.error.classList.remove("hidden")}
-function daysCount(){if(!startDate||!endDate)return 0;return Math.round((endDate-startDate)/86400000)+1}
+function nightsCount(){if(!startDate||!endDate)return 0;return Math.round((endDate-startDate)/86400000)}
 function updateSelection(){
   els.start.textContent=startDate?fmt.format(startDate):"請選擇";els.end.textContent=endDate?fmt.format(endDate):"請選擇";
-  els.note.textContent=startDate&&!endDate?"已選開始日期，請再點結束日期。":startDate&&endDate?`共選擇 ${daysCount()} 天；送出前仍會以官方 LINE 最終確認。`:"先點開始日期，再點結束日期；若只詢問單日，可連續點同一天兩次。";
+  els.note.textContent=startDate&&!endDate?"已選開始日期，請再點結束日期。":startDate&&endDate?`入住 ${nightsCount()} 晚；送出前仍會以官方 LINE 最終確認。`:"先點入住日期，再點退房日期。已預約或暫停開放的日期無法選取。";
   refreshForm();
+}
+
+function renderStayRules(){
+  els.checkInTime.textContent = BOOKING_RULES.checkInFrom;
+  els.checkOutTime.textContent = BOOKING_RULES.checkOutBy;
+  els.stayRulesList.innerHTML = BOOKING_RULES.notes.map(n => `<li>${escapeHtml(n)}</li>`).join("");
 }
 
 function buildMessage(){
@@ -96,12 +109,18 @@ function buildMessage(){
   const name=els.name.value.trim(),phone=els.phone.value.trim(),people=els.people.value.trim(),purpose=els.purpose.value.trim(),notes=els.notes.value.trim();
   return [
     "【俐姐的家｜預約申請】",
-    `日期：${keyOf(startDate)} ～ ${keyOf(endDate)}（${daysCount()} 天）`,
+    `入住：${keyOf(startDate)}`
+    ,`退房：${keyOf(endDate)}（${nightsCount()} 晚）`,
     `姓名：${name||"未填"}`,
     `電話：${phone||"未填"}`,
     `人數：${people?people+" 人":"未填"}`,
-    `活動：${purpose||"未填"}`,
+    `需求：${purpose||"未填"}`,
     `備註：${notes||"無"}`,
+    "",
+    "【入住須知】",
+    `最早入住：${BOOKING_RULES.checkInFrom}`,
+    `最晚退房：${BOOKING_RULES.checkOutBy}`,
+    ...BOOKING_RULES.notes.map(n => `• ${n}`),
     "",
     "此為預約申請，請協助確認日期與安排，謝謝。"
   ].join("\n");
@@ -111,7 +130,7 @@ function refreshForm(){
   const valid=!!(startDate&&endDate&&els.name.value.trim()); els.send.disabled=!valid;
   els.status.textContent=valid?"資料已整理好，可傳送到官方 LINE。":"請先選擇完整日期並填寫姓名。";
   const msg=buildMessage();
-  if(msg){els.summary.innerHTML=`<div class="row"><span>日期</span><strong>${keyOf(startDate)} ～ ${keyOf(endDate)}</strong></div><div class="row"><span>天數</span><strong>${daysCount()} 天</strong></div><div class="row"><span>姓名</span><strong>${escapeHtml(els.name.value.trim()||"—")}</strong></div>`;els.summary.classList.remove("hidden")}else els.summary.classList.add("hidden");
+  if(msg){els.summary.innerHTML=`<div class="row"><span>入住</span><strong>${keyOf(startDate)}</strong></div><div class="row"><span>退房</span><strong>${keyOf(endDate)}</strong></div><div class="row"><span>住宿</span><strong>${nightsCount()} 晚</strong></div><div class="row"><span>姓名</span><strong>${escapeHtml(els.name.value.trim()||"—")}</strong></div>`;els.summary.classList.remove("hidden")}else els.summary.classList.add("hidden");
 }
 function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 
@@ -139,4 +158,17 @@ els.next.addEventListener("click",()=>{cursor=new Date(cursor.getFullYear(),curs
 [els.name,els.phone,els.people,els.purpose,els.notes].forEach(e=>e.addEventListener("input",refreshForm));
 els.copy.addEventListener("click",copyMessage);els.send.addEventListener("click",sendMessage);
 
-await initLiff(); await render(); updateSelection();
+const presetStart = params.get("start");
+const presetEnd = params.get("end");
+if (presetStart && /^\d{4}-\d{2}-\d{2}$/.test(presetStart)) {
+  const d = parseKey(presetStart);
+  if (d >= today) {
+    startDate = d; cursor = new Date(d.getFullYear(), d.getMonth(), 1);
+  }
+}
+if (presetEnd && /^\d{4}-\d{2}-\d{2}$/.test(presetEnd)) {
+  const d = parseKey(presetEnd);
+  if (startDate && d > startDate) endDate = d;
+}
+
+renderStayRules(); await initLiff(); await render(); updateSelection();

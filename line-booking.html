@@ -15,8 +15,8 @@
   <main class="app">
     <header class="hero">
       <div class="brand"><img src="images/lijie-home-mark.svg" alt=""><b>俐姐的家</b><span>LIJIE'S HOME</span></div>
-      <h1>把想來的日子，<br>先留給彼此。</h1>
-      <p>直接在 LINE 裡查看目前可安排日期。選好日期與基本資料後，會把完整預約內容傳回官方 LINE，由俐姐協助最後確認。</p>
+      <h1>在官方 LINE 裡，<br>直接選入住日期。</h1>
+      <p>這個日曆與官網後台同步。先選入住日與退房日，再填寫人數與聯絡資料；送出後會把完整內容傳回官方 LINE，由俐姐協助確認。</p>
       <div class="line-badge"><i class="dot"></i><span id="lineModeText">LINE 預約模式準備中</span></div>
     </header>
 
@@ -31,10 +31,18 @@
         <div id="calendar" class="grid" role="grid" aria-label="預約日期"></div>
         <div class="legend"><span><i class="a"></i>可詢問</span><span><i class="b"></i>已預約</span><span><i class="c"></i>暫停開放</span></div>
         <div class="selection">
-          <div class="box"><span>開始日期</span><strong id="startText">請選擇</strong></div><div class="arrow">→</div><div class="box"><span>結束日期</span><strong id="endText">請選擇</strong></div>
+          <div class="box"><span>入住日期</span><strong id="startText">請選擇</strong></div><div class="arrow">→</div><div class="box"><span>退房日期</span><strong id="endText">請選擇</strong></div>
         </div>
-        <p id="selectionNote" class="selection-note">先點開始日期，再點結束日期；若只詢問單日，可連續點同一天兩次。</p>
+        <p id="selectionNote" class="selection-note">先點入住日期，再點退房日期。已預約或暫停開放的日期無法選取。</p>
         <div id="dateError" class="error hidden"></div>
+        <div class="stay-rules" aria-labelledby="stay-rules-title">
+          <div class="stay-rules-head"><span>入住須知</span><strong id="stay-rules-title">CHECK-IN GUIDE</strong></div>
+          <div class="stay-time-grid">
+            <div><span>最早入住</span><strong id="checkInTime">—</strong></div>
+            <div><span>最晚退房</span><strong id="checkOutTime">—</strong></div>
+          </div>
+          <ul id="stayRulesList"></ul>
+        </div>
       </section>
 
       <section class="card" aria-labelledby="form-title">
@@ -43,11 +51,11 @@
         <div class="form-grid" style="margin-top:18px">
           <div class="field"><label for="guestName">姓名</label><input id="guestName" autocomplete="name" maxlength="40" placeholder="怎麼稱呼您"></div>
           <div class="field"><label for="phone">聯絡電話</label><input id="phone" inputmode="tel" autocomplete="tel" maxlength="24" placeholder="09xx-xxx-xxx"></div>
-          <div class="field"><label for="people">預計人數</label><input id="people" type="number" inputmode="numeric" min="1" max="30" placeholder="例如 8"></div>
-          <div class="field"><label for="purpose">活動類型</label><input id="purpose" maxlength="40" placeholder="朋友聚會／家庭聚會"></div>
-          <div class="field full"><label for="notes">備註</label><textarea id="notes" maxlength="300" placeholder="可以告訴我們大約抵達時間、是否需要 KTV／戶外料理區，或其他需求。"></textarea></div>
+          <div class="field"><label for="people">入住人數</label><input id="people" type="number" inputmode="numeric" min="1" max="12" placeholder="最多 12 人"></div>
+          <div class="field"><label for="purpose">住宿需求</label><input id="purpose" maxlength="40" placeholder="家庭旅遊／朋友包棟"></div>
+          <div class="field full"><label for="notes">備註</label><textarea id="notes" maxlength="300" placeholder="可以告訴我們預計抵達時間、孩童人數、是否有特殊需求，或其他想先詢問的事項。"></textarea></div>
         </div>
-        <p class="privacy">送出後會將以上內容整理成一則 LINE 訊息傳回官方帳號。此頁不會直接把姓名、電話公開寫入可查詢的日曆資料庫；實際是否成立仍以官方 LINE 確認為準。</p>
+        <p class="privacy">送出後會將以上內容整理成一則 LINE 訊息傳回官方帳號。若已啟用 Messaging API Webhook，官方 LINE 會立即自動回覆您所選的入住／退房日期與入住須知；實際是否成立仍以俐姐後續確認為準。</p>
         <div id="summary" class="summary hidden"></div>
         <button id="sendBtn" class="primary" type="button" disabled><span>LINE</span> 傳送預約申請</button>
         <button id="copyBtn" class="secondary" type="button">複製預約內容</button>

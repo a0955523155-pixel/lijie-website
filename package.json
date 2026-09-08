@@ -5,5 +5,6 @@
   "scripts": {
     "check": "node scripts/check.mjs",
     "preview": "npx serve ."
-  }
+  },
+  "version": "6.6.0"
 }

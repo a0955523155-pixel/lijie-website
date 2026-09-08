@@ -14,7 +14,7 @@ if (grid) {
   const dateSheetTitle = document.querySelector("#dateSheetTitle");
   const dateSheetLine = document.querySelector("#dateSheetLine");
   const dateSheetCopy = document.querySelector("#dateSheetCopy");
-  const lineBase = selectedLine?.href?.split("?")[0] || "https://line.me/ti/p/~287ppyfa";
+  const bookingPage = "line-booking.html";
   let selectedMessage = "";
   const formatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long" });
   const fullFormatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
@@ -51,7 +51,7 @@ if (grid) {
   function openDateSheet(d, key) {
     selectedMessage = `您好，我想詢問俐姐的家 ${key} 是否可以預約？`;
     if (dateSheetTitle) dateSheetTitle.textContent = fullFormatter.format(d);
-    if (dateSheetLine) dateSheetLine.href = lineBase;
+    if (dateSheetLine) dateSheetLine.href = `${bookingPage}?start=${encodeURIComponent(key)}`;
     dateSheet?.classList.add("open");
     dateSheetBackdrop?.classList.add("open");
     dateSheet?.setAttribute("aria-hidden", "false");
@@ -65,7 +65,7 @@ if (grid) {
     grid.replaceChildren();
     statusNode.textContent = "正在載入可預約日期…";
     let states = new Map();
-    try { states = await getMonthStates(first, last); statusNode.textContent = "點選「可詢問」日期後，可直接帶日期到 LINE 詢問。"; }
+    try { states = await getMonthStates(first, last); statusNode.textContent = "點選「可詢問」日期後，可直接帶入 LINE 預約日曆。"; }
     catch { statusNode.textContent = "目前無法同步最新日期，請直接透過 LINE 詢問。"; }
 
     const startOffset = first.getDay();
@@ -89,7 +89,7 @@ if (grid) {
         selectedKey = key;
         selectedText.textContent = fullFormatter.format(d);
         selectedMessage = `您好，我想詢問俐姐的家 ${key} 是否可以預約？`;
-        selectedLine.href = lineBase;
+        selectedLine.href = `${bookingPage}?start=${encodeURIComponent(key)}`;
         selectedCard.classList.remove("hidden");
         openDateSheet(d, key);
         render();
