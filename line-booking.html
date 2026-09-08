@@ -68,43 +68,94 @@
 
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script>
-    // V6.25 — LIFF must initialize before loading app modules/Firebase.
-    // Do not read, rewrite, or normalize liff.* parameters before this Promise resolves.
+    // V6.26 — Bootstrap LIFF first, and POST sanitized diagnostics to Vercel.
+    // Important: diagnostics never include query values, tokens, ID tokens, cookies, or form data.
     (function () {
       const LIFF_ID = "2011502071-EM878xNE";
-      const diag = {
-        startedAt: new Date().toISOString(),
-        liffId: LIFF_ID,
-        hrefBeforeInit: location.href,
-        origin: location.origin,
-        pathname: location.pathname,
-        searchBeforeInit: location.search,
-        inClientBeforeInit: !!window.liff?.isInClient?.(),
-        sdkVersion: window.liff?.getVersion?.() || null,
-        lineVersion: window.liff?.getLineVersion?.() || null
-      };
+
+      function safeUrlParts(raw) {
+        try {
+          const u = new URL(raw, location.href);
+          return { host: u.host, pathname: u.pathname, queryKeys: Array.from(u.searchParams.keys()).slice(0, 20) };
+        } catch (_) { return { host: location.host, pathname: location.pathname, queryKeys: [] }; }
+      }
+
+      function safeReferrer() {
+        try {
+          if (!document.referrer) return { referrerHost: null, referrerPath: null };
+          const u = new URL(document.referrer);
+          return { referrerHost: u.host, referrerPath: u.pathname };
+        } catch (_) { return { referrerHost: null, referrerPath: null }; }
+      }
+
+      function baseDiagnostic(event, extra) {
+        const url = safeUrlParts(location.href);
+        const ref = safeReferrer();
+        let context = null;
+        try { context = window.liff?.getContext?.() || null; } catch (_) {}
+        let sendMessagesAvailable = null;
+        try { sendMessagesAvailable = window.liff?.isApiAvailable?.("sendMessages"); } catch (_) {}
+        return Object.assign({
+          event,
+          at: new Date().toISOString(),
+          liffId: LIFF_ID,
+          host: url.host,
+          pathname: url.pathname,
+          queryKeys: url.queryKeys,
+          referrerHost: ref.referrerHost,
+          referrerPath: ref.referrerPath,
+          inClient: !!window.liff?.isInClient?.(),
+          loggedIn: !!window.liff?.isLoggedIn?.(),
+          contextType: context?.type || null,
+          viewType: context?.viewType || null,
+          sendMessagesAvailable,
+          sdkVersion: window.liff?.getVersion?.() || null,
+          lineVersion: window.liff?.getLineVersion?.() || null,
+          userAgent: navigator.userAgent,
+          visibilityState: document.visibilityState,
+          online: navigator.onLine,
+          screen: `${window.screen?.width || 0}x${window.screen?.height || 0}@${window.devicePixelRatio || 1}`
+        }, extra || {});
+      }
+
+      function report(event, extra) {
+        const payload = baseDiagnostic(event, extra);
+        try {
+          fetch('/api/liff-diagnostic', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            cache: 'no-store',
+            keepalive: true,
+            credentials: 'same-origin'
+          }).catch(function () {});
+        } catch (_) {}
+        return payload;
+      }
+
+      window.__LIFF_REPORT__ = report;
+      const diag = report('LIFF_BOOTSTRAP_START', { stage: 'before-init' });
+
       const promise = window.liff
         ? window.liff.init({ liffId: LIFF_ID }).then(function () {
-            diag.resolvedAt = new Date().toISOString();
-            diag.hrefAfterInit = location.href;
-            diag.searchAfterInit = location.search;
-            diag.inClientAfterInit = !!window.liff.isInClient?.();
-            diag.loggedIn = !!window.liff.isLoggedIn?.();
-            try { diag.context = window.liff.getContext?.() || null; } catch (e) {}
-            try { diag.sendMessages = window.liff.isApiAvailable?.("sendMessages"); } catch (e) {}
-            console.info("LIFF_BOOTSTRAP_OK", diag);
+            const ok = report('LIFF_BOOTSTRAP_OK', { stage: 'init-resolved' });
+            Object.assign(diag, ok);
+            console.info('LIFF_BOOTSTRAP_OK', ok);
           }).catch(function (err) {
-            diag.failedAt = new Date().toISOString();
-            diag.errorCode = err && err.code || null;
-            diag.errorMessage = err && err.message || String(err);
-            diag.hrefOnError = location.href;
-            console.error("LIFF_BOOTSTRAP_ERROR", diag, err);
+            const failed = report('LIFF_BOOTSTRAP_ERROR', {
+              stage: 'init-rejected',
+              code: err && err.code || null,
+              message: err && err.message || String(err)
+            });
+            Object.assign(diag, failed);
+            console.error('LIFF_BOOTSTRAP_ERROR', failed, err);
             throw err;
           })
-        : Promise.reject(Object.assign(new Error("LIFF_SDK_MISSING"), { code: "LIFF_SDK_MISSING" }));
+        : Promise.reject(Object.assign(new Error('LIFF_SDK_MISSING'), { code: 'LIFF_SDK_MISSING' }));
+
       window.__LIFF_BOOTSTRAP__ = { promise: promise, diag: diag };
     })();
   </script>
-  <script type="module" src="js/line-booking.js?v=625"></script>
+  <script type="module" src="js/line-booking.js?v=626"></script>
 </body>
 </html>

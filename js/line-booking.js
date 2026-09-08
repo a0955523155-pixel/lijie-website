@@ -48,7 +48,7 @@ function lineDiag(){
 }
 
 async function initLiff(){
-  // V6.25: LIFF 初始化由 HTML 的 bootstrap 在任何 module / Firebase 載入前執行。
+  // V6.26: LIFF 初始化由 HTML bootstrap 先執行，並將錯誤主動 POST 到 /api/liff-diagnostic。
   // 這裡只等待 bootstrap 結果，避免 primary redirect 期間被其他 module 延遲或干擾。
   const boot = window.__LIFF_BOOTSTRAP__;
   if (!window.liff) { els.mode.textContent = "一般瀏覽器預約模式"; return; }
@@ -82,7 +82,14 @@ async function initLiff(){
     const code = e?.code || e?.message || "UNKNOWN";
     const diag = boot?.diag || {};
     console.error("LIFF_INIT_ERROR", {code, message:e?.message, stack:e?.stack, liffId:lineConfig.liffId, href:location.href, bootstrap:diag});
-    els.mode.textContent = `LINE 初始化失敗：${code}｜host=${location.host}｜path=${location.pathname}。診斷資訊已保留。`;
+    try {
+      window.__LIFF_REPORT__?.("LIFF_INIT_CATCH", {
+        stage: "module-init-catch",
+        code,
+        message: e?.message || String(e)
+      });
+    } catch {}
+    els.mode.textContent = `LINE 初始化失敗：${code}。診斷已送到 Vercel：請搜尋 LIFF_BOOTSTRAP_ERROR 或 /api/liff-diagnostic。`;
   }
 }
 
@@ -371,6 +378,7 @@ async function sendMessage(){
       }
       const d = lineDiag();
       console.info("LIFF_SEND_ATTEMPT", {...d, messageLength: msg.length});
+      try { window.__LIFF_REPORT__?.("LIFF_SEND_ATTEMPT", { stage:"before-send", contextType:d.contextType, viewType:d.viewType, sendMessagesAvailable:d.sendMessagesAvailable }); } catch {}
       try {
         await window.liff.sendMessages([{ type: "text", text: msg }]);
       } catch (sendErr) {
@@ -381,6 +389,7 @@ async function sendMessage(){
           diagnostic: d,
           messageLength: msg.length
         });
+        try { window.__LIFF_REPORT__?.("LIFF_SEND_ERROR", { stage:"send-rejected", code:sendErr?.code, message:sendErr?.message, contextType:d.contextType, viewType:d.viewType, sendMessagesAvailable:d.sendMessagesAvailable }); } catch {}
         // 將診斷資料掛到錯誤，畫面直接顯示真正的聊天室 context / API 狀態。
         sendErr.lineDiagnostic = d;
         throw sendErr;
