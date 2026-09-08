@@ -17,6 +17,8 @@ const today = new Date(); today.setHours(0,0,0,0);
 const params = new URLSearchParams(location.search);
 let cursor = new Date(today.getFullYear(), today.getMonth(), 1);
 let startDate = null, endDate = null, monthStates = new Map(), liffReady = false, inLine = false;
+const stateCache = new Map();
+const loadedMonths = new Set();
 let db = null;
 if (isConfigured()) {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
@@ -41,19 +43,29 @@ async function initLiff(){
 }
 
 async function loadStates(first,last){
-  if (!db) return new Map();
+  const monthKey = `${first.getFullYear()}-${String(first.getMonth()+1).padStart(2,"0")}`;
+  if (loadedMonths.has(monthKey)) {
+    const out = new Map();
+    for (const [k,v] of stateCache) if (k >= keyOf(first) && k <= keyOf(last)) out.set(k,v);
+    return out;
+  }
+  if (!db) { loadedMonths.add(monthKey); return new Map(); }
   try {
     const q = query(collection(db,"availability"), where(documentId(),">=",keyOf(first)), where(documentId(),"<=",keyOf(last)));
-    const snap = await getDocs(q); return new Map(snap.docs.map(d=>[d.id,d.data().status||"available"]));
+    const snap = await getDocs(q);
+    const out = new Map(snap.docs.map(d=>[d.id,d.data().status||"available"]));
+    out.forEach((v,k)=>stateCache.set(k,v));
+    loadedMonths.add(monthKey);
+    return out;
   } catch(e){ console.warn(e); return new Map(); }
 }
 
 function isInRange(d){ if(!startDate) return false; const end=endDate||startDate; return d>=startDate&&d<=end; }
-function stateOf(d){ return monthStates.get(keyOf(d))||"available"; }
+function stateOf(d){ return stateCache.get(keyOf(d)) || monthStates.get(keyOf(d)) || "available"; }
 
-async function render(){
-  const first=new Date(cursor.getFullYear(),cursor.getMonth(),1), last=new Date(cursor.getFullYear(),cursor.getMonth()+1,0);
-  els.month.textContent=monthFmt.format(first); monthStates=await loadStates(first,last); els.cal.replaceChildren();
+function drawCalendar(){
+  const first=new Date(cursor.getFullYear(),cursor.getMonth(),1);
+  els.month.textContent=monthFmt.format(first); els.cal.replaceChildren();
   const start=new Date(first); start.setDate(1-first.getDay());
   for(let i=0;i<42;i++){
     const d=new Date(start); d.setDate(start.getDate()+i); const state=stateOf(d); const outside=d.getMonth()!==cursor.getMonth(); const past=d<today;
@@ -64,29 +76,52 @@ async function render(){
   }
 }
 
+async function render(){
+  const first=new Date(cursor.getFullYear(),cursor.getMonth(),1), last=new Date(cursor.getFullYear(),cursor.getMonth()+1,0);
+  drawCalendar(); // 先立即畫出，避免 LINE MINI App 點擊後等待網路才有反應
+  monthStates=await loadStates(first,last);
+  drawCalendar();
+}
+
 async function rangeIsAvailable(a,b){
   const start=new Date(a), end=new Date(b); const months=[]; let c=new Date(start.getFullYear(),start.getMonth(),1);
   while(c<=end){months.push(new Date(c));c=new Date(c.getFullYear(),c.getMonth()+1,1)}
-  const all=new Map();
-  for(const m of months){const first=new Date(m.getFullYear(),m.getMonth(),1),last=new Date(m.getFullYear(),m.getMonth()+1,0);const s=await loadStates(first,last);s.forEach((v,k)=>all.set(k,v));}
-  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){if((all.get(keyOf(d))||"available")!=="available")return false;}
+  // 已載入的月份直接吃快取；只有跨到尚未載入月份才查 Firestore。
+  for(const m of months){
+    const first=new Date(m.getFullYear(),m.getMonth(),1),last=new Date(m.getFullYear(),m.getMonth()+1,0);
+    await loadStates(first,last);
+  }
+  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){if((stateCache.get(keyOf(d))||"available")!=="available")return false;}
   return true;
 }
 
 async function pickDate(d){
   hideError();
-  if(!startDate||endDate){startDate=new Date(d);endDate=null;}
-  else if(d<=startDate){
-    startDate=new Date(d);endDate=null;
-    showError("退房日期需晚於入住日期，請再選一天。");
-  } else {
-    // 退房當日本身可作為離店日；住宿夜晚是入住日起至退房日前一日。
-    const lastNight=new Date(d); lastNight.setDate(lastNight.getDate()-1);
-    const ok=await rangeIsAvailable(startDate,lastNight);
-    if(!ok){showError("住宿期間有已預約或暫停開放的日期，請重新選擇。");startDate=new Date(d);endDate=null;}
-    else endDate=new Date(d);
+  if(!startDate||endDate){
+    startDate=new Date(d); endDate=null;
+    updateSelection(); drawCalendar();
+    return;
   }
-  updateSelection(); await render();
+  if(d<=startDate){
+    startDate=new Date(d); endDate=null;
+    showError("退房日期需晚於入住日期，請再選一天。");
+    updateSelection(); drawCalendar();
+    return;
+  }
+
+  // 先立即顯示客人點到的退房日，再做必要的跨月可用性檢查。
+  const candidateEnd = new Date(d);
+  endDate = candidateEnd;
+  updateSelection(); drawCalendar();
+
+  const lastNight=new Date(candidateEnd); lastNight.setDate(lastNight.getDate()-1);
+  els.note.textContent = "正在確認住宿期間是否可預約…";
+  const ok=await rangeIsAvailable(startDate,lastNight);
+  if(!ok){
+    endDate=null;
+    showError("住宿期間有已預約或暫停開放的日期，請重新選擇退房日期。");
+  }
+  updateSelection(); drawCalendar();
 }
 
 function hideError(){els.error.classList.add("hidden")}

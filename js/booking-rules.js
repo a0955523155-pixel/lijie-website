@@ -2,7 +2,7 @@
 // 若實際營運時間不同，只需改這一個檔案後重新部署。
 export const BOOKING_RULES = {
   checkInFrom: "15:00",
-  checkOutBy: "11:00",
+  checkOutBy: "12:00",
   maxGuests: 12,
   notes: [
     "若預計較晚抵達，請先透過官方 LINE 告知。",
