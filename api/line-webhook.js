@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
+import { lineConfig } from "../js/line-config.js";
 
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
@@ -46,7 +47,44 @@ function parseBooking(text = "") {
   };
 }
 
-function buildReply(b) {
+function welcomeText() {
+  return [
+    "歡迎加入『俐姐的家』🌿",
+    "",
+    "這裡可以查詢空房、選擇入住／退房日期並送出預約申請。",
+    "",
+    "【住宿資訊】",
+    `• 入住時間：${BOOKING_RULES.checkInFrom} 起`,
+    `• 退房時間：${BOOKING_RULES.checkOutBy} 前`,
+    `• 全館 5 間客房，最多入住 ${BOOKING_RULES.maxGuests} 人`,
+    `• ${BOOKING_RULES.payment.depositMethod}`,
+    `• ${BOOKING_RULES.payment.balanceMethods}`,
+    `• ${BOOKING_RULES.payment.accountStatus}`,
+    "",
+    "要預約時，點下方『立即預約』開啟日期日曆即可。"
+  ].join("\n");
+}
+
+function welcomeButtonMessage() {
+  return {
+    type: "template",
+    altText: "俐姐的家｜立即預約",
+    template: {
+      type: "buttons",
+      title: "俐姐的家｜住宿預約",
+      text: "查看空房並選擇入住、退房日期",
+      actions: [
+        {
+          type: "uri",
+          label: "立即預約",
+          uri: lineConfig.miniAppUrl
+        }
+      ]
+    }
+  };
+}
+
+function buildBookingReply(b) {
   return [
     `收到 ${b.name} 的預約申請 🌿`,
     "",
@@ -54,27 +92,76 @@ function buildReply(b) {
     `退房日期：${b.checkOut}`,
     `住宿晚數：${b.nights} 晚`,
     `入住人數：${b.people}`,
+    b.phone && b.phone !== "未填" ? `聯絡電話：${b.phone}` : null,
     b.purpose && b.purpose !== "未填" ? `住宿需求：${b.purpose}` : null,
+    b.notes && b.notes !== "未填" && b.notes !== "無" ? `備註：${b.notes}` : null,
     "",
     "【入住須知】",
-    `• 最早入住時間：${BOOKING_RULES.checkInFrom}`,
-    `• 最晚退房時間：${BOOKING_RULES.checkOutBy}`,
+    `• 最早入住：${BOOKING_RULES.checkInFrom}`,
+    `• 最晚退房：${BOOKING_RULES.checkOutBy}`,
     `• 付款方式：${BOOKING_RULES.payment.depositMethod}；${BOOKING_RULES.payment.balanceMethods}。`,
     `• 匯款資訊：${BOOKING_RULES.payment.accountStatus}。`,
     ...BOOKING_RULES.notes.map(x => `• ${x}`),
     "",
-    "以上已收到，日期目前仍為『預約申請』，俐姐確認後會再於 LINE 回覆您。"
+    "以上資料已收到，目前仍為『預約申請』；待確認日期與訂金安排後，官方 LINE 會再通知您。"
   ].filter(Boolean).join("\n");
 }
 
-async function replyLine(replyToken, text, token) {
+function keywordReply(text = "") {
+  const t = text.replace(/\s+/g, "").toLowerCase();
+  if (!t) return null;
+
+  if (/預約|空房|日曆|日期|訂房/.test(t)) {
+    return {
+      text: [
+        "可以直接用官方預約日曆選擇入住與退房日期 🌿",
+        "",
+        `入住：${BOOKING_RULES.checkInFrom} 起`,
+        `退房：${BOOKING_RULES.checkOutBy} 前`,
+        "",
+        "點下方『立即預約』即可開始。"
+      ].join("\n"),
+      button: welcomeButtonMessage()
+    };
+  }
+
+  if (/最多|幾人|人數|入住人數/.test(t)) {
+    return { text: `俐姐的家整棟最多入住 ${BOOKING_RULES.maxGuests} 人。\n目前房型為雙人房 4 間、四人房 1 間，共 5 間房。` };
+  }
+
+  if (/入住|退房|checkin|checkout|時間/.test(t)) {
+    return { text: `入住時間：${BOOKING_RULES.checkInFrom} 起\n退房時間：${BOOKING_RULES.checkOutBy} 前\n若預計較晚抵達，請先透過官方 LINE 告知。` };
+  }
+
+  if (/付款|訂金|現金|轉帳|匯款|帳號/.test(t)) {
+    return {
+      text: [
+        "【付款方式】",
+        `• ${BOOKING_RULES.payment.depositMethod}`,
+        `• ${BOOKING_RULES.payment.balanceMethods}`,
+        `• ${BOOKING_RULES.payment.accountStatus}`
+      ].join("\n")
+    };
+  }
+
+  if (/房間|房型|幾間/.test(t)) {
+    return { text: `目前共有 5 間客房：雙人房 4 間、四人房 1 間，整棟最多入住 ${BOOKING_RULES.maxGuests} 人。` };
+  }
+
+  return null;
+}
+
+async function replyLine(replyToken, messages, token) {
+  const normalized = (Array.isArray(messages) ? messages : [messages]).map(message =>
+    typeof message === "string" ? { type: "text", text: message } : message
+  );
   const r = await fetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${token}`
     },
-    body: JSON.stringify({ replyToken, messages: [{ type: "text", text }] })
+    body: JSON.stringify({ replyToken, messages: normalized.slice(0, 5) })
   });
   if (!r.ok) throw new Error(`LINE reply failed: ${r.status} ${await r.text()}`);
 }
@@ -87,7 +174,10 @@ export default async function handler(req, res) {
 
   const secret = process.env.LINE_CHANNEL_SECRET;
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  if (!secret || !token) return res.status(500).json({ ok: false, error: "LINE environment variables are not configured" });
+  if (!secret || !token) {
+    console.error("LINE environment variables are not configured");
+    return res.status(500).json({ ok: false, error: "LINE environment variables are not configured" });
+  }
 
   try {
     const raw = await readRawBody(req);
@@ -95,18 +185,44 @@ export default async function handler(req, res) {
     if (!verifyLineSignature(raw, signature, secret)) return res.status(401).json({ ok: false });
 
     const body = JSON.parse(raw.toString("utf8"));
-    // LINE Developers 的 Verify 會送 events: []；正常回 200 即可。
+    // LINE Developers 的 Verify 會送 events: []；一定直接回 200。
     if (!Array.isArray(body.events) || body.events.length === 0) return res.status(200).json({ ok: true });
 
+    // 先快速回覆 LINE，避免超時；實際處理仍在同一 invocation 內完成。
     for (const event of body.events) {
-      if (event?.type !== "message" || event?.message?.type !== "text" || !event?.replyToken) continue;
+      if (!event?.replyToken) continue;
+
+      if (event.type === "follow") {
+        await replyLine(event.replyToken, [welcomeText(), welcomeButtonMessage()], token);
+        continue;
+      }
+
+      if (event.type !== "message" || event.message?.type !== "text") continue;
+
       const booking = parseBooking(event.message.text);
-      if (!booking) continue;
-      await replyLine(event.replyToken, buildReply(booking), token);
+      if (booking) {
+        await replyLine(event.replyToken, buildBookingReply(booking), token);
+        continue;
+      }
+
+      const keyword = keywordReply(event.message.text);
+      if (keyword) {
+        const messages = [keyword.text];
+        if (keyword.button) messages.push(keyword.button);
+        await replyLine(event.replyToken, messages, token);
+        continue;
+      }
+
+      // 一般聊天不搶話，只做輕量接收提示；後續可由人工接手。
+      await replyLine(event.replyToken,
+        "訊息已收到 😊\n若要查空房或預約，可傳『預約』，我會開啟入住／退房日期日曆；其他問題俐姐會再回覆您。",
+        token
+      );
     }
+
     return res.status(200).json({ ok: true });
   } catch (error) {
-    console.error(error);
+    console.error("LINE webhook error", error);
     return res.status(500).json({ ok: false });
   }
 }
