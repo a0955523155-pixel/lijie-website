@@ -45,7 +45,7 @@ function ensureDraftShape() {
     const current = currentRooms[index] || {};
     const merged = { ...clone(fallback), ...current, image: { ...clone(fallback.image), ...(current.image || {}) } };
     // V6.1 migration: the property has exactly four double rooms and one quad room.
-    merged.number = fallback.number;
+    if (!current.number) merged.number = fallback.number;
     merged.name = fallback.name;
     if (!current.alias || ["三人房","家庭房","標準房 A","標準房 B","多人房"].includes(current.name)) merged.alias = fallback.alias;
     if (!current.kicker || ["TRIPLE ROOM","FAMILY ROOM","STANDARD ROOM A","STANDARD ROOM B","GROUP ROOM"].includes(current.kicker)) merged.kicker = fallback.kicker;
@@ -61,6 +61,14 @@ function validateHttps(value) {
 
 function fillForm() {
   document.querySelectorAll("[data-path]").forEach((input) => { input.value = getPath(draft, input.dataset.path); });
+}
+
+function syncContentFormToDraft() {
+  document.querySelectorAll("[data-path]").forEach((input) => {
+    const value = input.value.trim();
+    if (input.type === "url" && !validateHttps(value)) throw new Error("所有網址都必須使用 https:// 開頭。");
+    setPath(draft, input.dataset.path, value);
+  });
 }
 
 
@@ -647,18 +655,17 @@ function bindEvents() {
   $("#contentForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
-      document.querySelectorAll("[data-path]").forEach((input) => {
-        const value = input.value.trim();
-        if (input.type === "url" && !validateHttps(value)) throw new Error("所有網址都必須使用 https:// 開頭。");
-        setPath(draft, input.dataset.path, value);
-      });
+      syncContentFormToDraft();
       await saveDraft();
     } catch (error) { message("#saveMessage", error.message, "error"); }
   });
   $("#previewButton").addEventListener("click", () => {
-    sessionStorage.setItem("lijiePreview", JSON.stringify(draft));
-    $("#previewFrame").src = `../index.html?preview=1&t=${Date.now()}`;
-    $("#previewDialog").showModal();
+    try {
+      syncContentFormToDraft();
+      sessionStorage.setItem("lijiePreview", JSON.stringify(draft));
+      $("#previewFrame").src = `../index.html?preview=1&t=${Date.now()}`;
+      $("#previewDialog").showModal();
+    } catch (error) { message("#saveMessage", error.message, "error"); }
   });
   $("#closePreview").addEventListener("click", () => $("#previewDialog").close());
   $("#restoreButton").addEventListener("click", async () => {
@@ -677,6 +684,7 @@ function bindEvents() {
     if (!confirm("確定要將目前草稿發布到官網嗎？")) return;
     message("#publishMessage", "正在發布…");
     try {
+      syncContentFormToDraft();
       await saveDraft();
       const publicContent = publicContentFromDraft();
       const batch = writeBatch(db);
