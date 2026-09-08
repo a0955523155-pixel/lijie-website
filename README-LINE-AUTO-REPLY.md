@@ -53,7 +53,7 @@ Webhook 會驗證 `x-line-signature`，只有通過 LINE Channel Secret 驗證�
 - 歡迎訊息：可自行保留
 
 LINE Developers → Messaging API 頻道：
-- Webhook URL：https://5-1bbs.com/api/line-webhook
+- Webhook URL：https://www.5-1bbs.com/api/line-webhook
 - Verify：必須成功
 - Use webhook：開啟
 

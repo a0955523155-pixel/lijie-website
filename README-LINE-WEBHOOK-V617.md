@@ -7,7 +7,7 @@ LINE Developers → Messaging API → Webhook URL 請使用：
 
 `https://www.5-1bbs.com/api/line-webhook`
 
-請勿使用 `https://5-1bbs.com/...`，因為目前該網址會 308 轉址到 `www`，LINE Verify 會判定失敗。
+請勿使用 `https://www.5-1bbs.com/...`，因為目前該網址會 308 轉址到 `www`，LINE Verify 會判定失敗。
 
 ## 已加入功能
 - 新好友 `follow` 事件：自動發送歡迎訊息。
