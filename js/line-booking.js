@@ -259,6 +259,39 @@ function canSendToCurrentChat(){
   return ["utou","group","room"].includes(type) && window.liff.isApiAvailable?.("sendMessages") !== false;
 }
 
+async function ensureChatMessagePermission(){
+  if (!liffReady || !inLine) return {ok:false, reason:"NOT_IN_LINE"};
+  try {
+    lineContext = window.liff.getContext?.() || lineContext;
+    const type = lineContext?.type;
+    if (!["utou","group","room"].includes(type)) {
+      return {ok:false, reason:`NO_CHAT_CONTEXT:${type || "unknown"}`};
+    }
+
+    // LINE MINI App 的 chat_message.write 不一定在首次開啟時就授權。
+    // 若狀態是 prompt，主動叫出 LINE 權限確認畫面。
+    if (window.liff.permission?.query) {
+      const status = await window.liff.permission.query("chat_message.write");
+      if (status?.state === "prompt" && window.liff.permission?.requestAll) {
+        els.status.textContent = "請允許 LINE『傳送訊息』權限，授權後會繼續送出預約。";
+        await window.liff.permission.requestAll();
+      }
+      const after = await window.liff.permission.query("chat_message.write");
+      if (after?.state !== "granted") {
+        return {ok:false, reason:`CHAT_MESSAGE_PERMISSION_${after?.state || "unknown"}`};
+      }
+    }
+
+    if (window.liff.isApiAvailable?.("sendMessages") === false) {
+      return {ok:false, reason:"SEND_MESSAGES_API_UNAVAILABLE"};
+    }
+    return {ok:true};
+  } catch (e) {
+    console.warn("chat_message.write permission check failed", e);
+    return {ok:false, reason:e?.code || e?.message || "PERMISSION_CHECK_FAILED"};
+  }
+}
+
 async function ensureOfficialAccountFriend(){
   if (!liffReady || !window.liff?.isLoggedIn?.()) return false;
   try {
@@ -307,6 +340,12 @@ async function sendMessage(){
     // 只有「從俐姐的家官方 LINE 聊天室的 Rich Menu 開啟」才有聊天室 context。
     // 這時 liff.sendMessages() 才能讓預約內容真的以客人的訊息送進官方帳號聊天室。
     if(canSendToCurrentChat()){
+      const permission = await ensureChatMessagePermission();
+      if (!permission.ok) {
+        const err = new Error(permission.reason);
+        err.code = permission.reason;
+        throw err;
+      }
       await window.liff.sendMessages([{type:"text",text:msg}]);
       clearDraft();
       els.status.textContent="預約申請已送出 ✓ 官方 LINE 正在回覆確認資訊。";
@@ -320,8 +359,15 @@ async function sendMessage(){
     els.status.textContent="資料已保留。正在前往官方 LINE；請點圖文選單『立即預約』完成最後送出。";
     setTimeout(()=>{ window.location.href = lineConfig.officialLineUrl; }, 700);
   }catch(e){
-    console.warn("LINE send failed", e);
-    els.status.textContent="LINE 傳送未完成，預約資料已保留。請回官方 LINE 從圖文選單『立即預約』重新開啟。";
+    console.warn("LINE send failed", {code:e?.code, message:e?.message, context:lineContext});
+    const reason = String(e?.code || e?.message || "");
+    if (reason.includes("CHAT_MESSAGE_PERMISSION") || reason.includes("403") || reason.includes("required permissions")) {
+      els.status.textContent="LINE 尚未授權『傳送訊息』權限。請在 LINE MINI App 的權限畫面允許傳送訊息後，再按一次送出。";
+    } else if (reason.includes("NO_CHAT_CONTEXT")) {
+      els.status.textContent="目前不是從官方 LINE 聊天室開啟。請回俐姐的家官方 LINE，從圖文選單『立即預約』重新開啟。";
+    } else {
+      els.status.textContent=`LINE 傳送未完成（${reason || "未知原因"}）。預約資料已保留，請從官方 LINE 圖文選單重新開啟後再送出。`;
+    }
     saveDraft();
   } finally {
     setTimeout(refreshForm,2200);
