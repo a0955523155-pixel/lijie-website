@@ -1,3 +1,0 @@
-User-agent: *
-Allow: /
-Sitemap: https://www.5-1bbs.com/sitemap.xml
