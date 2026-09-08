@@ -14,7 +14,7 @@ const els = {
 };
 
 const today = new Date(); today.setHours(0,0,0,0);
-const params = new URLSearchParams(location.search);
+let params = null;
 let cursor = new Date(today.getFullYear(), today.getMonth(), 1);
 let startDate = null, endDate = null, monthStates = new Map(), liffReady = false, inLine = false, lineContext = null;
 const DRAFT_KEY = "lijie-line-booking-draft-v1";
@@ -51,7 +51,7 @@ async function initLiff(){
   if (!window.liff) { els.mode.textContent = "一般瀏覽器預約模式"; return; }
   if (!hasLiffId()) { els.mode.textContent = "LINE 頁面已完成・等待填入 LIFF ID"; return; }
   try {
-    await window.liff.init({ liffId: lineConfig.liffId, withLoginOnExternalBrowser: true });
+    await window.liff.init({ liffId: lineConfig.liffId });
     liffReady = true;
     inLine = !!window.liff.isInClient?.();
 
@@ -76,7 +76,7 @@ async function initLiff(){
   } catch (e) {
     const code = e?.code || e?.message || "UNKNOWN";
     console.error("LIFF_INIT_ERROR", {code, message:e?.message, stack:e?.stack, liffId:lineConfig.liffId, href:location.href});
-    els.mode.textContent = `LINE 初始化失敗：${code}`;
+    els.mode.textContent = `LINE 初始化失敗：${code}。若仍為 Developing，請確認目前手機 LINE 帳號已被加入本 MINI App 的 Admin／Tester，且該 Business ID 已連結同一個 LINE 帳號。`;
   }
 }
 
@@ -431,21 +431,27 @@ els.send.addEventListener("pointerup", triggerSend);
 els.send.addEventListener("click", triggerSend);
 els.send.addEventListener("touchend", triggerSend, {passive:false});
 
-const presetStart = params.get("start");
-const presetEnd = params.get("end");
-if (presetStart && /^\d{4}-\d{2}-\d{2}$/.test(presetStart)) {
-  const d = parseKey(presetStart);
-  if (d >= today) {
-    startDate = d; cursor = new Date(d.getFullYear(), d.getMonth(), 1);
+function applyPresetDates(){
+  params = new URLSearchParams(location.search);
+  const presetStart = params.get("start");
+  const presetEnd = params.get("end");
+  if (presetStart && /^\d{4}-\d{2}-\d{2}$/.test(presetStart)) {
+    const d = parseKey(presetStart);
+    if (d >= today) {
+      startDate = d; cursor = new Date(d.getFullYear(), d.getMonth(), 1);
+    }
   }
-}
-if (presetEnd && /^\d{4}-\d{2}-\d{2}$/.test(presetEnd)) {
-  const d = parseKey(presetEnd);
-  if (startDate && d > startDate) endDate = d;
+  if (presetEnd && /^\d{4}-\d{2}-\d{2}$/.test(presetEnd)) {
+    const d = parseKey(presetEnd);
+    if (startDate && d > startDate) endDate = d;
+  }
 }
 
 const restoredDraft = loadDraft();
-renderStayRules(); await initLiff(); await render(); updateSelection(); updateSendMode();
+renderStayRules();
+await initLiff(); // 先讓 LINE 完成 primary/secondary redirect 與 liff.state 還原
+applyPresetDates(); // 再讀 query，避免在 init 前碰觸 LIFF redirect 資訊
+await render(); updateSelection(); updateSendMode();
 if (restoredDraft && canSendToCurrentChat() && startDate && endDate && els.name.value.trim()) {
   els.status.textContent = "已自動恢復剛才在官網填好的預約資料。確認無誤後，按下『LINE 傳送預約申請』即可送進官方聊天室。";
 }
