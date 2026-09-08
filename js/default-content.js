@@ -20,7 +20,7 @@ export const DEFAULT_CONTENT = {
   },
   contact: {
     phone: "0800-666-738",
-    lineUrl: "https://line.me/R/ti/p/@287ppyfa",
+    lineUrl: "https://line.me/R/ti/p/%40287ppyfa",
     mapUrl: "https://www.google.com/maps?q=21.945560514053177,120.73903972238396"
   },
   facilities: [
