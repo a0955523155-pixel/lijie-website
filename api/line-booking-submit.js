@@ -128,10 +128,20 @@ export default async function handler(req,res){
     const booking=normalizeBooking(body.booking);
     const id=bookingId();
     console.log("booking-secure-submit",{userId:String(session.uid).slice(0,8)+"…",checkIn:booking.checkIn,checkOut:booking.checkOut,people:booking.people});
-    await push(session.uid,messages(booking),token);
-    const notifyTo=process.env.LINE_BOOKING_NOTIFY_TO;
-    if(notifyTo&&notifyTo!==session.uid){
-      try{await push(notifyTo,[ownerFlex(booking,session.uid,id)],token);}catch(e){console.warn("owner notify failed",e);}
+    const notifyTo=String(process.env.LINE_BOOKING_NOTIFY_TO||"").trim();
+    const customerMessages=messages(booking);
+    // 管理者本人測試預約時，管理帳號與客戶 userId 可能是同一個。
+    // 舊版會因 notifyTo === session.uid 而跳過管理卡，造成看不到「確認／取消」按鈕。
+    if(notifyTo && notifyTo===session.uid){
+      await push(session.uid,[...customerMessages,ownerFlex(booking,session.uid,id)],token);
+      console.log("booking-owner-self-test",{bookingId:id});
+    }else{
+      await push(session.uid,customerMessages,token);
+      if(notifyTo){
+        try{await push(notifyTo,[ownerFlex(booking,session.uid,id)],token);}catch(e){console.warn("owner notify failed",e);}
+      }else{
+        console.warn("LINE_BOOKING_NOTIFY_TO not configured; owner card skipped");
+      }
     }
     console.log("booking-secure-push-success",{checkIn:booking.checkIn,checkOut:booking.checkOut});
     return res.status(200).json({ok:true,bookingId:id});

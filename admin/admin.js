@@ -618,6 +618,44 @@ async function saveBookingDates(event) {
   } catch (error) { message("#bookingMessage",error.message || "日期儲存失敗。","error"); }
 }
 
+async function cancelSelectedBooking() {
+  const key = adminSelectedDate || $("#bookingStart").value;
+  if (!key) return message("#bookingMessage", "請先在左側日曆點選一個已預約日期。", "error");
+  message("#bookingMessage", "正在讀取預約資料…");
+  try {
+    const daySnap = await getDoc(doc(db, "availability", key));
+    if (!daySnap.exists() || daySnap.data()?.status !== "booked") {
+      return message("#bookingMessage", "這一天目前不是已預約狀態。", "error");
+    }
+    const bookingId = daySnap.data()?.bookingId || "";
+    if (!bookingId) {
+      if (!confirm(`確定要將 ${key} 恢復為可詢問嗎？這筆日期沒有綁定預約編號。`)) return;
+      await deleteDoc(doc(db, "availability", key));
+      await renderAdminCalendar();
+      return message("#bookingMessage", `${key} 已恢復可詢問。`, "success");
+    }
+    const bookingRef = doc(db, "bookings", bookingId);
+    const bookingSnap = await getDoc(bookingRef);
+    const booking = bookingSnap.exists() ? bookingSnap.data() : {};
+    const label = booking?.guestName ? `（${booking.guestName}）` : "";
+    if (!confirm(`確定取消這筆預約${label}？\n系統會一次釋出所有綁定日期。`)) return;
+    const q = query(collection(db, "availability"), where("bookingId", "==", bookingId));
+    const days = await getDocs(q);
+    const batch = writeBatch(db);
+    days.forEach((snap) => batch.delete(snap.ref));
+    if (bookingSnap.exists()) {
+      batch.set(bookingRef, { status:"cancelled", cancelledAt:serverTimestamp(), updatedAt:serverTimestamp() }, { merge:true });
+    }
+    await batch.commit();
+    adminSelectedDate = key;
+    await renderAdminCalendar();
+    message("#bookingMessage", `預約已取消，${days.size} 天已恢復可詢問。`, "success");
+  } catch (error) {
+    console.error("cancel booking failed", error);
+    message("#bookingMessage", error?.message || "取消預約失敗。", "error");
+  }
+}
+
 function bindEvents() {
   $("#loginForm").addEventListener("submit", async (event) => {
     event.preventDefault();
