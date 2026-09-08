@@ -294,9 +294,13 @@ async function sendMessage(){
   els.status.textContent="正在把預約申請送回官方 LINE…";
   try {
     saveDraft();
-    await submitBookingToOfficialLine();
+    const result = await submitBookingToOfficialLine();
     clearDraft();
-    els.status.textContent="預約申請已送出 ✓ 請回官方 LINE 查看確認卡片。";
+    if(result?.warning === "CUSTOMER_LINE_PUSH_FAILED"){
+      els.status.textContent="預約已送達俐姐管理端 ✓ 管理者確認／取消按鈕已送出；目前客戶 LINE 身分無法由 Messaging API 直接回覆，請檢查 LINE Login 與 Messaging API 是否位於同一個 Provider。";
+    }else{
+      els.status.textContent="預約申請已送出 ✓ 請回官方 LINE 查看確認卡片。";
+    }
     els.send.textContent="已送出預約申請";
     els.send.disabled=true;
     setTimeout(openOfficialLine, 1100);

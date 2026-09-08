@@ -130,21 +130,55 @@ export default async function handler(req,res){
     console.log("booking-secure-submit",{userId:String(session.uid).slice(0,8)+"…",checkIn:booking.checkIn,checkOut:booking.checkOut,people:booking.people});
     const notifyTo=String(process.env.LINE_BOOKING_NOTIFY_TO||"").trim();
     const customerMessages=messages(booking);
-    // 管理者本人測試預約時，管理帳號與客戶 userId 可能是同一個。
-    // 舊版會因 notifyTo === session.uid 而跳過管理卡，造成看不到「確認／取消」按鈕。
-    if(notifyTo && notifyTo===session.uid){
-      await push(session.uid,[...customerMessages,ownerFlex(booking,session.uid,id)],token);
-      console.log("booking-owner-self-test",{bookingId:id});
+    let customerDelivered=false;
+    let ownerDelivered=false;
+    let customerError="";
+    let ownerError="";
+
+    // 先確保管理者一定收到管理卡。就算 LINE Login 取得的 userId 與
+    // Messaging API 所屬 Provider 不一致，管理者仍可看到「確認／取消」按鈕。
+    if(notifyTo){
+      try{
+        if(notifyTo===session.uid){
+          await push(notifyTo,[...customerMessages,ownerFlex(booking,session.uid,id)],token);
+          customerDelivered=true;
+          ownerDelivered=true;
+          console.log("booking-owner-self-test",{bookingId:id});
+        }else{
+          await push(notifyTo,[ownerFlex(booking,session.uid,id)],token);
+          ownerDelivered=true;
+        }
+      }catch(e){
+        ownerError=String(e?.message||e);
+        console.warn("owner notify failed",e);
+      }
     }else{
-      await push(session.uid,customerMessages,token);
-      if(notifyTo){
-        try{await push(notifyTo,[ownerFlex(booking,session.uid,id)],token);}catch(e){console.warn("owner notify failed",e);}
-      }else{
-        console.warn("LINE_BOOKING_NOTIFY_TO not configured; owner card skipped");
+      console.warn("LINE_BOOKING_NOTIFY_TO not configured; owner card skipped");
+    }
+
+    if(!customerDelivered){
+      try{
+        await push(session.uid,customerMessages,token);
+        customerDelivered=true;
+      }catch(e){
+        customerError=String(e?.message||e);
+        console.warn("customer push failed",e);
       }
     }
-    console.log("booking-secure-push-success",{checkIn:booking.checkIn,checkOut:booking.checkOut});
-    return res.status(200).json({ok:true,bookingId:id});
+
+    console.log("booking-secure-delivery",{bookingId:id,customerDelivered,ownerDelivered,checkIn:booking.checkIn,checkOut:booking.checkOut});
+    // 預約資料已進後端且管理者收到時，不把整筆預約判定為失敗。
+    // 前端可以提示「已送達管理端，但客戶 LINE 身分需檢查」。
+    if(ownerDelivered || customerDelivered){
+      return res.status(200).json({
+        ok:true,bookingId:id,customerDelivered,ownerDelivered,
+        warning: customerDelivered ? null : "CUSTOMER_LINE_PUSH_FAILED",
+        diagnostic: customerDelivered ? null : "LINE Login userId 與目前 Messaging API 無法互相傳訊，請確認兩個 Channel 在同一個 Provider 且 Access Token 屬於俐姐的家官方帳號。"
+      });
+    }
+    const err=new Error(`LINE_DELIVERY_FAILED customer=${customerError} owner=${ownerError}`);
+    err.code="LINE_PUSH_FAILED";
+    throw err;
   }catch(e){
     console.error("booking secure submit error",e);
     const code=String(e?.message||"UNKNOWN_ERROR");
