@@ -31,23 +31,52 @@ const parseKey = (k) => { const [y,m,d]=k.split("-").map(Number); return new Dat
 const fmt = new Intl.DateTimeFormat("zh-TW", {month:"short", day:"numeric", weekday:"short"});
 const monthFmt = new Intl.DateTimeFormat("zh-TW", {year:"numeric", month:"long"});
 
+function lineDiag(){
+  let ctx = null;
+  try { ctx = window.liff?.getContext?.() || lineContext || null; } catch {}
+  const api = (()=>{ try { return window.liff?.isApiAvailable?.("sendMessages"); } catch { return null; } })();
+  return {
+    liffId: lineConfig.liffId,
+    ready: liffReady,
+    loggedIn: !!window.liff?.isLoggedIn?.(),
+    inClient: !!window.liff?.isInClient?.(),
+    contextType: ctx?.type || "none",
+    viewType: ctx?.viewType || "none",
+    sendMessagesAvailable: api,
+    href: location.href
+  };
+}
+
 async function initLiff(){
   if (!window.liff) { els.mode.textContent = "一般瀏覽器預約模式"; return; }
   if (!hasLiffId()) { els.mode.textContent = "LINE 頁面已完成・等待填入 LIFF ID"; return; }
   try {
-    await window.liff.init({ liffId: lineConfig.liffId });
-    if (!window.liff.isLoggedIn()) {
+    await window.liff.init({ liffId: lineConfig.liffId, withLoginOnExternalBrowser: true });
+    liffReady = true;
+    inLine = !!window.liff.isInClient?.();
+
+    if (!window.liff.isLoggedIn?.()) {
       els.mode.textContent = "正在連接 LINE…";
-      window.liff.login({ redirectUri: location.href });
+      if (!inLine) window.liff.login();
       return;
     }
-    liffReady = true;
-    inLine = window.liff.isInClient();
-    lineContext = window.liff.getContext?.() || null;
-    const chatReady = canSendToCurrentChat();
-    els.mode.textContent = chatReady ? "已從官方 LINE 聊天室開啟・可直接送出" : (inLine ? "LINE MINI App 模式・請從官方 LINE 圖文選單完成送出" : "LINE 預約頁面");
+
+    try { lineContext = window.liff.getContext?.() || null; }
+    catch (ctxErr) { console.warn("LIFF getContext failed", ctxErr); lineContext = null; }
+
+    const d = lineDiag();
+    console.info("LIFF_DIAGNOSTIC", d);
+    if (canSendToCurrentChat()) {
+      els.mode.textContent = `LINE 聊天室已連線・${d.contextType}・可直接送出`;
+    } else if (inLine) {
+      els.mode.textContent = `LINE MINI App 已開啟・context=${d.contextType}・sendMessages=${String(d.sendMessagesAvailable)}`;
+    } else {
+      els.mode.textContent = "LINE 預約頁面（外部瀏覽器）";
+    }
   } catch (e) {
-    console.warn("LIFF init failed", e); els.mode.textContent = "LINE 連線暫時不可用・仍可複製內容詢問";
+    const code = e?.code || e?.message || "UNKNOWN";
+    console.error("LIFF_INIT_ERROR", {code, message:e?.message, stack:e?.stack, liffId:lineConfig.liffId, href:location.href});
+    els.mode.textContent = `LINE 初始化失敗：${code}`;
   }
 }
 
@@ -334,7 +363,22 @@ async function sendMessage(){
         err.code = permission.reason;
         throw err;
       }
-      await window.liff.sendMessages([{type:"text",text:msg}]);
+      const d = lineDiag();
+      console.info("LIFF_SEND_ATTEMPT", {...d, messageLength: msg.length});
+      try {
+        await window.liff.sendMessages([{ type: "text", text: msg }]);
+      } catch (sendErr) {
+        console.error("LIFF_SEND_ERROR", {
+          code: sendErr?.code,
+          message: sendErr?.message,
+          stack: sendErr?.stack,
+          diagnostic: d,
+          messageLength: msg.length
+        });
+        // 將診斷資料掛到錯誤，畫面直接顯示真正的聊天室 context / API 狀態。
+        sendErr.lineDiagnostic = d;
+        throw sendErr;
+      }
       clearDraft();
       els.status.textContent="預約申請已送出 ✓ 官方 LINE 正在回覆確認資訊。";
       setTimeout(()=>{try{window.liff.closeWindow()}catch{}},900);
@@ -352,7 +396,8 @@ async function sendMessage(){
     if (reason.includes("403") || reason.includes("required permissions") || reason.includes("PERMISSION")) {
       els.status.textContent="LINE 尚未授權『傳送訊息』權限。請確認 Developing 的 Scopes 已勾選 chat_message.write，重新開啟 MINI App 後允許授權，再按一次送出。";
     } else if (reason.includes("INVALID_ARGUMENT")) {
-      els.status.textContent="LINE 回傳 INVALID_ARGUMENT。V6.21 已移除會造成此錯誤的權限預查；若仍出現，請確認 Rich Menu 使用 MINI App URL，且 Scopes 已勾選 chat_message.write。";
+      const d = e?.lineDiagnostic || lineDiag();
+      els.status.textContent=`LINE 回傳 INVALID_ARGUMENT｜context=${d.contextType}｜inClient=${d.inClient}｜sendMessages=${String(d.sendMessagesAvailable)}。此資訊也已寫入 Vercel Logs（LIFF_SEND_ERROR），可直接定位原因。`;
     } else if (reason.includes("NO_CHAT_CONTEXT")) {
       els.status.textContent="目前不是從官方 LINE 聊天室開啟。請回俐姐的家官方 LINE，從圖文選單『立即預約』重新開啟。";
     } else {
