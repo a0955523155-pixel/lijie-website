@@ -47,14 +47,53 @@ function lineDiag(){
   };
 }
 
+async function postLiffDiagnostic(event, extra = {}) {
+  try {
+    const ctx = (()=>{ try { return window.liff?.getContext?.() || null; } catch { return null; } })();
+    const payload = {
+      event,
+      at: new Date().toISOString(),
+      liffId: lineConfig.liffId,
+      host: location.host,
+      pathname: location.pathname,
+      queryKeys: (()=>{ try { return [...new URL(location.href).searchParams.keys()].slice(0,20); } catch { return []; } })(),
+      inClient: !!window.liff?.isInClient?.(),
+      loggedIn: !!window.liff?.isLoggedIn?.(),
+      contextType: ctx?.type || null,
+      viewType: ctx?.viewType || null,
+      sendMessagesAvailable: (()=>{ try { return window.liff?.isApiAvailable?.("sendMessages"); } catch { return null; } })(),
+      sdkVersion: window.liff?.getVersion?.() || null,
+      lineVersion: window.liff?.getLineVersion?.() || null,
+      userAgent: navigator.userAgent,
+      ...extra
+    };
+    await fetch('/api/liff-diagnostic', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+      keepalive: true,
+      credentials: 'same-origin'
+    });
+  } catch {}
+}
+
 async function initLiff(){
-  // V6.26: LIFF 初始化由 HTML bootstrap 先執行，並將錯誤主動 POST 到 /api/liff-diagnostic。
-  // 這裡只等待 bootstrap 結果，避免 primary redirect 期間被其他 module 延遲或干擾。
-  const boot = window.__LIFF_BOOTSTRAP__;
-  if (!window.liff) { els.mode.textContent = "一般瀏覽器預約模式"; return; }
+  // V6.27: HTML bootstrap 若因 LINE WebView 快取未載入，主模組會自行 fallback init，
+  // 並直接 POST 診斷到 Vercel，不再出現「BOOTSTRAP_MISSING 但其實沒送出診斷」。
+  let boot = window.__LIFF_BOOTSTRAP__;
+  if (!window.liff) {
+    await postLiffDiagnostic('LIFF_SDK_MISSING', {stage:'module-precheck'});
+    els.mode.textContent = "LINE SDK 尚未載入，請關閉後從圖文選單重新開啟";
+    return;
+  }
   if (!hasLiffId()) { els.mode.textContent = "LINE 頁面已完成・等待填入 LIFF ID"; return; }
   try {
-    if (!boot?.promise) throw Object.assign(new Error("LIFF_BOOTSTRAP_MISSING"), {code:"BOOTSTRAP_MISSING"});
+    if (!boot?.promise) {
+      await postLiffDiagnostic('LIFF_BOOTSTRAP_MISSING', {stage:'module-fallback-init-start'});
+      const fallbackPromise = window.liff.init({ liffId: lineConfig.liffId });
+      boot = window.__LIFF_BOOTSTRAP__ = { promise: fallbackPromise, diag: {event:'LIFF_BOOTSTRAP_FALLBACK'} };
+    }
     await boot.promise;
     liffReady = true;
     inLine = !!window.liff.isInClient?.();
@@ -89,7 +128,8 @@ async function initLiff(){
         message: e?.message || String(e)
       });
     } catch {}
-    els.mode.textContent = `LINE 初始化失敗：${code}。診斷已送到 Vercel：請搜尋 LIFF_BOOTSTRAP_ERROR 或 /api/liff-diagnostic。`;
+    await postLiffDiagnostic("LIFF_INIT_CATCH", {stage:"module-init-catch", code, message:e?.message || String(e)});
+    els.mode.textContent = `LINE 初始化失敗：${code}。診斷已送到 Vercel，請搜尋 /api/liff-diagnostic。`;
   }
 }
 

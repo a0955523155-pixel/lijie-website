@@ -68,7 +68,7 @@
 
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script>
-    // V6.26 — Bootstrap LIFF first, and POST sanitized diagnostics to Vercel.
+    // V6.27 — Bootstrap LIFF first, with module fallback and cache busting.
     // Important: diagnostics never include query values, tokens, ID tokens, cookies, or form data.
     (function () {
       const LIFF_ID = "2011502071-EM878xNE";
@@ -156,6 +156,6 @@
       window.__LIFF_BOOTSTRAP__ = { promise: promise, diag: diag };
     })();
   </script>
-  <script type="module" src="js/line-booking.js?v=626"></script>
+  <script type="module" src="js/line-booking.js?v=627"></script>
 </body>
 </html>
