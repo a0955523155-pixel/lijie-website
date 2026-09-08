@@ -17,6 +17,7 @@ const today = new Date(); today.setHours(0,0,0,0);
 const params = new URLSearchParams(location.search);
 let cursor = new Date(today.getFullYear(), today.getMonth(), 1);
 let startDate = null, endDate = null, monthStates = new Map(), liffReady = false, inLine = false, lineContext = null;
+const DRAFT_KEY = "lijie-line-booking-draft-v1";
 const stateCache = new Map();
 const loadedMonths = new Set();
 let db = null;
@@ -43,7 +44,8 @@ async function initLiff(){
     liffReady = true;
     inLine = window.liff.isInClient();
     lineContext = window.liff.getContext?.() || null;
-    els.mode.textContent = inLine ? "已在 LINE MINI App 內開啟" : "LINE 預約頁面";
+    const chatReady = canSendToCurrentChat();
+    els.mode.textContent = chatReady ? "已從官方 LINE 聊天室開啟・可直接送出" : (inLine ? "LINE MINI App 模式・請從官方 LINE 圖文選單完成送出" : "LINE 預約頁面");
   } catch (e) {
     console.warn("LIFF init failed", e); els.mode.textContent = "LINE 連線暫時不可用・仍可複製內容詢問";
   }
@@ -168,9 +170,68 @@ function buildMessage(){
   ].join("\n");
 }
 
+function saveDraft(){
+  try {
+    const draft = {
+      checkIn: startDate ? keyOf(startDate) : "",
+      checkOut: endDate ? keyOf(endDate) : "",
+      name: els.name.value.trim(),
+      phone: els.phone.value.trim(),
+      people: els.people.value.trim(),
+      purpose: els.purpose.value.trim(),
+      notes: els.notes.value.trim(),
+      savedAt: Date.now()
+    };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch (e) { console.warn("booking draft save failed", e); }
+}
+
+function loadDraft(){
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return false;
+    const draft = JSON.parse(raw);
+    if (!draft || !draft.savedAt || Date.now() - Number(draft.savedAt) > 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(DRAFT_KEY); return false;
+    }
+    if (!startDate && /^\d{4}-\d{2}-\d{2}$/.test(draft.checkIn || "")) startDate = parseKey(draft.checkIn);
+    if (!endDate && startDate && /^\d{4}-\d{2}-\d{2}$/.test(draft.checkOut || "")) {
+      const d = parseKey(draft.checkOut); if (d > startDate) endDate = d;
+    }
+    if (startDate) cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+    if (!els.name.value) els.name.value = draft.name || "";
+    if (!els.phone.value) els.phone.value = draft.phone || "";
+    if (!els.people.value) els.people.value = draft.people || "";
+    if (!els.purpose.value) els.purpose.value = draft.purpose || "";
+    if (!els.notes.value) els.notes.value = draft.notes || "";
+    return !!(startDate || draft.name || draft.phone);
+  } catch (e) { console.warn("booking draft load failed", e); return false; }
+}
+
+function clearDraft(){ try { localStorage.removeItem(DRAFT_KEY); } catch {} }
+
+function updateSendMode(){
+  const chatReady = canSendToCurrentChat();
+  const label = chatReady ? '<span>LINE</span> 傳送預約申請' : '<span>LINE</span> 前往官方 LINE 完成送出';
+  els.send.innerHTML = label;
+  if (chatReady) {
+    els.status.dataset.mode = "chat";
+  } else {
+    els.status.dataset.mode = "handoff";
+  }
+}
+
 function refreshForm(){
   const valid=!!(startDate&&endDate&&els.name.value.trim()); els.send.disabled=!valid;
-  els.status.textContent=valid?"資料已整理好，可傳送到官方 LINE。":"請先選擇完整日期並填寫姓名。";
+  updateSendMode();
+  if (valid) {
+    els.status.textContent = canSendToCurrentChat()
+      ? "資料已整理好，現在可直接傳送到『俐姐的家』官方 LINE。"
+      : "資料已保留。按下後會前往官方 LINE；請從圖文選單點『立即預約』，回到這裡即可真正送出。";
+    saveDraft();
+  } else {
+    els.status.textContent="請先選擇完整日期並填寫姓名。";
+  }
   const msg=buildMessage();
   if(msg){els.summary.innerHTML=`<div class="row"><span>入住</span><strong>${keyOf(startDate)}</strong></div><div class="row"><span>退房</span><strong>${keyOf(endDate)}</strong></div><div class="row"><span>住宿</span><strong>${nightsCount()} 晚</strong></div><div class="row"><span>姓名</span><strong>${escapeHtml(els.name.value.trim()||"—")}</strong></div>`;els.summary.classList.remove("hidden")}else els.summary.classList.add("hidden");
 }
@@ -239,41 +300,29 @@ async function submitViaOfficialAccount(){
 
 async function sendMessage(){
   const msg=buildMessage(); if(!msg)return;
-  els.send.disabled=true; els.status.textContent="正在送出預約申請…";
+  els.send.disabled=true; els.status.textContent="正在處理預約申請…";
   try{
-    // 從官方帳號聊天室的 Rich Menu 開啟時：由客人本人送出訊息，Webhook 立即自動回覆。
+    saveDraft();
+
+    // 只有「從俐姐的家官方 LINE 聊天室的 Rich Menu 開啟」才有聊天室 context。
+    // 這時 liff.sendMessages() 才能讓預約內容真的以客人的訊息送進官方帳號聊天室。
     if(canSendToCurrentChat()){
       await window.liff.sendMessages([{type:"text",text:msg}]);
-      els.status.textContent="已送出預約申請，官方 LINE 會立即回覆您。";
-      setTimeout(()=>{try{window.liff.closeWindow()}catch{}},1000);
+      clearDraft();
+      els.status.textContent="預約申請已送出 ✓ 官方 LINE 正在回覆確認資訊。";
+      setTimeout(()=>{try{window.liff.closeWindow()}catch{}},900);
       return;
     }
 
-    // 從官網直接導入 MINI App 時沒有聊天室 context。
-    // 先確認已加入俐姐的家官方帳號，必要時由 LINE 原生視窗要求加入/解除封鎖，
-    // 再由後端驗證 LINE ID Token，使用 Messaging API 將確認內容推送給本人。
-    const isFriend = await ensureOfficialAccountFriend();
-    if (!isFriend) {
-      const err = new Error("LINE_FRIEND_REQUIRED");
-      err.code = "LINE_FRIEND_REQUIRED";
-      throw err;
-    }
-    await submitViaOfficialAccount();
-    els.status.textContent="預約申請已送出，請回官方 LINE 查看確認訊息與入住須知。";
-    setTimeout(()=>{
-      try { window.location.href = lineConfig.officialLineUrl; } catch {}
-    }, 1200);
+    // 從官網/Safari 直接開 MINI App 時，LINE 不提供聊天室 context，不能冒充客人自動發訊息。
+    // 將資料留在 MINI App 本機草稿，先進官方 LINE；客人從圖文選單再次開啟「立即預約」後，
+    // 同一份資料會自動恢復，接著就能使用 liff.sendMessages() 真正送進聊天室。
+    els.status.textContent="資料已保留。正在前往官方 LINE；請點圖文選單『立即預約』完成最後送出。";
+    setTimeout(()=>{ window.location.href = lineConfig.officialLineUrl; }, 700);
   }catch(e){
-    console.warn(e);
-    if (e?.code === "LINE_FRIEND_REQUIRED" || e?.code === "LINE_PUSH_FAILED") {
-      els.status.textContent="需要先加入或解除封鎖『俐姐的家』官方 LINE，完成後回來再按一次送出。";
-      setTimeout(()=>{ window.location.href=lineConfig.officialLineUrl; },1200);
-    } else if (String(e?.message || "").includes("LINE_CHANNEL_ACCESS_TOKEN")) {
-      els.status.textContent="LINE 自動回覆尚未完成後端設定，請管理員檢查 Vercel 的 Messaging API 環境變數。";
-    } else {
-      await navigator.clipboard.writeText(msg).catch(()=>{});
-      els.status.textContent="自動送出未完成，已保留預約內容；請稍後重試。";
-    }
+    console.warn("LINE send failed", e);
+    els.status.textContent="LINE 傳送未完成，預約資料已保留。請回官方 LINE 從圖文選單『立即預約』重新開啟。";
+    saveDraft();
   } finally {
     setTimeout(refreshForm,2200);
   }
@@ -281,7 +330,7 @@ async function sendMessage(){
 
 els.prev.addEventListener("click",()=>{cursor=new Date(cursor.getFullYear(),cursor.getMonth()-1,1);render()});
 els.next.addEventListener("click",()=>{cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,1);render()});
-[els.name,els.phone,els.people,els.purpose,els.notes].forEach(e=>e.addEventListener("input",refreshForm));
+[els.name,els.phone,els.people,els.purpose,els.notes].forEach(e=>e.addEventListener("input",()=>{refreshForm();saveDraft();}));
 els.copy.addEventListener("click", copyMessage);
 let submitInFlight = false;
 async function triggerSend(e){
@@ -314,4 +363,8 @@ if (presetEnd && /^\d{4}-\d{2}-\d{2}$/.test(presetEnd)) {
   if (startDate && d > startDate) endDate = d;
 }
 
-renderStayRules(); await initLiff(); await render(); updateSelection();
+const restoredDraft = loadDraft();
+renderStayRules(); await initLiff(); await render(); updateSelection(); updateSendMode();
+if (restoredDraft && canSendToCurrentChat() && startDate && endDate && els.name.value.trim()) {
+  els.status.textContent = "已自動恢復剛才在官網填好的預約資料。確認無誤後，按下『LINE 傳送預約申請』即可送進官方聊天室。";
+}

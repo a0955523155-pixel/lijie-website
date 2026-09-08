@@ -15,8 +15,8 @@
   <main class="app">
     <header class="hero">
       <div class="brand"><img src="images/lijie-home-mark.svg" alt=""><b>俐姐的家</b><span>LIJIE'S HOME</span></div>
-      <h1>在官方 LINE 裡，<br>直接選入住日期。</h1>
-      <p>這個日曆與官網後台同步。先選入住日與退房日，再填寫人數與聯絡資料；送出後會把完整內容傳回官方 LINE，由俐姐協助確認。</p>
+      <h1>在官方 LINE 裡，<br>完成住宿預約。</h1>
+      <p>這個日曆與官網後台同步。從官方 LINE 圖文選單「立即預約」開啟時，可將完整預約資料直接送進聊天室，再由系統回覆確認卡片。</p>
       <div class="line-badge"><i class="dot"></i><span id="lineModeText">LINE 預約模式準備中</span></div>
     </header>
 
@@ -55,7 +55,7 @@
           <div class="field"><label for="purpose">住宿需求</label><input id="purpose" maxlength="40" placeholder="家庭旅遊／朋友包棟"></div>
           <div class="field full"><label for="notes">備註</label><textarea id="notes" maxlength="300" placeholder="可以告訴我們預計抵達時間、孩童人數、是否有特殊需求，或其他想先詢問的事項。"></textarea></div>
         </div>
-        <p class="privacy">送出後會將以上內容整理成一則 LINE 訊息傳回官方帳號。若已啟用 Messaging API Webhook，官方 LINE 會立即自動回覆您所選的入住／退房日期與入住須知；實際是否成立仍以俐姐後續確認為準。</p>
+        <p class="privacy">若從官方 LINE 圖文選單「立即預約」開啟此頁，按下送出後，預約內容會以您的 LINE 訊息直接傳進官方聊天室，接著由 Messaging API 回覆預約確認卡片。若從官網直接進入，系統會先保留資料並帶您前往官方 LINE，再從圖文選單開啟即可完成送出。</p>
         <div id="summary" class="summary hidden"></div>
         <button id="sendBtn" class="primary" type="button" disabled><span>LINE</span> 傳送預約申請</button>
         <button id="copyBtn" class="secondary" type="button">複製預約內容</button>

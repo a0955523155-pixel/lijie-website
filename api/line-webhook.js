@@ -107,6 +107,68 @@ function buildBookingReply(b) {
   ].filter(Boolean).join("\n");
 }
 
+
+function bookingFlexReply(b) {
+  const infoRows = [
+    ["姓名", b.name], ["電話", b.phone || "未填"], ["人數", b.people || "未填"],
+    ["需求", b.purpose || "未填"], ["備註", b.notes || "沒有"]
+  ];
+  const row = ([label, value]) => ({
+    type: "box", layout: "baseline", spacing: "sm",
+    contents: [
+      { type: "text", text: label, size: "sm", color: "#7A8581", flex: 2 },
+      { type: "text", text: String(value), size: "sm", color: "#1F2E2B", weight: "bold", flex: 5, wrap: true }
+    ]
+  });
+  return {
+    type: "flex",
+    altText: `俐姐的家｜預約申請已收到 ${b.checkIn} → ${b.checkOut}`,
+    contents: {
+      type: "bubble",
+      size: "mega",
+      header: {
+        type: "box", layout: "vertical", paddingAll: "20px", spacing: "xs", backgroundColor: "#173A35",
+        contents: [
+          { type: "text", text: "俐姐的家", color: "#FFFFFF", weight: "bold", size: "xl" },
+          { type: "text", text: "預約申請已收到", color: "#D7E4DF", size: "sm" }
+        ]
+      },
+      body: {
+        type: "box", layout: "vertical", paddingAll: "20px", spacing: "md",
+        contents: [
+          { type: "text", text: `${b.checkIn}  →  ${b.checkOut}`, weight: "bold", size: "xl", color: "#173A35", wrap: true },
+          { type: "text", text: `${b.nights} 晚｜${b.people || "人數未填"}`, size: "sm", color: "#6C7773" },
+          { type: "separator", margin: "md" },
+          { type: "box", layout: "vertical", spacing: "sm", margin: "md", contents: infoRows.map(row) },
+          { type: "separator", margin: "md" },
+          { type: "text", text: "入住須知", weight: "bold", size: "md", color: "#173A35", margin: "md" },
+          { type: "box", layout: "horizontal", spacing: "sm", contents: [
+            { type: "box", layout: "vertical", paddingAll: "12px", backgroundColor: "#F3F6F4", flex: 1, contents: [
+              { type: "text", text: "最早入住", size: "xs", color: "#7A8581" },
+              { type: "text", text: BOOKING_RULES.checkInFrom, size: "lg", weight: "bold", color: "#173A35" }
+            ]},
+            { type: "box", layout: "vertical", paddingAll: "12px", backgroundColor: "#F3F6F4", flex: 1, contents: [
+              { type: "text", text: "最晚退房", size: "xs", color: "#7A8581" },
+              { type: "text", text: BOOKING_RULES.checkOutBy, size: "lg", weight: "bold", color: "#173A35" }
+            ]}
+          ]},
+          { type: "text", text: `• ${BOOKING_RULES.payment.depositMethod}\n• ${BOOKING_RULES.payment.balanceMethods}\n• ${BOOKING_RULES.payment.accountStatus}`, size: "xs", color: "#4F5D59", wrap: true, margin: "md" },
+          { type: "text", text: "目前為預約申請，實際成立仍以俐姐於官方 LINE 確認為準。", size: "xs", color: "#7A8581", wrap: true }
+        ]
+      },
+      footer: {
+        type: "box", layout: "vertical", paddingAll: "16px", spacing: "sm",
+        contents: [
+          { type: "box", layout: "vertical", paddingAll: "12px", backgroundColor: "#FFF7DF", cornerRadius: "8px", contents: [
+            { type: "text", text: "🟡 等待俐姐確認", align: "center", weight: "bold", size: "sm", color: "#8A6400" }
+          ]},
+          { type: "button", style: "secondary", height: "sm", action: { type: "uri", label: "再次查看預約日曆", uri: lineConfig.miniAppUrl } }
+        ]
+      }
+    }
+  };
+}
+
 function keywordReply(text = "") {
   const t = text.replace(/\s+/g, "").toLowerCase();
   if (!t) return null;
@@ -201,7 +263,7 @@ export default async function handler(req, res) {
 
       const booking = parseBooking(event.message.text);
       if (booking) {
-        await replyLine(event.replyToken, buildBookingReply(booking), token);
+        await replyLine(event.replyToken, bookingFlexReply(booking), token);
         continue;
       }
 
