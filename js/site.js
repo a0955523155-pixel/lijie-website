@@ -43,9 +43,15 @@ function applyContent(content) {
   document.querySelectorAll(".facts .fact strong").forEach((node, index) => {
     if (factValues[index]) node.textContent = factValues[index];
   });
-  const detailValues = [content.details?.capacity, content.details?.schedule, content.details?.hours, content.details?.price, content.details?.deposit, content.details?.payment, content.details?.parking];
-  document.querySelectorAll("#details .nearby-card small").forEach((node, index) => {
-    if (detailValues[index] && index !== 7) node.textContent = detailValues[index];
+  const publicDetails = {
+    capacity: content.details?.capacity,
+    schedule: content.details?.schedule,
+    hours: content.details?.hours,
+    parking: content.details?.parking
+  };
+  Object.entries(publicDetails).forEach(([key, value]) => {
+    const node = document.querySelector(`#details [data-detail="${key}"]`);
+    if (node && value) node.textContent = value;
   });
 
   document.querySelectorAll(".facility img").forEach((node, index) => {

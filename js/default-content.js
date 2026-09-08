@@ -16,9 +16,6 @@ export const DEFAULT_CONTENT = {
     capacity: "最多 12 人",
     schedule: "全天安排",
     hours: "08:30–17:30",
-    price: "NT$10,000",
-    deposit: "NT$3,000",
-    payment: "匯款",
     parking: "最多 5 輛"
   },
   contact: {
