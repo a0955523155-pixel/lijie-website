@@ -55,7 +55,7 @@
           <div class="field"><label for="purpose">住宿需求</label><input id="purpose" maxlength="40" placeholder="家庭旅遊／朋友包棟"></div>
           <div class="field full"><label for="notes">備註</label><textarea id="notes" maxlength="300" placeholder="可以告訴我們預計抵達時間、孩童人數、是否有特殊需求，或其他想先詢問的事項。"></textarea></div>
         </div>
-        <p class="privacy">若從官方 LINE 圖文選單「立即預約」開啟此頁，按下送出後，預約內容會以您的 LINE 訊息直接傳進官方聊天室，接著由 Messaging API 回覆預約確認卡片。若從官網直接進入，系統會先保留資料並帶您前往官方 LINE，再從圖文選單開啟即可完成送出。</p>
+        <p class="privacy">若從官方 LINE 圖文選單「立即預約」開啟此頁，按下送出後，預約內容會以您的 LINE 訊息直接傳進官方聊天室，接著由 Messaging API 回覆預約確認卡片。若 LINE 無法直接代您送出，系統會改為開啟俐姐的家官方 LINE，並自動把完整預約內容帶入輸入框；您只要再按一次送出即可。</p>
         <div id="summary" class="summary hidden"></div>
         <button id="sendBtn" class="primary" type="button" disabled><span>LINE</span> 傳送預約申請</button>
         <button id="copyBtn" class="secondary" type="button">複製預約內容</button>
@@ -68,7 +68,7 @@
 
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script>
-    // V6.27 — Bootstrap LIFF first, with module fallback and cache busting.
+    // V6.28 — LIFF direct send with reliable Official Account prefilled-message fallback.
     // Important: diagnostics never include query values, tokens, ID tokens, cookies, or form data.
     (function () {
       const LIFF_ID = "2011502071-EM878xNE";
@@ -156,6 +156,6 @@
       window.__LIFF_BOOTSTRAP__ = { promise: promise, diag: diag };
     })();
   </script>
-  <script type="module" src="js/line-booking.js?v=627"></script>
+  <script type="module" src="js/line-booking.js?v=628"></script>
 </body>
 </html>

@@ -78,8 +78,22 @@ async function postLiffDiagnostic(event, extra = {}) {
   } catch {}
 }
 
+
+function buildOfficialLinePrefillUrl(message){
+  // LINE 官方 URL scheme：開啟指定官方帳號聊天室，並把文字預先放入輸入框。
+  // 使用者仍需按一次「送出」；送出後 Webhook 會收到訊息並回 Flex 卡片。
+  const officialId = '@287ppyfa';
+  return `https://line.me/R/oaMessage/${encodeURIComponent(officialId)}/?${encodeURIComponent(message)}`;
+}
+
+function openOfficialLineWithPrefill(message){
+  const url = buildOfficialLinePrefillUrl(message);
+  try { sessionStorage.setItem('lijie_last_prefill_url', url); } catch {}
+  window.location.href = url;
+}
+
 async function initLiff(){
-  // V6.27: HTML bootstrap 若因 LINE WebView 快取未載入，主模組會自行 fallback init，
+  // V6.28: HTML bootstrap 若因 LINE WebView 快取未載入，主模組會自行 fallback init，
   // 並直接 POST 診斷到 Vercel，不再出現「BOOTSTRAP_MISSING 但其實沒送出診斷」。
   let boot = window.__LIFF_BOOTSTRAP__;
   if (!window.liff) {
@@ -440,11 +454,12 @@ async function sendMessage(){
       return;
     }
 
-    // 從官網/Safari 直接開 MINI App 時，LINE 不提供聊天室 context，不能冒充客人自動發訊息。
-    // 將資料留在 MINI App 本機草稿，先進官方 LINE；客人從圖文選單再次開啟「立即預約」後，
-    // 同一份資料會自動恢復，接著就能使用 liff.sendMessages() 真正送進聊天室。
-    els.status.textContent="資料已保留。正在前往官方 LINE；請點圖文選單『立即預約』完成最後送出。";
-    setTimeout(()=>{ window.location.href = lineConfig.officialLineUrl; }, 700);
+    // 若 LIFF 無法直接代表使用者送訊息，改用 LINE 官方支援的 oaMessage URL scheme。
+    // 它會直接開啟「俐姐的家」聊天室，並把完整預約內容預填在輸入框；使用者只需再按一次送出。
+    // 這比單純跳到官方帳號可靠，且訊息送出後 Webhook 一樣能自動回覆 Flex 卡片。
+    els.status.textContent="正在開啟俐姐的家 LINE，預約內容會自動帶入輸入框；請按一次『送出』完成申請。";
+    saveDraft();
+    setTimeout(()=>{ openOfficialLineWithPrefill(msg); }, 450);
   }catch(e){
     console.warn("LINE send failed", {code:e?.code, message:e?.message, context:lineContext});
     const reason = String(e?.code || e?.message || "");
@@ -456,7 +471,8 @@ async function sendMessage(){
     } else if (reason.includes("NO_CHAT_CONTEXT")) {
       els.status.textContent="目前不是從官方 LINE 聊天室開啟。請回俐姐的家官方 LINE，從圖文選單『立即預約』重新開啟。";
     } else {
-      els.status.textContent=`LINE 傳送未完成（${reason || "未知原因"}）。預約資料已保留，請從官方 LINE 圖文選單重新開啟後再送出。`;
+      els.status.textContent=`LINE 直接傳送未完成（${reason || "未知原因"}），已改用官方 LINE 預填訊息模式。請在聊天室按一次送出。`;
+      setTimeout(()=>{ openOfficialLineWithPrefill(msg); }, 650);
     }
     saveDraft();
   } finally {
