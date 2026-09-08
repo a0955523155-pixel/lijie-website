@@ -37,6 +37,17 @@ function setPath(target, path, value) {
 
 const getPath = (target, path) => path.split(".").reduce((value, part) => value?.[part], target) ?? "";
 
+function ensureDraftShape() {
+  draft.hero ??= clone(DEFAULT_CONTENT.hero);
+  draft.facilities ??= clone(DEFAULT_CONTENT.facilities);
+  draft.rooms ??= clone(DEFAULT_CONTENT.rooms);
+  if (!Array.isArray(draft.rooms) || draft.rooms.length < DEFAULT_CONTENT.rooms.length) {
+    const current = Array.isArray(draft.rooms) ? draft.rooms : [];
+    draft.rooms = DEFAULT_CONTENT.rooms.map((fallback, index) => ({ ...clone(fallback), ...(current[index] || {}), image: { ...clone(fallback.image), ...(current[index]?.image || {}) } }));
+  }
+  draft._mediaLibrary ??= [];
+}
+
 function validateHttps(value) {
   if (!value) return true;
   try { return new URL(value).protocol === "https:"; } catch { return false; }
