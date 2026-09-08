@@ -67,6 +67,44 @@
   </main>
 
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <script type="module" src="js/line-booking.js"></script>
+  <script>
+    // V6.25 — LIFF must initialize before loading app modules/Firebase.
+    // Do not read, rewrite, or normalize liff.* parameters before this Promise resolves.
+    (function () {
+      const LIFF_ID = "2011502071-EM878xNE";
+      const diag = {
+        startedAt: new Date().toISOString(),
+        liffId: LIFF_ID,
+        hrefBeforeInit: location.href,
+        origin: location.origin,
+        pathname: location.pathname,
+        searchBeforeInit: location.search,
+        inClientBeforeInit: !!window.liff?.isInClient?.(),
+        sdkVersion: window.liff?.getVersion?.() || null,
+        lineVersion: window.liff?.getLineVersion?.() || null
+      };
+      const promise = window.liff
+        ? window.liff.init({ liffId: LIFF_ID }).then(function () {
+            diag.resolvedAt = new Date().toISOString();
+            diag.hrefAfterInit = location.href;
+            diag.searchAfterInit = location.search;
+            diag.inClientAfterInit = !!window.liff.isInClient?.();
+            diag.loggedIn = !!window.liff.isLoggedIn?.();
+            try { diag.context = window.liff.getContext?.() || null; } catch (e) {}
+            try { diag.sendMessages = window.liff.isApiAvailable?.("sendMessages"); } catch (e) {}
+            console.info("LIFF_BOOTSTRAP_OK", diag);
+          }).catch(function (err) {
+            diag.failedAt = new Date().toISOString();
+            diag.errorCode = err && err.code || null;
+            diag.errorMessage = err && err.message || String(err);
+            diag.hrefOnError = location.href;
+            console.error("LIFF_BOOTSTRAP_ERROR", diag, err);
+            throw err;
+          })
+        : Promise.reject(Object.assign(new Error("LIFF_SDK_MISSING"), { code: "LIFF_SDK_MISSING" }));
+      window.__LIFF_BOOTSTRAP__ = { promise: promise, diag: diag };
+    })();
+  </script>
+  <script type="module" src="js/line-booking.js?v=625"></script>
 </body>
 </html>

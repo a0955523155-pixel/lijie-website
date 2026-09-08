@@ -48,10 +48,14 @@ function lineDiag(){
 }
 
 async function initLiff(){
+  // V6.25: LIFF 初始化由 HTML 的 bootstrap 在任何 module / Firebase 載入前執行。
+  // 這裡只等待 bootstrap 結果，避免 primary redirect 期間被其他 module 延遲或干擾。
+  const boot = window.__LIFF_BOOTSTRAP__;
   if (!window.liff) { els.mode.textContent = "一般瀏覽器預約模式"; return; }
   if (!hasLiffId()) { els.mode.textContent = "LINE 頁面已完成・等待填入 LIFF ID"; return; }
   try {
-    await window.liff.init({ liffId: lineConfig.liffId });
+    if (!boot?.promise) throw Object.assign(new Error("LIFF_BOOTSTRAP_MISSING"), {code:"BOOTSTRAP_MISSING"});
+    await boot.promise;
     liffReady = true;
     inLine = !!window.liff.isInClient?.();
 
@@ -65,6 +69,7 @@ async function initLiff(){
     catch (ctxErr) { console.warn("LIFF getContext failed", ctxErr); lineContext = null; }
 
     const d = lineDiag();
+    d.bootstrap = boot.diag || null;
     console.info("LIFF_DIAGNOSTIC", d);
     if (canSendToCurrentChat()) {
       els.mode.textContent = `LINE 聊天室已連線・${d.contextType}・可直接送出`;
@@ -75,8 +80,9 @@ async function initLiff(){
     }
   } catch (e) {
     const code = e?.code || e?.message || "UNKNOWN";
-    console.error("LIFF_INIT_ERROR", {code, message:e?.message, stack:e?.stack, liffId:lineConfig.liffId, href:location.href});
-    els.mode.textContent = `LINE 初始化失敗：${code}。若仍為 Developing，請確認目前手機 LINE 帳號已被加入本 MINI App 的 Admin／Tester，且該 Business ID 已連結同一個 LINE 帳號。`;
+    const diag = boot?.diag || {};
+    console.error("LIFF_INIT_ERROR", {code, message:e?.message, stack:e?.stack, liffId:lineConfig.liffId, href:location.href, bootstrap:diag});
+    els.mode.textContent = `LINE 初始化失敗：${code}｜host=${location.host}｜path=${location.pathname}。診斷資訊已保留。`;
   }
 }
 
