@@ -267,28 +267,16 @@ async function ensureChatMessagePermission(){
     if (!["utou","group","room"].includes(type)) {
       return {ok:false, reason:`NO_CHAT_CONTEXT:${type || "unknown"}`};
     }
-
-    // LINE MINI App 的 chat_message.write 不一定在首次開啟時就授權。
-    // 若狀態是 prompt，主動叫出 LINE 權限確認畫面。
-    if (window.liff.permission?.query) {
-      const status = await window.liff.permission.query("chat_message.write");
-      if (status?.state === "prompt" && window.liff.permission?.requestAll) {
-        els.status.textContent = "請允許 LINE『傳送訊息』權限，授權後會繼續送出預約。";
-        await window.liff.permission.requestAll();
-      }
-      const after = await window.liff.permission.query("chat_message.write");
-      if (after?.state !== "granted") {
-        return {ok:false, reason:`CHAT_MESSAGE_PERMISSION_${after?.state || "unknown"}`};
-      }
-    }
-
     if (window.liff.isApiAvailable?.("sendMessages") === false) {
       return {ok:false, reason:"SEND_MESSAGES_API_UNAVAILABLE"};
     }
+    // 不先呼叫 permission.query("chat_message.write")。
+    // LINE MINI App 在需要 chat_message.write 時，sendMessages() 會自行顯示驗證／授權畫面。
+    // 先 query 在部分 MINI App 環境會回 INVALID_ARGUMENT，反而阻斷真正送出。
     return {ok:true};
   } catch (e) {
-    console.warn("chat_message.write permission check failed", e);
-    return {ok:false, reason:e?.code || e?.message || "PERMISSION_CHECK_FAILED"};
+    console.warn("LINE chat preflight failed", e);
+    return {ok:false, reason:e?.code || e?.message || "CHAT_PREFLIGHT_FAILED"};
   }
 }
 
@@ -361,8 +349,10 @@ async function sendMessage(){
   }catch(e){
     console.warn("LINE send failed", {code:e?.code, message:e?.message, context:lineContext});
     const reason = String(e?.code || e?.message || "");
-    if (reason.includes("CHAT_MESSAGE_PERMISSION") || reason.includes("403") || reason.includes("required permissions")) {
-      els.status.textContent="LINE 尚未授權『傳送訊息』權限。請在 LINE MINI App 的權限畫面允許傳送訊息後，再按一次送出。";
+    if (reason.includes("403") || reason.includes("required permissions") || reason.includes("PERMISSION")) {
+      els.status.textContent="LINE 尚未授權『傳送訊息』權限。請確認 Developing 的 Scopes 已勾選 chat_message.write，重新開啟 MINI App 後允許授權，再按一次送出。";
+    } else if (reason.includes("INVALID_ARGUMENT")) {
+      els.status.textContent="LINE 回傳 INVALID_ARGUMENT。V6.21 已移除會造成此錯誤的權限預查；若仍出現，請確認 Rich Menu 使用 MINI App URL，且 Scopes 已勾選 chat_message.write。";
     } else if (reason.includes("NO_CHAT_CONTEXT")) {
       els.status.textContent="目前不是從官方 LINE 聊天室開啟。請回俐姐的家官方 LINE，從圖文選單『立即預約』重新開啟。";
     } else {
