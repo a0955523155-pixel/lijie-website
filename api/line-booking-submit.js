@@ -62,27 +62,56 @@ function ownerFlex(b, uid, id){
 }
 
 function messages(b){
+  const infoRow=(label,value)=>({
+    type:"box",layout:"baseline",spacing:"sm",contents:[
+      {type:"text",text:label,size:"xs",color:"#8B938F",flex:2},
+      {type:"text",text:String(value||"未填"),size:"sm",color:"#1E2D29",weight:"bold",flex:5,wrap:true}
+    ]
+  });
   const flex={
-    type:"flex",altText:`俐姐的家｜預約申請已收到 ${b.checkIn} → ${b.checkOut}`,
+    type:"flex",
+    altText:`俐姐的家｜預約申請已收到 ${b.checkIn} → ${b.checkOut}`,
     contents:{type:"bubble",size:"mega",
-      header:{type:"box",layout:"vertical",paddingAll:"20px",spacing:"xs",backgroundColor:"#173A35",contents:[
-        {type:"text",text:"俐姐的家",color:"#FFFFFF",weight:"bold",size:"xl"},
-        {type:"text",text:"預約申請已收到",color:"#D7E4DF",size:"sm"}]},
-      body:{type:"box",layout:"vertical",paddingAll:"20px",spacing:"md",contents:[
-        {type:"text",text:`${b.checkIn}  →  ${b.checkOut}`,weight:"bold",size:"xl",color:"#173A35",wrap:true},
-        {type:"text",text:`${b.nights} 晚｜${b.people?`${b.people} 人`:"人數未填"}`,size:"sm",color:"#6C7773"},
-        {type:"separator",margin:"md"},
-        {type:"text",text:`姓名｜${b.name}\n電話｜${b.phone||"未填"}\n需求｜${b.purpose||"未填"}\n備註｜${b.notes||"沒有"}`,size:"sm",color:"#1F2E2B",wrap:true,margin:"md"},
-        {type:"separator",margin:"md"},
-        {type:"text",text:"入住須知",weight:"bold",size:"md",color:"#173A35",margin:"md"},
-        {type:"text",text:`入住 ${BOOKING_RULES.checkInFrom} 起｜退房 ${BOOKING_RULES.checkOutBy} 前`,size:"sm",color:"#202725",wrap:true},
-        {type:"text",text:`${BOOKING_RULES.payment.depositMethod}；${BOOKING_RULES.payment.balanceMethods}。`,size:"sm",color:"#202725",wrap:true},
-        {type:"text",text:"整棟最多入住 12 人；目前為預約申請，實際成立以官方 LINE 最終確認為準。",size:"xs",color:"#6B7773",wrap:true}]},
-      footer:{type:"box",layout:"vertical",paddingAll:"16px",contents:[{type:"box",layout:"vertical",paddingAll:"12px",backgroundColor:"#FFF7DF",cornerRadius:"8px",contents:[{type:"text",text:"🟡 等待俐姐確認",align:"center",weight:"bold",size:"sm",color:"#8A6400"}]}]}}
+      header:{type:"box",layout:"vertical",paddingAll:"22px",spacing:"xs",backgroundColor:"#153C36",contents:[
+        {type:"text",text:"LIJIE'S HOME",color:"#CDBD92",size:"xs",weight:"bold",letterSpacing:"1px"},
+        {type:"text",text:"俐姐的家",color:"#FFFFFF",weight:"bold",size:"xxl"},
+        {type:"text",text:"預約申請已收到",color:"#D9E5E1",size:"sm"}
+      ]},
+      body:{type:"box",layout:"vertical",paddingAll:"22px",spacing:"md",contents:[
+        {type:"box",layout:"horizontal",spacing:"sm",contents:[
+          {type:"box",layout:"vertical",flex:1,paddingAll:"12px",backgroundColor:"#F7F3EA",cornerRadius:"10px",contents:[
+            {type:"text",text:"入住",size:"xs",color:"#8B7E61"},
+            {type:"text",text:b.checkIn,size:"lg",weight:"bold",color:"#153C36",margin:"xs"},
+            {type:"text",text:BOOKING_RULES.checkInFrom,size:"xs",color:"#6F7773",margin:"xs"}
+          ]},
+          {type:"box",layout:"vertical",flex:1,paddingAll:"12px",backgroundColor:"#F7F3EA",cornerRadius:"10px",contents:[
+            {type:"text",text:"退房",size:"xs",color:"#8B7E61"},
+            {type:"text",text:b.checkOut,size:"lg",weight:"bold",color:"#153C36",margin:"xs"},
+            {type:"text",text:BOOKING_RULES.checkOutBy,size:"xs",color:"#6F7773",margin:"xs"}
+          ]}
+        ]},
+        {type:"text",text:`${b.nights} 晚  ·  ${b.people?`${b.people} 人`:"人數未填"}`,size:"sm",weight:"bold",color:"#6B756F",align:"center"},
+        {type:"separator",margin:"md",color:"#E5E0D6"},
+        infoRow("姓名",b.name),
+        infoRow("電話",b.phone||"未填"),
+        infoRow("需求",b.purpose||"未填"),
+        infoRow("備註",b.notes||"沒有"),
+        {type:"separator",margin:"md",color:"#E5E0D6"},
+        {type:"text",text:"入住提醒",weight:"bold",size:"md",color:"#153C36",margin:"sm"},
+        {type:"text",text:`訂金需先轉帳；尾款可轉帳或現金。\n整棟最多入住 ${BOOKING_RULES.maxGuests} 人。`,size:"sm",color:"#48534F",wrap:true,lineSpacing:"4px"},
+        {type:"text",text:"此為預約申請，實際成立仍以俐姐於官方 LINE 最終確認為準。",size:"xs",color:"#8B938F",wrap:true}
+      ]},
+      footer:{type:"box",layout:"vertical",paddingAll:"16px",spacing:"sm",contents:[
+        {type:"box",layout:"vertical",paddingAll:"12px",backgroundColor:"#FFF3CC",cornerRadius:"10px",contents:[
+          {type:"text",text:"● 等待俐姐確認",align:"center",weight:"bold",size:"sm",color:"#8A6500"}
+        ]}
+      ]}
+    }
   };
   const text={type:"text",text:["【俐姐的家｜預約申請】",`入住：${b.checkIn}`,`退房：${b.checkOut}（${b.nights} 晚）`,`姓名：${b.name}`,`電話：${b.phone||"未填"}`,`人數：${b.people?`${b.people} 人`:"未填"}`,`需求：${b.purpose||"未填"}`,`備註：${b.notes||"沒有"}`,"","預約資料已送達，請等待俐姐確認日期與訂金安排。"].join("\n")};
   return [text,flex];
 }
+
 async function push(to,msgs,token){
   const r=await fetch("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify({to,messages:msgs})});
   if(!r.ok){ const t=await r.text(); const e=new Error(`LINE_PUSH_FAILED ${r.status} ${t}`); e.code="LINE_PUSH_FAILED"; throw e; }

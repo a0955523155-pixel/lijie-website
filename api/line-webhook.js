@@ -38,17 +38,29 @@ async function pushLine(to,messages,token){
   const r=await fetch("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify({to,messages:normalized.slice(0,5)})});
   if(!r.ok) throw new Error(`LINE push failed: ${r.status} ${await r.text()}`);
 }
-function customerStatusFlex(p,status){
+function customerStatusFlex(p,status,actionToken){
   const confirmed=status==="confirm";
-  return {type:"flex",altText:`俐姐的家｜${confirmed?"預約已確認":"預約已取消"}`,contents:{type:"bubble",
-    header:{type:"box",layout:"vertical",paddingAll:"18px",backgroundColor:confirmed?"#173A35":"#6B3C3C",contents:[
-      {type:"text",text:"俐姐的家",color:"#FFFFFF",weight:"bold",size:"xl"},
+  const calendarUrl=confirmed && actionToken
+    ? `https://www.5-1bbs.com/api/booking-calendar?token=${encodeURIComponent(actionToken)}`
+    : null;
+  return {type:"flex",altText:`俐姐的家｜${confirmed?"預約已確認":"預約已取消"}`,contents:{type:"bubble",size:"mega",
+    header:{type:"box",layout:"vertical",paddingAll:"22px",spacing:"xs",backgroundColor:confirmed?"#153C36":"#6A4141",contents:[
+      {type:"text",text:"LIJIE'S HOME",color:confirmed?"#CDBD92":"#E7CACA",size:"xs",weight:"bold"},
+      {type:"text",text:"俐姐的家",color:"#FFFFFF",weight:"bold",size:"xxl"},
       {type:"text",text:confirmed?"預約已確認":"預約已取消",color:"#FFFFFF",size:"sm"}]},
-    body:{type:"box",layout:"vertical",paddingAll:"18px",spacing:"sm",contents:[
-      {type:"text",text:`${p.ci} → ${p.co}`,weight:"bold",size:"lg",color:"#173A35",wrap:true},
-      {type:"text",text:`預約編號｜${p.id}\n姓名｜${p.n||"未填"}`,size:"sm",wrap:true,color:"#394743"},
-      {type:"separator",margin:"md"},
-      {type:"text",text:confirmed?"✅ 日期已由俐姐確認。接下來請依官方 LINE 提供的訂金方式完成轉帳，完成後再回傳末五碼。":"預約已取消，本次日期不再保留。如需重新預約，可再次開啟預約日曆。",size:"sm",wrap:true,color:"#394743",margin:"md"}]}}};
+    body:{type:"box",layout:"vertical",paddingAll:"22px",spacing:"md",contents:[
+      {type:"text",text:confirmed?"住宿日期已為您保留":"本次預約已取消",size:"sm",color:"#7C8682"},
+      {type:"text",text:`${p.ci}  →  ${p.co}`,weight:"bold",size:"xl",color:"#153C36",wrap:true},
+      {type:"separator",margin:"md",color:"#E5E0D6"},
+      {type:"text",text:`預約編號｜${p.id}\n姓名｜${p.n||"未填"}`,size:"sm",wrap:true,color:"#394743",lineSpacing:"4px"},
+      {type:"separator",margin:"md",color:"#E5E0D6"},
+      {type:"text",text:confirmed?"接下來請依官方 LINE 提供的訂金方式完成轉帳，完成後再回傳末五碼。":"本次日期已釋出；若想重新安排，歡迎再次開啟預約日曆。",size:"sm",wrap:true,color:"#394743"}]},
+    footer:{type:"box",layout:"vertical",paddingAll:"16px",spacing:"sm",contents:[
+      ...(confirmed&&calendarUrl?[{type:"button",style:"primary",color:"#153C36",height:"sm",action:{type:"uri",label:"加入行事曆",uri:calendarUrl}}]:[]),
+      {type:"box",layout:"vertical",paddingAll:"11px",backgroundColor:confirmed?"#EAF4F0":"#F6ECEC",cornerRadius:"10px",contents:[
+        {type:"text",text:confirmed?"● 已確認預約":"● 已取消預約",align:"center",weight:"bold",size:"sm",color:confirmed?"#1C6B59":"#8A4747"}
+      ]}
+    ]}}};
 }
 
 function readRawBody(req) {
@@ -319,7 +331,7 @@ export default async function handler(req, res) {
         if(action!=="confirm" && action!=="cancel") continue;
         try{
           const payload=verifyActionToken(q.get("token"));
-          await pushLine(payload.uid,customerStatusFlex(payload,action),token);
+          await pushLine(payload.uid,customerStatusFlex(payload,action,q.get("token")),token);
           const adminText=action==="confirm"
             ? `✅ 已確認預約 ${payload.id}\n${payload.ci} → ${payload.co}\n客人：${payload.n||"未填"}\n已通知客人。`
             : `❌ 已取消預約 ${payload.id}\n${payload.ci} → ${payload.co}\n客人：${payload.n||"未填"}\n已通知客人。`;
