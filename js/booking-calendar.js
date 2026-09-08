@@ -15,8 +15,7 @@ if (grid) {
   const dateSheetHint = document.querySelector("#dateSheetHint");
   const dateSheetLine = document.querySelector("#dateSheetLine");
   const dateSheetCopy = document.querySelector("#dateSheetCopy");
-  const officialLineUrl = "https://line.me/R/ti/p/%40287ppyfa";
-  const officialLineChatBase = "https://line.me/R/oaMessage/%40287ppyfa/?";
+  const officialLineUrl = "https://lin.ee/w28dW98A";
   const formatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long" });
   const fullFormatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
   const today = new Date(); today.setHours(0,0,0,0);
@@ -96,7 +95,7 @@ if (grid) {
     if (dateSheetTitle) dateSheetTitle.textContent = `${keyOf(startDate)} → ${keyOf(endDate)}`;
     if (dateSheetHint) dateSheetHint.textContent = `共 ${nights} 晚｜入住 15:00 起｜退房 12:00 前。可先複製預約內容，再前往官方 LINE。`;
     if (dateSheetLine) {
-      dateSheetLine.href = officialLineChatBase + encodeURIComponent(selectedMessage);
+      dateSheetLine.href = officialLineUrl;
       dateSheetLine.removeAttribute("target");
     }
     dateSheet?.classList.add("open");
@@ -113,7 +112,7 @@ if (grid) {
     selectedCard?.classList.remove("hidden");
     if (selectedText) selectedText.textContent = rangeLabel();
     if (selectedLine) {
-      selectedLine.href = endDate ? (officialLineChatBase + encodeURIComponent(buildMessage())) : "#";
+      selectedLine.href = endDate ? officialLineUrl : "#";
       selectedLine.textContent = endDate ? "前往官方 LINE 預約 →" : "再選擇退房日期";
       selectedLine.removeAttribute("target");
     }

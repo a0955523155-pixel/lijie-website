@@ -3,7 +3,7 @@
 // LIFF ID 不是 secret，可安全放在前端。
 export const lineConfig = {
   liffId: "2011502071-EM878xNE",
-  officialLineUrl: "https://line.me/R/ti/p/%40287ppyfa"
+  officialLineUrl: "https://lin.ee/w28dW98A"
 };
 
 export const hasLiffId = () => lineConfig.liffId && !lineConfig.liffId.startsWith("YOUR_");
