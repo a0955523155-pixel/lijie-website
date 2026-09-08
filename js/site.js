@@ -70,7 +70,13 @@ function applyContent(content) {
     const indexBadge = slide.querySelector(".room-index");
     if (kicker) kicker.textContent = room.kicker || `ROOM ${room.number || String(index + 1).padStart(2, "0")}`;
     if (title) title.textContent = room.alias || `${room.number || String(index + 1).padStart(2, "0")}號${room.name || "房間"}`;
-    if (description && room.description) description.textContent = room.description;
+    if (description && room.description) {
+      const publicDescription = room.description
+        .replace(/房間別名與介紹文字可由後台自行調整。?/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+      description.textContent = publicDescription;
+    }
     if (indexBadge) indexBadge.textContent = `${room.number || String(index + 1).padStart(2, "0")} / ${String(content.rooms.length).padStart(2, "0")}`;
   });
   document.dispatchEvent(new CustomEvent("lijie:rooms-updated"));
