@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { COOKIE_NAME, parseCookies, verifyPayload as verifyCookieSession } from "./line-auth-lib.js";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 
 function clean(value, max = 500) {
@@ -70,7 +71,9 @@ export default async function handler(req,res){
   if(!token||!secret) return res.status(500).json({ok:false,error:"LINE environment variables are not configured"});
   try{
     const body=typeof req.body==="string"?JSON.parse(req.body):(req.body||{});
-    const session=verifySession(clean(body.session,4000),secret);
+    const explicit = clean(body.session,4000);
+    const cookieSession = parseCookies(req)[COOKIE_NAME] || "";
+    const session = explicit ? verifySession(explicit, secret) : verifyCookieSession(cookieSession);
     const booking=normalizeBooking(body.booking);
     console.log("booking-secure-submit",{userId:String(session.uid).slice(0,8)+"…",checkIn:booking.checkIn,checkOut:booking.checkOut,people:booking.people});
     await push(session.uid,messages(booking),token);

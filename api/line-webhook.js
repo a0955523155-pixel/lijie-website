@@ -96,7 +96,7 @@ function welcomeButtonMessage() {
         {
           type: "uri",
           label: "立即預約",
-          uri: lineConfig.miniAppUrl
+          uri: "https://www.5-1bbs.com/line-booking.html"
         }
       ]
     }
@@ -181,7 +181,7 @@ function bookingFlexReply(b) {
           { type: "box", layout: "vertical", paddingAll: "12px", backgroundColor: "#FFF7DF", cornerRadius: "8px", contents: [
             { type: "text", text: "🟡 等待俐姐確認", align: "center", weight: "bold", size: "sm", color: "#8A6400" }
           ]},
-          { type: "button", style: "secondary", height: "sm", action: { type: "uri", label: "再次查看預約日曆", uri: lineConfig.miniAppUrl } }
+          { type: "button", style: "secondary", height: "sm", action: { type: "uri", label: "再次查看預約日曆", uri: "https://www.5-1bbs.com/line-booking.html" } }
         ]
       }
     }

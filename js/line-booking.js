@@ -17,6 +17,7 @@ let params = null;
 let cursor = new Date(today.getFullYear(), today.getMonth(), 1);
 let startDate = null, endDate = null, monthStates = new Map();
 let bookingSession = null;
+let lineIdentityReady = false;
 const DRAFT_KEY = "lijie-line-booking-draft-v1";
 const stateCache = new Map();
 const loadedMonths = new Set();
@@ -33,12 +34,34 @@ const monthFmt = new Intl.DateTimeFormat("zh-TW", {year:"numeric", month:"long"}
 
 function readBookingSession(){
   const p = new URLSearchParams(location.search);
-  bookingSession = p.get("session") || "";
+  bookingSession = p.get("session") || ""; // 保留 V6.29 安全連結相容性
   if (bookingSession) {
     els.mode.textContent = "官方 LINE 安全預約連線已建立";
     return true;
   }
-  els.mode.textContent = "請從官方 LINE 圖文選單『立即預約』開始";
+  return false;
+}
+
+async function ensureLineIdentity(){
+  if (bookingSession) return true;
+  try {
+    const r = await fetch("/api/line-session", {cache:"no-store", credentials:"same-origin"});
+    const data = await r.json().catch(()=>({}));
+    if (r.ok && data.authenticated) {
+      els.mode.textContent = "已連結您的 LINE 帳號";
+      return true;
+    }
+  } catch (e) { console.warn("LINE session check failed", e); }
+
+  const p = new URLSearchParams(location.search);
+  if (p.get("lineAuth") === "error") {
+    els.mode.textContent = "LINE 身分驗證失敗，請重新連結";
+    els.status.textContent = "需要先連結 LINE 身分，送出後才能把預約確認送回您的官方 LINE 聊天室。";
+    return false;
+  }
+  els.mode.textContent = "正在連結您的 LINE 帳號…";
+  const returnTo = location.pathname + (location.search && !location.search.includes("lineAuth=") ? location.search : "");
+  location.replace(`/api/line-auth-start?return=${encodeURIComponent(returnTo)}`);
   return false;
 }
 
@@ -206,7 +229,7 @@ function loadDraft(){
 function clearDraft(){ try { localStorage.removeItem(DRAFT_KEY); } catch {} }
 
 function updateSendMode(){
-  const chatReady = Boolean(bookingSession);
+  const chatReady = Boolean(bookingSession || lineIdentityReady);
   const label = chatReady ? '<span>LINE</span> 傳送預約申請' : '<span>LINE</span> 請先從官方 LINE 開始';
   els.send.innerHTML = label;
   if (chatReady) {
@@ -217,10 +240,10 @@ function updateSendMode(){
 }
 
 function refreshForm(){
-  const valid=!!(startDate&&endDate&&els.name.value.trim()); els.send.disabled=!valid || !bookingSession;
+  const valid=!!(startDate&&endDate&&els.name.value.trim()); els.send.disabled=!valid || !(bookingSession || lineIdentityReady);
   updateSendMode();
   if (valid) {
-    els.status.textContent = Boolean(bookingSession)
+    els.status.textContent = Boolean(bookingSession || lineIdentityReady)
       ? "資料已整理好，現在可直接傳送到『俐姐的家』官方 LINE。"
       : "資料已保留。按下後會前往官方 LINE；請從圖文選單點『立即預約』，回到這裡即可真正送出。";
     saveDraft();
@@ -243,12 +266,11 @@ function bookingPayload(){
     people: els.people.value.trim(),
     purpose: els.purpose.value.trim(),
     notes: els.notes.value.trim(),
-    source: "official-line-secure-link"
+    source: bookingSession ? "official-line-secure-link" : "direct-calendar-line-login"
   };
 }
 
 async function submitBookingToOfficialLine(){
-  if (!bookingSession) throw Object.assign(new Error("BOOKING_SESSION_REQUIRED"), {code:"BOOKING_SESSION_REQUIRED"});
   const response = await fetch("/api/line-booking-submit", {
     method: "POST",
     headers: {"Content-Type":"application/json"},
@@ -336,10 +358,10 @@ function applyPresetDates(){
 const restoredDraft = loadDraft();
 renderStayRules();
 readBookingSession();
-applyPresetDates();
-await render();
-updateSelection();
-updateSendMode();
-if (!bookingSession) {
-  els.status.textContent = "請先從俐姐的家官方 LINE 圖文選單點『立即預約』，取得安全預約連結。";
+lineIdentityReady = await ensureLineIdentity();
+if (lineIdentityReady || bookingSession) {
+  applyPresetDates();
+  await render();
+  updateSelection();
+  updateSendMode();
 }
