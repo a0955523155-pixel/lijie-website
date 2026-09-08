@@ -30,4 +30,8 @@
 這樣客人會在官方 LINE 內直接看到日曆，而不是跳 Google Calendar。
 
 ## 官方 LINE 連結
-目前 fallback 使用專案既有官方 LINE：`https://line.me/ti/p/~287ppyfa`。如官方帳號連結日後更換，請同步修改 `js/line-config.js`。
+目前 fallback 使用專案既有官方 LINE：`https://line.me/R/ti/p/@287ppyfa`。如官方帳號連結日後更換，請同步修改 `js/line-config.js`。
+
+
+## V6.8 官網導流調整
+官網不再直接開啟 MINI App。所有「LINE 預約」按鈕改為官方帳號加入連結：`https://line.me/R/ti/p/@287ppyfa`。客人加入官方 LINE 後，再由 Rich Menu 的「立即預約」開啟 MINI App 日曆。
