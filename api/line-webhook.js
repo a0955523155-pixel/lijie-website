@@ -2,6 +2,25 @@ import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 import { lineConfig } from "../js/line-config.js";
 
+function createBookingSession(userId, secret, ttlMs = 2 * 60 * 60 * 1000) {
+  const payload = Buffer.from(JSON.stringify({ uid: userId, exp: Date.now() + ttlMs })).toString("base64url");
+  const sig = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
+  return `${payload}.${sig}`;
+}
+function bookingUrlFor(userId, secret) {
+  const session = createBookingSession(userId, secret);
+  return `https://www.5-1bbs.com/line-booking.html?session=${encodeURIComponent(session)}`;
+}
+function bookingButtonMessage(url) {
+  return {
+    type: "template",
+    altText: "俐姐的家｜開啟預約日曆",
+    template: { type: "buttons", title: "俐姐的家｜住宿預約", text: "安全連線已建立，請開啟日曆選擇入住與退房日期。", actions: [
+      { type: "uri", label: "開啟預約日曆", uri: url }
+    ]}
+  };
+}
+
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -255,7 +274,7 @@ export default async function handler(req, res) {
       if (!event?.replyToken) continue;
 
       if (event.type === "follow") {
-        await replyLine(event.replyToken, [welcomeText(), welcomeButtonMessage()], token);
+        await replyLine(event.replyToken, [welcomeText(), bookingButtonMessage(bookingUrlFor(event.source?.userId, secret))], token);
         continue;
       }
 
@@ -270,7 +289,7 @@ export default async function handler(req, res) {
       const keyword = keywordReply(event.message.text);
       if (keyword) {
         const messages = [keyword.text];
-        if (keyword.button) messages.push(keyword.button);
+        if (keyword.button) messages.push(bookingButtonMessage(bookingUrlFor(event.source?.userId, secret)));
         await replyLine(event.replyToken, messages, token);
         continue;
       }

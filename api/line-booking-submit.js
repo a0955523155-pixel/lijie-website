@@ -1,186 +1,90 @@
+import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-function clean(value, max = 200) {
-  return String(value ?? "").trim().slice(0, max);
+function clean(value, max = 500) {
+  return String(value ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, max);
 }
-
-function parseDateKey(key) {
-  if (!DATE_RE.test(key)) return null;
-  const [y, m, d] = key.split("-").map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d));
-  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) return null;
-  return date;
+function b64url(input) { return Buffer.from(input).toString("base64url"); }
+function safeEqual(a,b){
+  try { const x=Buffer.from(a); const y=Buffer.from(b); return x.length===y.length && crypto.timingSafeEqual(x,y); }
+  catch { return false; }
 }
-
-function normalizeBooking(input = {}) {
-  const checkIn = clean(input.checkIn, 10);
-  const checkOut = clean(input.checkOut, 10);
-  const a = parseDateKey(checkIn);
-  const b = parseDateKey(checkOut);
-  if (!a || !b || b <= a) throw new Error("INVALID_DATES");
-  const nights = Math.round((b - a) / 86400000);
-  if (nights < 1 || nights > 30) throw new Error("INVALID_NIGHTS");
-  const peopleRaw = Number.parseInt(String(input.people ?? ""), 10);
-  const people = Number.isFinite(peopleRaw) ? Math.min(Math.max(peopleRaw, 1), 12) : null;
-  const name = clean(input.name, 60);
-  if (!name) throw new Error("NAME_REQUIRED");
-  return {
-    checkIn,
-    checkOut,
-    nights,
-    name,
-    phone: clean(input.phone, 40),
-    people,
-    purpose: clean(input.purpose, 120),
-    notes: clean(input.notes, 500),
-    source: clean(input.source, 30) || "miniapp"
+function verifySession(token, secret){
+  if (!token || !secret) throw new Error("BOOKING_SESSION_REQUIRED");
+  const parts=String(token).split(".");
+  if(parts.length!==2) throw new Error("BOOKING_SESSION_INVALID");
+  const [payloadPart,sig]=parts;
+  const expected=crypto.createHmac("sha256", secret).update(payloadPart).digest("base64url");
+  if(!safeEqual(sig,expected)) throw new Error("BOOKING_SESSION_INVALID");
+  let payload;
+  try { payload=JSON.parse(Buffer.from(payloadPart,"base64url").toString("utf8")); }
+  catch { throw new Error("BOOKING_SESSION_INVALID"); }
+  if(!payload?.uid || !payload?.exp) throw new Error("BOOKING_SESSION_INVALID");
+  if(Date.now()>Number(payload.exp)) throw new Error("BOOKING_SESSION_EXPIRED");
+  return payload;
+}
+function parseDateKey(v){
+  const s=clean(v,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const [y,m,d]=s.split("-").map(Number); const date=new Date(Date.UTC(y,m-1,d));
+  if(date.getUTCFullYear()!==y||date.getUTCMonth()!==m-1||date.getUTCDate()!==d) return null;
+  return {s,date};
+}
+function normalizeBooking(input={}){
+  const a=parseDateKey(input.checkIn), b=parseDateKey(input.checkOut);
+  if(!a||!b||b.date<=a.date) throw new Error("INVALID_DATES");
+  const nights=Math.round((b.date-a.date)/86400000); if(nights<1||nights>30) throw new Error("INVALID_NIGHTS");
+  const peopleRaw=Number.parseInt(String(input.people??""),10);
+  const people=Number.isFinite(peopleRaw)?Math.min(Math.max(peopleRaw,1),12):null;
+  const name=clean(input.name,60); if(!name) throw new Error("NAME_REQUIRED");
+  return {checkIn:a.s,checkOut:b.s,nights,name,phone:clean(input.phone,40),people,purpose:clean(input.purpose,120),notes:clean(input.notes,500),source:clean(input.source,40)||"official-line-secure-link"};
+}
+function messages(b){
+  const flex={
+    type:"flex",altText:`俐姐的家｜預約申請已收到 ${b.checkIn} → ${b.checkOut}`,
+    contents:{type:"bubble",size:"mega",
+      header:{type:"box",layout:"vertical",paddingAll:"20px",spacing:"xs",backgroundColor:"#173A35",contents:[
+        {type:"text",text:"俐姐的家",color:"#FFFFFF",weight:"bold",size:"xl"},
+        {type:"text",text:"預約申請已收到",color:"#D7E4DF",size:"sm"}]},
+      body:{type:"box",layout:"vertical",paddingAll:"20px",spacing:"md",contents:[
+        {type:"text",text:`${b.checkIn}  →  ${b.checkOut}`,weight:"bold",size:"xl",color:"#173A35",wrap:true},
+        {type:"text",text:`${b.nights} 晚｜${b.people?`${b.people} 人`:"人數未填"}`,size:"sm",color:"#6C7773"},
+        {type:"separator",margin:"md"},
+        {type:"text",text:`姓名｜${b.name}\n電話｜${b.phone||"未填"}\n需求｜${b.purpose||"未填"}\n備註｜${b.notes||"沒有"}`,size:"sm",color:"#1F2E2B",wrap:true,margin:"md"},
+        {type:"separator",margin:"md"},
+        {type:"text",text:"入住須知",weight:"bold",size:"md",color:"#173A35",margin:"md"},
+        {type:"text",text:`入住 ${BOOKING_RULES.checkInFrom} 起｜退房 ${BOOKING_RULES.checkOutBy} 前`,size:"sm",color:"#202725",wrap:true},
+        {type:"text",text:`${BOOKING_RULES.payment.depositMethod}；${BOOKING_RULES.payment.balanceMethods}。`,size:"sm",color:"#202725",wrap:true},
+        {type:"text",text:"整棟最多入住 12 人；目前為預約申請，實際成立以官方 LINE 最終確認為準。",size:"xs",color:"#6B7773",wrap:true}]},
+      footer:{type:"box",layout:"vertical",paddingAll:"16px",contents:[{type:"box",layout:"vertical",paddingAll:"12px",backgroundColor:"#FFF7DF",cornerRadius:"8px",contents:[{type:"text",text:"🟡 等待俐姐確認",align:"center",weight:"bold",size:"sm",color:"#8A6400"}]}]}}
   };
+  const text={type:"text",text:["【俐姐的家｜預約申請】",`入住：${b.checkIn}`,`退房：${b.checkOut}（${b.nights} 晚）`,`姓名：${b.name}`,`電話：${b.phone||"未填"}`,`人數：${b.people?`${b.people} 人`:"未填"}`,`需求：${b.purpose||"未填"}`,`備註：${b.notes||"沒有"}`,"","預約資料已送達，請等待俐姐確認日期與訂金安排。"].join("\n")};
+  return [text,flex];
 }
-
-async function verifyIdToken(idToken, clientId) {
-  const body = new URLSearchParams({ id_token: idToken, client_id: clientId });
-  const response = await fetch("https://api.line.me/oauth2/v2.1/verify", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || !data.sub) throw new Error("INVALID_LINE_ID_TOKEN");
-  return data;
+async function push(to,msgs,token){
+  const r=await fetch("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify({to,messages:msgs})});
+  if(!r.ok){ const t=await r.text(); const e=new Error(`LINE_PUSH_FAILED ${r.status} ${t}`); e.code="LINE_PUSH_FAILED"; throw e; }
 }
-
-function customerMessages(b) {
-  const alt = `俐姐的家預約申請｜${b.checkIn} → ${b.checkOut}（${b.nights} 晚）`;
-  const flex = {
-    type: "flex",
-    altText: alt,
-    contents: {
-      type: "bubble",
-      size: "mega",
-      header: {
-        type: "box", layout: "vertical", spacing: "sm", paddingAll: "20px",
-        contents: [
-          { type: "text", text: "俐姐的家", weight: "bold", size: "xl", color: "#FFFFFF" },
-          { type: "text", text: "預約申請已收到", size: "sm", color: "#DDEDE7" }
-        ],
-        backgroundColor: "#153C35"
-      },
-      body: {
-        type: "box", layout: "vertical", spacing: "md", paddingAll: "20px",
-        contents: [
-          { type: "text", text: `${b.checkIn}  →  ${b.checkOut}`, weight: "bold", size: "xl", color: "#153C35", wrap: true },
-          { type: "text", text: `${b.nights} 晚｜${b.people ? `${b.people} 人` : "人數未填"}`, size: "sm", color: "#6B7773" },
-          { type: "separator", margin: "md" },
-          { type: "box", layout: "vertical", spacing: "sm", margin: "md", contents: [
-            { type: "box", layout: "baseline", contents: [{type:"text",text:"姓名",size:"sm",color:"#7B8582",flex:2},{type:"text",text:b.name,size:"sm",weight:"bold",color:"#202725",flex:5,wrap:true}] },
-            { type: "box", layout: "baseline", contents: [{type:"text",text:"電話",size:"sm",color:"#7B8582",flex:2},{type:"text",text:b.phone || "未填",size:"sm",color:"#202725",flex:5,wrap:true}] },
-            { type: "box", layout: "baseline", contents: [{type:"text",text:"需求",size:"sm",color:"#7B8582",flex:2},{type:"text",text:b.purpose || "未填",size:"sm",color:"#202725",flex:5,wrap:true}] },
-            { type: "box", layout: "baseline", contents: [{type:"text",text:"備註",size:"sm",color:"#7B8582",flex:2},{type:"text",text:b.notes || "沒有",size:"sm",color:"#202725",flex:5,wrap:true}] }
-          ]},
-          { type: "separator", margin: "md" },
-          { type: "text", text: "入住須知", weight: "bold", size: "md", color: "#153C35", margin: "md" },
-          { type: "text", text: `入住 ${BOOKING_RULES.checkInFrom} 起｜退房 ${BOOKING_RULES.checkOutBy} 前`, size: "sm", color: "#202725", wrap: true },
-          { type: "text", text: `訂金需先轉帳；${BOOKING_RULES.payment.balanceMethods}。`, size: "sm", color: "#202725", wrap: true },
-          { type: "text", text: "整棟最多入住 12 人；實際成立以官方 LINE 最終確認為準。", size: "xs", color: "#6B7773", wrap: true }
-        ]
-      },
-      footer: {
-        type: "box", layout: "vertical", paddingAll: "16px",
-        contents: [
-          { type: "box", layout: "vertical", paddingAll: "12px", backgroundColor: "#EEF5F2", cornerRadius: "8px", contents: [
-            { type: "text", text: "🟡 等待俐姐確認", weight: "bold", size: "sm", color: "#8A6400", align: "center" }
-          ]}
-        ]
-      }
+export default async function handler(req,res){
+  if(req.method!=="POST"){res.setHeader("Allow","POST");return res.status(405).json({ok:false,error:"Method Not Allowed"});}
+  const token=process.env.LINE_CHANNEL_ACCESS_TOKEN, secret=process.env.LINE_CHANNEL_SECRET;
+  if(!token||!secret) return res.status(500).json({ok:false,error:"LINE environment variables are not configured"});
+  try{
+    const body=typeof req.body==="string"?JSON.parse(req.body):(req.body||{});
+    const session=verifySession(clean(body.session,4000),secret);
+    const booking=normalizeBooking(body.booking);
+    console.log("booking-secure-submit",{userId:String(session.uid).slice(0,8)+"…",checkIn:booking.checkIn,checkOut:booking.checkOut,people:booking.people});
+    await push(session.uid,messages(booking),token);
+    const notifyTo=process.env.LINE_BOOKING_NOTIFY_TO;
+    if(notifyTo&&notifyTo!==session.uid){
+      try{await push(notifyTo,[{type:"text",text:`【新預約申請】\n${booking.name}\n${booking.checkIn} → ${booking.checkOut}（${booking.nights} 晚）\n${booking.people?booking.people+" 人":"人數未填"}\n${booking.phone||"電話未填"}`}],token);}catch(e){console.warn("owner notify failed",e);}
     }
-  };
-  const fallback = {
-    type: "text",
-    text: [
-      "【俐姐的家｜預約申請】",
-      `入住：${b.checkIn}`,
-      `退房：${b.checkOut}（${b.nights} 晚）`,
-      `姓名：${b.name}`,
-      `電話：${b.phone || "未填"}`,
-      `人數：${b.people ? `${b.people} 人` : "未填"}`,
-      `需求：${b.purpose || "未填"}`,
-      `備註：${b.notes || "沒有"}`,
-      "",
-      "此為預約申請，請協助確認日期與安排，謝謝。"
-    ].join("\n")
-  };
-  return [flex, fallback];
-}
-
-function ownerMessage(b, userId) {
-  return [
-    "【官網／MINI App 新預約申請】",
-    `姓名：${b.name}`,
-    `入住：${b.checkIn}`,
-    `退房：${b.checkOut}（${b.nights} 晚）`,
-    `人數：${b.people ? `${b.people} 人` : "未填"}`,
-    b.phone ? `電話：${b.phone}` : null,
-    b.purpose ? `需求：${b.purpose}` : null,
-    b.notes ? `備註：${b.notes}` : null,
-    `來源：${b.source}`,
-    `LINE userId：${userId}`
-  ].filter(Boolean).join("\n");
-}
-
-async function pushMessages(to, messages, token) {
-  const response = await fetch("https://api.line.me/v2/bot/message/push", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`
-    },
-    body: JSON.stringify({ to, messages })
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    const error = new Error(`LINE_PUSH_FAILED ${response.status} ${text}`);
-    error.code = "LINE_PUSH_FAILED";
-    throw error;
-  }
-}
-
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ ok: false, error: "Method Not Allowed" });
-  }
-
-  const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  const miniAppChannelId = process.env.LINE_MINIAPP_CHANNEL_ID || "2011502071";
-  if (!accessToken) return res.status(500).json({ ok: false, error: "LINE_CHANNEL_ACCESS_TOKEN is not configured" });
-
-  try {
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
-    const idToken = clean(body.idToken, 5000);
-    if (!idToken) return res.status(401).json({ ok: false, error: "LINE ID token required" });
-
-    const verified = await verifyIdToken(idToken, miniAppChannelId);
-    const booking = normalizeBooking(body.booking);
-    const userId = verified.sub;
-
-    console.log("booking-submit", { userId: userId.slice(0, 8) + "…", checkIn: booking.checkIn, checkOut: booking.checkOut, people: booking.people, source: booking.source });
-    await pushMessages(userId, customerMessages(booking), accessToken);
-    console.log("booking-push-success", { checkIn: booking.checkIn, checkOut: booking.checkOut });
-
-    const notifyTo = process.env.LINE_BOOKING_NOTIFY_TO;
-    if (notifyTo && notifyTo !== userId) {
-      try { await pushMessages(notifyTo, [{ type: "text", text: ownerMessage(booking, userId) }], accessToken); }
-      catch (e) { console.warn("Owner notification failed", e); }
-    }
-
-    return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error(error);
-    if (error?.code === "LINE_PUSH_FAILED") return res.status(409).json({ ok: false, code: "LINE_PUSH_FAILED", error: "Official LINE cannot message this user yet" });
-    const message = String(error?.message || "UNKNOWN_ERROR");
-    const status = message === "INVALID_LINE_ID_TOKEN" ? 401 : 400;
-    return res.status(status).json({ ok: false, error: message });
+    console.log("booking-secure-push-success",{checkIn:booking.checkIn,checkOut:booking.checkOut});
+    return res.status(200).json({ok:true});
+  }catch(e){
+    console.error("booking secure submit error",e);
+    const code=String(e?.message||"UNKNOWN_ERROR");
+    if(e?.code==="LINE_PUSH_FAILED") return res.status(409).json({ok:false,code:"LINE_PUSH_FAILED",error:"Official LINE cannot message this user"});
+    const status=code.includes("SESSION")?401:400;
+    return res.status(status).json({ok:false,code,error:code});
   }
 }
