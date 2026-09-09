@@ -96,7 +96,7 @@ function messages(b){
     altText:`俐姐的家｜預約申請已收到 ${b.checkIn} → ${b.checkOut}`,
     contents:{type:"bubble",size:"mega",
       header:{type:"box",layout:"vertical",paddingAll:"22px",spacing:"xs",backgroundColor:"#153C36",contents:[
-        {type:"text",text:"LIJIE'S HOME",color:"#CDBD92",size:"xs",weight:"bold",letterSpacing:"1px"},
+        {type:"text",text:"LIJIE'S HOME",color:"#CDBD92",size:"xs",weight:"bold"},
         {type:"text",text:"俐姐的家",color:"#FFFFFF",weight:"bold",size:"xxl"},
         {type:"text",text:"預約申請已收到",color:"#D9E5E1",size:"sm"}
       ]},
