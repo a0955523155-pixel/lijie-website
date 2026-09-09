@@ -129,7 +129,7 @@ function drawCalendar(prices=new Map()){
     const d=new Date(start); d.setDate(start.getDate()+i); const state=stateOf(d); const rate=prices.get(keyOf(d)); const outside=d.getMonth()!==cursor.getMonth(); const past=d<today; const beyond=isBeyondWindow(d);
     const b=document.createElement("button"); b.type="button"; b.className=`day ${outside?"outside":""} ${past?"past":""} ${beyond?"future-locked":""} ${state} ${isInRange(d)?"range":""}`;
     if ((startDate&&keyOf(d)===keyOf(startDate))||(endDate&&keyOf(d)===keyOf(endDate))) b.classList.add("selected");
-    const rateText="";
+    const rateText=(!outside&&!past&&!beyond&&state==="available"&&rate?.price)?`<em>${moneyFmt.format(rate.price)}</em>`:"";
     const tag=(!outside&&!past&&!beyond&&state==="available"&&rate?.label&&!['平日','週五','週六'].includes(rate.label))?`<i>${rate.label.replace('連假','')}</i>`:"";
     const status=beyond?"尚未開放":state==="available"?"可詢問":state==="booked"?"已預約":"暫停";
     b.innerHTML=`<span>${d.getDate()}</span>${rateText}${tag}<small>${status}</small>`;
