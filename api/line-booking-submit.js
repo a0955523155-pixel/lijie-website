@@ -44,6 +44,8 @@ function resolveSession(req, explicit){
   }
   throw new Error("BOOKING_SESSION_REQUIRED");
 }
+function bookingId(){ return `B${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(3).toString("hex").toUpperCase()}`; }
+
 function parseDateKey(v){
   const s=clean(v,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
   const [y,m,d]=s.split("-").map(Number); const date=new Date(Date.UTC(y,m-1,d));
