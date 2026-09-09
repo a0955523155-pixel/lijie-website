@@ -50,32 +50,13 @@ function readBookingSession(){
 }
 
 async function ensureLineIdentity(){
-  // Always check the server cookie first. A stale secure-link query must not mask a
-  // valid LINE Login session. The backend also uses the same preference order.
-  try {
-    const r = await fetch("/api/line-session", {cache:"no-store", credentials:"same-origin"});
-    const data = await r.json().catch(()=>({}));
-    if (r.ok && data.authenticated) {
-      els.mode.textContent = "已連結您的 LINE 帳號";
-      return true;
-    }
-  } catch (e) { console.warn("LINE session check failed", e); }
-
-  // Old webhook-generated secure links are still accepted as a fallback.
-  if (bookingSession) {
-    els.mode.textContent = "官方 LINE 安全預約連線已建立";
+  if(bookingSession){
+    els.mode.textContent="官方 LINE 安全預約連線已建立";
     return true;
   }
-
-  const p = new URLSearchParams(location.search);
-  if (p.get("lineAuth") === "error") {
-    els.mode.textContent = "LINE 身分驗證失敗，請重新連結";
-    els.status.textContent = "需要先連結 LINE 身分，送出後才能把預約確認送回您的官方 LINE 聊天室。";
-    return false;
-  }
-  els.mode.textContent = "正在連結您的 LINE 帳號…";
-  const returnTo = location.pathname + (location.search && !location.search.includes("lineAuth=") ? location.search : "");
-  location.replace(`/api/line-auth-start?return=${encodeURIComponent(returnTo)}`);
+  els.mode.textContent="請從官方 LINE 開啟預約";
+  els.status.textContent="為保護訂單資料，預約頁只接受從『俐姐的家』官方 LINE 的「立即預約」入口開啟。";
+  els.send.disabled=true;
   return false;
 }
 
@@ -275,7 +256,7 @@ function loadDraft(){
 function clearDraft(){ try { localStorage.removeItem(DRAFT_KEY); } catch {} }
 
 function updateSendMode(){
-  const chatReady = Boolean(bookingSession || lineIdentityReady);
+  const chatReady = Boolean(bookingSession);
   const label = chatReady ? '<span>LINE</span> 傳送預約申請' : '<span>LINE</span> 請先從官方 LINE 開始';
   els.send.innerHTML = label;
   if (chatReady) {
@@ -286,10 +267,10 @@ function updateSendMode(){
 }
 
 function refreshForm(){
-  const valid=!!(startDate&&endDate&&els.name.value.trim()); els.send.disabled=!valid || !(bookingSession || lineIdentityReady);
+  const valid=!!(startDate&&endDate&&els.name.value.trim()); els.send.disabled=!valid || !bookingSession;
   updateSendMode();
   if (valid) {
-    els.status.textContent = Boolean(bookingSession || lineIdentityReady)
+    els.status.textContent = Boolean(bookingSession)
       ? "資料已整理好，現在可直接傳送到『俐姐的家』官方 LINE。"
       : "資料已保留。按下後會前往官方 LINE；請從圖文選單點『立即預約』，回到這裡即可真正送出。";
     saveDraft();
@@ -313,7 +294,7 @@ function bookingPayload(){
     people: els.people.value.trim(),
     purpose: els.purpose.value.trim(),
     notes: els.notes.value.trim(),
-    source: bookingSession ? "official-line-secure-link" : "direct-calendar-line-login"
+    source: "official-line-secure-link"
   };
 }
 

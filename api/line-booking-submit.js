@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import { COOKIE_NAME, parseCookies, verifyPayload as verifyCookieSession } from "./line-auth-lib.js";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 import { putBooking, firestoreReady, quoteStay, getPublicPricingSettings } from "./firestore-admin.js";
 import { gmailReady, sendMail, receivedEmailText, receivedEmailHtml, adminNotificationEmail, newBookingAdminMail } from "./gmail-mailer.js";
@@ -33,18 +32,9 @@ function verifySessionWithSecrets(token, secrets=[]){
 }
 
 function resolveSession(req, explicit){
-  const cookieSession=parseCookies(req)[COOKIE_NAME] || "";
-  // LINE Login cookie is the preferred identity. This avoids an old ?session= query
-  // overriding a newer, valid login cookie after the user has authenticated.
-  if(cookieSession){
-    try { return {payload:verifyCookieSession(cookieSession), source:"line-login-cookie"}; }
-    catch(e){ console.warn("booking cookie session invalid", String(e?.message||e)); }
-  }
-  if(explicit){
-    const payload=verifySessionWithSecrets(explicit,[process.env.BOOKING_SESSION_SECRET,process.env.LINE_CHANNEL_SECRET]);
-    return {payload, source:"secure-link"};
-  }
-  throw new Error("BOOKING_SESSION_REQUIRED");
+  if(!explicit) throw new Error("BOOKING_SESSION_REQUIRED");
+  const payload=verifySessionWithSecrets(explicit,[process.env.BOOKING_SESSION_SECRET,process.env.LINE_CHANNEL_SECRET]);
+  return {payload,source:"official-line-secure-link"};
 }
 function parseDateKey(v){
   const s=clean(v,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
@@ -105,8 +95,8 @@ function messages(b){
         infoRow("備註",b.notes||"沒有"),
         {type:"separator",margin:"md",color:"#E5E0D6"},
         {type:"text",text:"🌿 入住提醒",weight:"bold",size:"md",color:"#153C36",margin:"sm"},
-        {type:"text",text:`固定訂金 NT$${Number(BOOKING_RULES.payment.depositAmount||3000).toLocaleString("zh-TW")}，需先轉帳；尾款可轉帳或現金。\n整棟最多入住 ${BOOKING_RULES.maxGuests} 人。`,size:"sm",color:"#48534F",wrap:true,lineSpacing:"4px"},
-        {type:"text",text:"此為預約申請，實際成立仍以俐姐於官方 LINE 最終確認為準。",size:"xs",color:"#8B938F",wrap:true}
+        {type:"text",text:`【付款資訊】\n固定訂金 NT$${Number(BOOKING_RULES.payment.depositAmount||3000).toLocaleString("zh-TW")}\n${BOOKING_RULES.payment.bankName}\n代號 ${BOOKING_RULES.payment.branchCode}\n戶名 ${BOOKING_RULES.payment.accountName}\n帳號 ${BOOKING_RULES.payment.accountNumber}\n\n匯款後請回官方 LINE 傳：\n匯款回報 末五碼 XXXXX 金額 3000\n\n客服核對入帳後才會登記正式收款。`,size:"sm",color:"#48534F",wrap:true,lineSpacing:"4px"},
+        {type:"text",text:"此為預約申請；訂金核對入帳並由民宿後台確認後，預約才正式成立。",size:"xs",color:"#8B938F",wrap:true}
       ]},
       footer:{type:"box",layout:"vertical",paddingAll:"16px",spacing:"sm",contents:[
         {type:"box",layout:"vertical",paddingAll:"12px",backgroundColor:"#FFF3CC",cornerRadius:"10px",contents:[
@@ -115,7 +105,7 @@ function messages(b){
       ]}
     }
   };
-  const text={type:"text",text:["【俐姐的家｜預約申請】",`入住：${b.checkIn}`,`退房：${b.checkOut}（${b.nights} 晚）`,`姓名：${b.name}`,`電話：${b.phone||"未填"}`,`人數：${b.people?`${b.people} 人`:"未填"}`,`需求：${b.purpose||"未填"}`,`備註：${b.notes||"沒有"}`,...(b.quotedTotal?[`試算金額：NT$ ${Number(b.quotedTotal).toLocaleString("zh-TW")}`]:[]),"",`預約資料已送達；固定訂金 NT$${Number(BOOKING_RULES.payment.depositAmount||3000).toLocaleString("zh-TW")}。訂金入帳且俐姐於官方 LINE 確認後，預約才正式成立。`].join("\n")};
+  const text={type:"text",text:["【俐姐的家｜預約申請】",`入住：${b.checkIn}`,`退房：${b.checkOut}（${b.nights} 晚）`,`姓名：${b.name}`,`電話：${b.phone||"未填"}`,`人數：${b.people?`${b.people} 人`:"未填"}`,`需求：${b.purpose||"未填"}`,`備註：${b.notes||"沒有"}`,...(b.quotedTotal?[`試算金額：NT$ ${Number(b.quotedTotal).toLocaleString("zh-TW")}`]:[]),"",`預約資料已送達；固定訂金 NT$${Number(BOOKING_RULES.payment.depositAmount||3000).toLocaleString("zh-TW")}。匯款後請在官方 LINE 回報末五碼與金額；客服核對入帳並由後台確認後，預約才正式成立。`].join("\n")};
   return [text,flex];
 }
 

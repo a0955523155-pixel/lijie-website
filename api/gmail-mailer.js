@@ -60,3 +60,12 @@ export function refundRequestMail(b,reason,{admin=false}={}){
   const html=cardHtml({title:admin?"收到退款申請":"退款申請已收到",subtitle:"退款尚未完成，將由民宿核對訂單與已收款後處理。",rows:[["訂單編號",b.id||"—"],["入住日期",b.startDate||"—"],["客戶",b.guestName||"—"],["目前已收",`NT$ ${Number(b.paidAmount||0).toLocaleString("zh-TW")}`],["申請原因",reason]],notice:"退款金額、退款方式與是否符合退款條件，均以民宿後台最終處理結果為準。",buttonLabel:admin?"前往營運管理":"",buttonUrl:url});
   return {subject,text,html};
 }
+export function paymentReportAdminMail(b){
+  const url=adminOperationsUrl(b);
+  const amount=Number(b.paymentReportAmount||0)||0;
+  const subject=`俐姐的家｜匯款回報 ${b.startDate||""} ${b.guestName||""}`;
+  const text=["【收到客戶匯款回報】",`訂單編號：${b.id||"—"}`,`入住日期：${b.startDate||"—"}`,`客戶：${b.guestName||"—"}`,`回報金額：NT$ ${amount.toLocaleString("zh-TW")}`,`匯款帳號末五碼：${b.paymentReportLast5||"—"}`,"","此為客戶回報，尚未代表實際入帳。請至營運管理核對銀行帳戶後，再新增正式收款紀錄。","",`前往營運管理：${url}`].join("\n");
+  const html=cardHtml({title:"收到客戶匯款回報",subtitle:"請核對銀行帳戶後，再於營運管理登記正式收款。",rows:[["訂單編號",b.id||"—"],["入住日期",b.startDate||"—"],["客戶",b.guestName||"—"],["回報金額",`NT$ ${amount.toLocaleString("zh-TW")}`],["帳號末五碼",b.paymentReportLast5||"—"],["目前狀態","待人工核帳"]],notice:"客戶的匯款回報不是入帳證明；請實際核對銀行帳戶後，再於後台新增收款紀錄。",buttonLabel:"前往營運管理核帳",buttonUrl:url});
+  return {subject,text,html};
+}
+

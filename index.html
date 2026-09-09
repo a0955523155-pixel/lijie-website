@@ -117,52 +117,28 @@
       <div class="booking-shell">
         <div class="booking-copy">
           <p class="eyebrow eyebrow-dark">AVAILABILITY</p>
-          <h2 id="booking-title">把想來的日子，<br>先留給彼此。</h2>
-          <p>直接查看俐姐的家目前可安排日期。先選入住日，再選退房日；確認住宿明細後即可直接從官網送出預約申請。</p>
+          <h2 id="booking-title">先看看日期，<br>預約統一到官方 LINE。</h2>
+          <p>官網只提供目前日期狀況查詢，不在網頁建立訂單。要預約、查詢訂單、回報匯款或申請取消，請統一使用「俐姐的家」官方 LINE。</p>
           <div class="booking-legend" aria-label="日期狀態說明">
             <span><i class="legend-dot available"></i>可詢問</span>
             <span><i class="legend-dot booked"></i>已預約</span>
             <span><i class="legend-dot blocked"></i>暫停開放</span>
           </div>
-          <a class="booking-line desktop-line-promo" href="https://lin.ee/w28dW98A" rel="noopener noreferrer"><span class="line-mark">LINE</span> 加入官方 LINE <span>→</span></a>
+          <a class="booking-line" href="https://line.me/R/oaMessage/%40287ppyfa/?%E7%AB%8B%E5%8D%B3%E9%A0%90%E7%B4%84" rel="noopener noreferrer"><span class="line-mark">LINE</span> 前往官方 LINE 預約 <span>→</span></a>
+          <p class="quick-select-hint">進入官方 LINE 後可直接傳「立即預約」，系統會開啟專用預約日曆。</p>
         </div>
         <div class="calendar-card" aria-live="polite">
-          <div class="booking-quick-select people-only" aria-label="入住人數">
-            <label><span>入住人數</span><select id="websiteGuests"><option value="">請選擇</option><option value="1">1 人</option><option value="2">2 人</option><option value="3">3 人</option><option value="4">4 人</option><option value="5">5 人</option><option value="6">6 人</option><option value="7">7 人</option><option value="8">8 人</option><option value="9">9 人</option><option value="10">10 人</option><option value="11">11 人</option><option value="12">12 人</option></select></label>
-            <p class="quick-select-hint">日期直接從下方日曆選擇；選好後會先顯示完整住宿明細，再從官網送出預約申請。</p>
-          </div>
           <div class="calendar-toolbar">
             <button id="calendarPrev" class="calendar-nav" type="button" aria-label="上個月">←</button>
-            <div><p class="calendar-kicker">SELECT CHECK-IN / CHECK-OUT</p><h3 id="calendarMonth">—</h3></div>
+            <div><p class="calendar-kicker">AVAILABILITY CALENDAR</p><h3 id="calendarMonth">—</h3></div>
             <button id="calendarNext" class="calendar-nav" type="button" aria-label="下個月">→</button>
           </div>
           <div class="calendar-weekdays" aria-hidden="true"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
           <div id="publicCalendar" class="calendar-grid" role="grid" aria-label="預約日曆"></div>
-          <div id="calendarStatus" class="calendar-status">先選入住日，再選退房日。</div>
-          <div id="selectedDateCard" class="selected-date hidden">
-            <div class="booking-summary-grid">
-              <div><span>入住</span><strong id="selectedCheckIn">—</strong></div>
-              <div><span>退房</span><strong id="selectedCheckOut">—</strong></div>
-              <div><span>晚數</span><strong id="selectedNights">—</strong></div>
-              <div><span>人數</span><strong id="selectedGuests">—</strong></div>
-            </div>
-            <strong id="selectedDateText" class="sr-only"></strong>
-            <div id="websiteBookingDetail" class="booking-confirm-box hidden-v656"><div id="bookingTestBanner" class="booking-test-banner"><strong>測試模式</strong><br>這筆資料會標記為 TEST、不鎖正式日期、不列入營運統計；測完可由後台一鍵清除。</div>
-              <div class="booking-confirm-title"><h4>送出前預約明細</h4><small>日曆不顯示價格，這裡完整列出</small></div>
-              <div id="websiteBookingPriceLines" class="booking-price-lines"></div>
-              <div class="booking-total-row"><span>系統試算住宿總額</span><strong id="websiteBookingTotal">—</strong></div>
-              <div class="booking-payment-rule"><strong>付款條件</strong><p>固定訂金 <b>NT$3,000</b>。須先完成訂金轉帳；確認入帳後，俐姐會由官網後台正式確認預約。尾款可轉帳或現金。</p></div>
-              <p class="booking-detail-note">請確認日期、人數與金額後再送出。此為目前系統試算；送出後仍只是預約申請；須先完成訂金，且由俐姐於官網後台確認後才正式成立。</p>
-            </div>
-            <form id="websiteBookingForm" class="website-booking-form hidden-v656">
-              <label>姓名<input id="websiteGuestName" type="text" maxlength="60" autocomplete="name" required></label>
-              <label>電話<input id="websiteGuestPhone" type="tel" maxlength="40" autocomplete="tel"></label>
-              <label class="wide">Email<input id="websiteGuestEmail" type="email" maxlength="120" autocomplete="email" required placeholder="預約通知與確認信會寄到這裡"></label>
-              <input id="websiteTrap" name="contact_fax_optional" type="text" value="" autocomplete="new-password" inputmode="none" tabindex="-1" aria-hidden="true" style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;opacity:0;pointer-events:none">
-              <button id="websiteBookingSubmit" type="submit">送出預約需求</button>
-              <p id="websiteBookingMessage" class="booking-submit-message" aria-live="polite"></p>
-              <p class="booking-alt-line desktop-line-promo">手機也可從 <a id="selectedDateLine" href="https://www.5-1bbs.com/line-booking.html" rel="noopener noreferrer">官方 LINE 預約日曆</a> 送出。</p>
-            </form>
+          <div id="calendarStatus" class="calendar-status">官網僅顯示日期狀況；預約請由官方 LINE 進行。</div>
+          <div class="booking-payment-rule" style="margin-top:18px">
+            <strong>官方 LINE 可處理</strong>
+            <p>立即預約｜查詢訂單｜匯款回報｜取消預約／退款申請</p>
           </div>
         </div>
       </div>
@@ -170,7 +146,7 @@
     <section class="section nearby" id="details"><div class="heading"><p class="eyebrow eyebrow-dark">PLAN YOUR DAY</p><h2>把細節先放好，<br>相聚就能更自在。</h2><p>以下為目前的住宿與使用參考；實際安排以雙方確認為準。</p></div><div class="nearby-grid"><article class="nearby-card"><h3><i class="fa-solid fa-calendar-check"></i>住宿安排</h3><ul><li><span>入住人數</span><small data-detail="capacity">最多 12 人</small></li><li><span>使用方式</span><small data-detail="schedule">全天安排</small></li><li><span>服務時段</span><small data-detail="hours">08:30–17:30</small></li></ul></article><article class="nearby-card"><h3><i class="fa-solid fa-car"></i>抵達與規範</h3><ul><li><span>汽車停放</span><small data-detail="parking">最多 5 輛</small></li><li><span>位置資訊</span><small><a href="https://www.google.com/maps?q=21.945560514053177,120.73903972238396" target="_blank" rel="noopener">開啟 Google 地圖 ↗</a></small></li><li><span>使用提醒</span><small>請配合現場規範與鄰里安寧</small></li></ul></article></div></section>
     <section class="section occasion" aria-labelledby="occasion-title"><div class="heading"><p class="eyebrow eyebrow-dark">WAYS TO GATHER</p><h2 id="occasion-title">每一種相聚，<br>都有一個剛好的位置。</h2><p>俐姐的家位於墾丁後壁湖，提供庭園式私人團體活動場地的使用洽詢。</p></div><div class="occasion-grid"><article class="occasion-card"><h3>朋友聚會場地</h3><p>適合墾丁朋友聚會、小型團體相見與聊天放鬆的活動安排。</p></article><article class="occasion-card"><h3>家庭聚會空間</h3><p>適合家庭相聚、親友聚餐與一起度過悠閒的一天。</p></article><article class="occasion-card"><h3>戶外聚餐場地</h3><p>庭園式空間，適合戶外聚餐、料理分享與輕鬆聊天。</p></article><article class="occasion-card"><h3>烤肉聚會場地</h3><p>可依活動內容洽詢墾丁烤肉聚會場地的使用安排與規範。</p></article><article class="occasion-card"><h3>KTV 聚會空間</h3><p>想唱歌、聽音樂或和朋友同樂，可先由官方 LINE 確認安排。</p></article><article class="occasion-card"><h3>恆春小型團體場地</h3><p>後壁湖一帶的私人聚會空間，建議最多 12 人使用。</p></article></div></section>
     <section class="section faq" aria-labelledby="faq-title"><div class="heading"><p class="eyebrow eyebrow-dark">COMMON QUESTIONS</p><h2 id="faq-title">先把常問的，<br>好好回答。</h2></div><div class="faq-grid"><article class="faq-item"><h3>俐姐的家在哪裡？</h3><p>位於屏東恆春、墾丁後壁湖一帶；可由頁面的 Google 地圖開啟導航。</p></article><article class="faq-item"><h3>如何安排日期？</h3><p>請先點選「預約日期」查看可安排時段，再透過官方 LINE 傳送日期、人數與活動內容確認。</p></article><article class="faq-item"><h3>最多可幾人、可以停車嗎？</h3><p>建議最多 12 人；汽車最多可停放 5 輛，抵達與停車方式將於預約確認時說明。</p></article><article class="faq-item"><h3>想確認住宿細節怎麼做？</h3><p>可先查看可預約日期，再透過官方 LINE 告訴我們入住日期、人數與需求，我們會協助確認安排。</p></article></div></section>
-    <section class="cta"><p class="eyebrow">SAVE A DAY FOR US</p><h2>下次相聚，<br>就來俐姐的家。</h2><p>加入官方 LINE，傳送「日期／人數／活動內容」。我們將於 08:30–17:30 協助確認使用安排、停車與匯款資訊；也可來電 <a href="tel:0800666738">0800-666-738</a>。</p><p class="social-note">從 <b>Instagram／Facebook</b> 認識我們後，請由個人簡介或貼文連結加入官方 LINE，統一確認日期、活動內容與使用安排。</p><a class="line-button booking-cta" href="#booking"><i class="fa-regular fa-calendar-check"></i> 查看可預約日期 <span>→</span></a> <a class="line-button" style="margin-left:10px;background:#06c755" href="https://lin.ee/w28dW98A" rel="noopener noreferrer"><span class="line-mark">LINE</span> 加入官方 LINE <span>→</span></a></section>
+    <section class="cta"><p class="eyebrow">SAVE A DAY FOR US</p><h2>下次相聚，<br>就來俐姐的家。</h2><p>所有預約、訂單查詢、匯款回報與取消申請都統一由官方 LINE 處理。我們將於 08:30–17:30 協助確認使用安排、停車與付款資訊；也可來電 <a href="tel:0800666738">0800-666-738</a>。</p><p class="social-note">從 <b>Instagram／Facebook</b> 認識我們後，請由個人簡介或貼文連結加入官方 LINE，統一確認日期、活動內容與使用安排。</p><a class="line-button booking-cta" href="#booking"><i class="fa-regular fa-calendar-check"></i> 查看可預約日期 <span>→</span></a> <a class="line-button" style="margin-left:10px;background:#06c755" href="https://lin.ee/w28dW98A" rel="noopener noreferrer"><span class="line-mark">LINE</span> 加入官方 LINE <span>→</span></a></section>
   </main>
   <div id="dateSheetBackdrop" class="date-sheet-backdrop" aria-hidden="true"></div>
   <aside id="dateSheet" class="date-sheet" role="dialog" aria-modal="true" aria-labelledby="dateSheetTitle" aria-hidden="true">
@@ -185,7 +161,7 @@
     setInterval(()=>{slides[current].classList.remove('active');current=(current+1)%slides.length;slides[current].classList.add('active')},5000);
   </script>
   <script type="module" src="js/site.js"></script>
-  <script type="module" src="js/booking-calendar.js?v=656"></script>
+  <script type="module" src="js/booking-calendar.js?v=670"></script>
   <script src="js/rooms-carousel.js" defer></script>
 </body>
 </html>
