@@ -97,6 +97,40 @@ export function refundRequestMail(b,reason,{admin=false}={}){
   const html=cardHtml({title:admin?"收到退款申請":"退款申請已收到",subtitle:"退款尚未完成，將由民宿核對訂單與已收款後處理。",rows:[["訂單編號",b.id||"—"],["入住日期",b.startDate||"—"],["客戶",b.guestName||"—"],["目前已收",`NT$ ${Number(b.paidAmount||0).toLocaleString("zh-TW")}`],["申請原因",reason]],notice:"退款金額、退款方式與是否符合退款條件，均以民宿後台最終處理結果為準。",buttonLabel:admin?"前往營運管理":"",buttonUrl:url});
   return {subject,text,html};
 }
+
+
+export function refundCompletedMail(b,{amount=0,method="轉帳",date="",reason=""}={}){
+  const n=Math.max(0,Number(amount)||0);
+  const d=date||new Date().toISOString().slice(0,10);
+  const subject=`俐姐的家｜退款已辦理，請留意查收`;
+  const text=[
+    "【退款已辦理】",
+    `訂單編號：${b.id||"—"}`,
+    `入住日期：${b.startDate||"—"}`,
+    `退款金額：NT$ ${n.toLocaleString("zh-TW")}`,
+    `退款方式：${method||"—"}`,
+    `退款日期：${d}`,
+    ...(reason?[`退款說明：${reason}`]:[]),
+    "",
+    "俐姐這邊已完成退款處理，實際入帳時間仍依銀行作業時間為準，請您留意帳戶。",
+    "若 1–3 個工作天後仍未收到，直接在官方 LINE 告訴我們，我們會協助確認。",
+    "若這次造成您的不便，真的很抱歉，也期待下次有機會在後壁湖迎接您。"
+  ].join("\n");
+  const html=cardHtml({title:"退款已為您辦理 💚",subtitle:"這筆退款已完成處理，麻煩您留意一下入帳狀況。",rows:[["訂單編號",b.id||"—"],["入住日期",b.startDate||"—"],["退款金額",`NT$ ${n.toLocaleString("zh-TW")}`],["退款方式",method||"—"],["退款日期",d],...(reason?[["退款說明",reason]]:[])],notice:"俐姐這邊已完成退款處理，實際入帳時間依銀行作業為準。若 1–3 個工作天後仍未收到，請直接在官方 LINE 告訴我們，我們會協助確認。若造成您的不便，真的很抱歉，也期待下次有機會再與您見面。"});
+  return {subject,text,html};
+}
+
+export function cancellationCompletedMail(b,{refundAmount=0,refundMethod="",refundDate="",reason="",depositDisposition=""}={}){
+  const n=Math.max(0,Number(refundAmount)||0);
+  const hasRefund=n>0;
+  const subject=hasRefund?"俐姐的家｜取消已完成・退款已辦理":"俐姐的家｜取消預約已完成";
+  const rows=[["訂單編號",b.id||"—"],["原入住日期",b.startDate||"—"],["原退房日期",b.endDate||"—"],["取消原因",reason||b.cancellationReason||"—"],["訂金處理",depositDisposition||b.depositDispositionLabel||"—"]];
+  if(hasRefund){rows.push(["退款金額",`NT$ ${n.toLocaleString("zh-TW")}`],["退款方式",refundMethod||"—"],["退款日期",refundDate||new Date().toISOString().slice(0,10)]);}
+  const text=["【取消預約已完成】",`訂單編號：${b.id||"—"}`,`原入住日期：${b.startDate||"—"}`,`取消原因：${reason||b.cancellationReason||"—"}`,`訂金處理：${depositDisposition||b.depositDispositionLabel||"—"}`,...(hasRefund?[`退款金額：NT$ ${n.toLocaleString("zh-TW")}`,`退款方式：${refundMethod||"—"}`,`退款日期：${refundDate||new Date().toISOString().slice(0,10)}`]:[]),"",hasRefund?"退款已由俐姐這邊完成處理，實際入帳時間依銀行作業為準，麻煩您留意帳戶。":"這筆取消已正式處理完成，原住宿日期也已重新釋出。","若這次造成您的不便，真的很抱歉。很可惜這次沒能與您見面，也期待下次有機會在後壁湖迎接您。"].join("\n");
+  const html=cardHtml({title:hasRefund?"取消已完成・退款已辦理 🌿":"取消預約已完成 🌿",subtitle:hasRefund?"訂單已取消，退款也已完成處理，麻煩您留意入帳。":"訂單已正式取消，謝謝您提前告訴我們。",rows,notice:hasRefund?"退款實際入帳時間依銀行作業為準。若 1–3 個工作天後仍未收到，請直接在官方 LINE 告訴我們，我們會協助確認。造成您的不便，真的很抱歉，也期待下次有機會再與您見面。":"原住宿日期已重新釋出。很可惜這次沒能與您見面，也期待下次有機會在後壁湖迎接您。"});
+  return {subject,text,html};
+}
+
 export function paymentReportAdminMail(b){
   const url=adminOperationsUrl(b);
   const amount=Number(b.paymentReportAmount||0)||0;
