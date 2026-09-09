@@ -854,17 +854,11 @@ function bindEvents() {
   $("#librarySearch").addEventListener("input", renderLibrary);
   $("#pickerSearch").addEventListener("input", renderPickerLibrary);
   $("#closeLibraryPicker").addEventListener("click", () => $("#libraryPickerDialog").close());
-  $("#adminCalPrev").addEventListener("click",()=>{adminCalendarCursor=new Date(adminCalendarCursor.getFullYear(),adminCalendarCursor.getMonth()-1,1);renderAdminCalendar();});
-  $("#adminCalNext").addEventListener("click",()=>{adminCalendarCursor=new Date(adminCalendarCursor.getFullYear(),adminCalendarCursor.getMonth()+1,1);renderAdminCalendar();});
-  $("#bookingStatus").addEventListener("change",toggleBookingPrivateFields);
-  $("#bookingForm").addEventListener("submit",saveBookingDates);
   $("#addPaymentRecord")?.addEventListener("click",addPaymentRecord);
   $("#saveFinanceSettings")?.addEventListener("click",()=>saveFinance(false));
   $("#financeTotal")?.addEventListener("input",refreshFinanceSummary);
-  $("#cancelSelectedBooking").addEventListener("click", cancelSelectedBooking);
   $("#pricingForm").addEventListener("submit",savePricing);
   $("#addSpecialRate").addEventListener("click",()=>{pricingSpecialRanges.push(newSpecialRate());renderSpecialRates();});
-  $("#clearBookingForm").addEventListener("click",clearBookingEditor);
   $("#refreshOperations")?.addEventListener("click",()=>loadOperations());
   $("#refreshReports")?.addEventListener("click",()=>loadReports());
   $("#refreshInventory")?.addEventListener("click",()=>loadInventoryManagement());
