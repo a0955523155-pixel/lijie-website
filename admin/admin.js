@@ -544,6 +544,14 @@ function eachDate(startKey, endKey) {
   for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)) out.push(dateKey(d));
   return out;
 }
+function eachStayNight(startKey, endKey) {
+  const start = localDateFromKey(startKey), end = localDateFromKey(endKey), out = [];
+  if (end <= start) throw new Error("退房日期必須晚於入住日期。");
+  const span = Math.round((end-start)/86400000);
+  if (span > 90) throw new Error("一次最多設定 90 晚，避免誤操作。");
+  for (let d = new Date(start); d < end; d.setDate(d.getDate()+1)) out.push(dateKey(d));
+  return out;
+}
 async function loadAdminMonthStates() {
   const first = new Date(adminCalendarCursor.getFullYear(), adminCalendarCursor.getMonth(), 1);
   const last = new Date(adminCalendarCursor.getFullYear(), adminCalendarCursor.getMonth()+1, 0);
@@ -598,7 +606,7 @@ async function saveBookingDates(event) {
   event.preventDefault();
   const startDate=$("#bookingStart").value, endDate=$("#bookingEnd").value, status=$("#bookingStatus").value;
   if (!startDate || !endDate) return message("#bookingMessage","請先選擇日期。","error");
-  let dates; try { dates = eachDate(startDate,endDate); } catch (e) { return message("#bookingMessage",e.message,"error"); }
+  let dates; try { dates = status === "booked" ? eachStayNight(startDate,endDate) : eachDate(startDate,endDate); } catch (e) { return message("#bookingMessage",e.message,"error"); }
   if (!confirm(`確定要將 ${startDate} ～ ${endDate} 設為「${status==='booked'?'已預約':status==='blocked'?'暫停開放':'可詢問'}」嗎？`)) return;
   message("#bookingMessage","正在儲存…");
   try {
@@ -703,6 +711,7 @@ function bindEvents() {
   $("#adminCalNext").addEventListener("click",()=>{adminCalendarCursor=new Date(adminCalendarCursor.getFullYear(),adminCalendarCursor.getMonth()+1,1);renderAdminCalendar();});
   $("#bookingStatus").addEventListener("change",toggleBookingPrivateFields);
   $("#bookingForm").addEventListener("submit",saveBookingDates);
+  $("#cancelSelectedBooking").addEventListener("click", cancelSelectedBooking);
   $("#clearBookingForm").addEventListener("click",clearBookingEditor);
   $("#contentForm").addEventListener("submit", async (event) => {
     event.preventDefault();

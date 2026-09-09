@@ -35,14 +35,16 @@ if (grid) {
   const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
   const nightsBetween = (a,b) => Math.round((new Date(b.getFullYear(),b.getMonth(),b.getDate()) - new Date(a.getFullYear(),a.getMonth(),a.getDate())) / 86400000);
 
-  async function getMonthStates(first, last) {
+  async function getMonthStates(first, last, { force = false } = {}) {
     const cacheKey = monthKey(first);
-    if (monthCache.has(cacheKey)) return monthCache.get(cacheKey);
+    if (!force && monthCache.has(cacheKey)) return monthCache.get(cacheKey);
     if (!db) {
       const empty = new Map(); monthCache.set(cacheKey, empty); return empty;
     }
     const q = query(collection(db, "availability"), where(documentId(), ">=", keyOf(first)), where(documentId(), "<=", keyOf(last)));
-    const snap = await getDocs(q);
+    let snap;
+    try { snap = await getDocsFromServer(q); }
+    catch { snap = await getDocs(q); }
     const result = new Map(snap.docs.map(d => [d.id, d.data().status || "available"]));
     monthCache.set(cacheKey, result);
     return result;
@@ -51,15 +53,24 @@ if (grid) {
   async function stateForDate(d) {
     const first = new Date(d.getFullYear(), d.getMonth(), 1);
     const last = new Date(d.getFullYear(), d.getMonth()+1, 0);
-    const states = await getMonthStates(first, last);
+    const states = await getMonthStates(first, last, { force: true });
     return states.get(keyOf(d)) || "available";
   }
 
   async function rangeIsAvailable(start, end) {
-    // 退房當天可以是下一組客人的入住日，因此只檢查入住日起到退房前一天。
+    // 住宿占用採 [入住日, 退房日)；退房當天可銜接下一筆入住。
+    if (!db) return { ok:true };
+    const startKey = keyOf(start);
+    const lastNight = new Date(end); lastNight.setDate(lastNight.getDate()-1);
+    const lastKey = keyOf(lastNight);
+    const q = query(collection(db, "availability"), where(documentId(), ">=", startKey), where(documentId(), "<=", lastKey));
+    let snap;
+    try { snap = await getDocsFromServer(q); }
+    catch { snap = await getDocs(q); }
+    const blocked = new Map(snap.docs.map(d => [d.id, d.data().status || "available"]));
     const d = new Date(start);
     while (d < end) {
-      const state = await stateForDate(d);
+      const state = blocked.get(keyOf(d)) || "available";
       if (state !== "available") return { ok:false, date:new Date(d), state };
       d.setDate(d.getDate()+1);
     }
@@ -173,7 +184,7 @@ if (grid) {
     if (showLoading) statusNode.textContent = startDate && !endDate ? "請選擇退房日期。" : "正在載入可預約日期…";
     let states = new Map();
     try {
-      states = await getMonthStates(first, last);
+      states = await getMonthStates(first, last, { force: true });
       if (showLoading) statusNode.textContent = startDate && !endDate ? "已選入住日，請再點選退房日期。" : "先選入住日，再選退房日。";
     } catch (error) {
       console.warn("Availability unavailable", error);
@@ -223,6 +234,8 @@ if (grid) {
     }
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDateSheet(); });
+  window.addEventListener("focus", () => { monthCache.clear(); render(false); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { monthCache.clear(); render(false); } });
   updateSelectionUI();
   render();
 }

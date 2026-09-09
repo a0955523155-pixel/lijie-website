@@ -123,6 +123,16 @@ export async function setBookingStatus(id,status){
   await putBooking(id,updated);
   const days=dateRangeNights(b.startDate,b.endDate);
   if(status==="confirmed"){
+    // 先檢查所有住宿晚數，避免確認新訂單時覆蓋另一筆已確認預約。
+    for(const day of days){
+      const existing=await authedFetch(`${base()}/availability/${day}`);
+      if(existing.status===404) continue;
+      if(!existing.ok) throw new Error(`FIRESTORE_AVAILABILITY_READ_FAILED ${existing.status} ${await existing.text()}`);
+      const j=await existing.json(); const d=fromFields(j.fields||{});
+      if(d.status==="booked" && d.bookingId && d.bookingId!==id){
+        throw new Error(`BOOKING_DATE_CONFLICT ${day} ${d.bookingId}`);
+      }
+    }
     for(const day of days){
       const r=await authedFetch(`${base()}/availability/${day}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({fields:toFields({status:"booked",bookingId:id,updatedAt:nowIso()})})});
       if(!r.ok) throw new Error(`FIRESTORE_AVAILABILITY_SAVE_FAILED ${r.status} ${await r.text()}`);

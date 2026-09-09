@@ -411,9 +411,11 @@ export default async function handler(req, res) {
         }catch(e){
           console.error("booking action failed",e);
           const msg=String(e?.message||e);
-          await replyLine(event.replyToken,msg.includes("FIRESTORE")
-            ? "預約資料庫尚未完成伺服器設定，請先設定 FIREBASE_SERVICE_ACCOUNT_JSON。"
-            : "這個預約操作無法完成，請傳『待確認預約』取得最新訂單卡片。",token);
+          await replyLine(event.replyToken,msg.includes("BOOKING_DATE_CONFLICT")
+            ? `⚠️ 無法確認：${msg.split(" ")[1] || "所選日期"} 已被另一筆已確認預約占用。請先查看後台日曆。`
+            : msg.includes("FIRESTORE")
+              ? "預約資料庫尚未完成伺服器設定，請先設定 FIREBASE_SERVICE_ACCOUNT_JSON。"
+              : "這個預約操作無法完成，請傳『待確認預約』取得最新訂單卡片。",token);
         }
         continue;
       }
