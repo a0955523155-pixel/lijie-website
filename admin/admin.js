@@ -954,8 +954,13 @@ function filteredOrdersForDisplay(){
   return date?opsBookings.filter(b=>b.startDate===date):[];
 }
 function renderInventory(){
-  if(!$("#inventoryList"))return;
-  renderInventory();
+  const list=$("#inventoryList");
+  if(!list)return;
+  list.innerHTML=opsInventory.length?opsInventory.map(i=>{
+    const qty=Number(i.quantity)||0, min=Number(i.minQuantity)||0;
+    const isLow=qty<=min;
+    return `<div class="inventory-row ${isLow?"low":""}"><strong>${esc(i.name||"未命名備品")}</strong><span>庫存 ${qty} ${esc(i.unit||"")}</span><span>安全庫存 ${min} ${esc(i.unit||"")}</span><small>${isLow?"⚠ 低庫存":"庫存正常"}</small></div>`;
+  }).join(""):"<p class='muted'>尚未建立備品。</p>";
 }
 function renderOperations(){
   const formalBookings=opsBookings.filter(b=>!b.isTest),formalIds=new Set(formalBookings.map(b=>b.id));
