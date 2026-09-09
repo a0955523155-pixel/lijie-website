@@ -1001,6 +1001,24 @@ async function saveStockMovement(e){
 }
 
 function paidFor(id){return opsPayments.filter(x=>x.bookingId===id).reduce((s,x)=>s+(x.type==="refund"?-1:1)*(Number(x.amount)||0),0);}
+function serviceRequestNotice(b){
+  if(!b)return "";
+  const blocks=[];
+  if(b.cancellationRequestStatus==="pending"){
+    blocks.push(`<div class="ops-request-alert cancellation-request-alert"><strong>客戶已提出取消預約申請</strong><span>原因：${esc(b.cancellationRequestReason||"未填")}</span></div>`);
+  }
+  if(b.refundRequestStatus==="pending"){
+    blocks.push(`<div class="ops-request-alert refund-request-alert"><strong>客戶已提出退款申請</strong><span>原因：${esc(b.refundRequestReason||"未填")}</span></div>`);
+  }
+  if(b.status==="cancelled"){
+    const reason=b.cancellationReason||b.cancellationRequestReason||"未填";
+    const disposition=b.depositDispositionLabel||b.depositDisposition||"未記錄";
+    const note=b.cancellationDepositNote||"";
+    const refund=Number(b.cancellationRefundAmount||0);
+    blocks.push(`<div class="ops-request-alert cancelled-order-alert"><strong>此訂單已取消</strong><span>取消原因：${esc(reason)}</span><span>訂金處理：${esc(disposition)}${refund>0?`｜退款 ${twd(refund)}`:""}</span>${note?`<span>取消備註：${esc(note)}</span>`:""}</div>`);
+  }
+  return blocks.join("");
+}
 function setNearestArrivalFilter(){
   const input=$("#orderArrivalFilter"); if(!input)return;
   const today=new Date().toLocaleDateString("en-CA");
@@ -1055,11 +1073,12 @@ function syncPaymentBookingOptions(){
   if(rows.some(b=>b.id===current))sel.value=current; else if(rows.length===1)sel.value=rows[0].id;
 }
 function renderOperations(){
+  // 日曆優先渲染，避免單筆訂單資料異常時整個月曆一起消失。
+  renderArrivalCalendar();
   const formalBookings=opsBookings.filter(b=>!b.isTest),formalIds=new Set(formalBookings.map(b=>b.id));
   const confirmed=formalBookings.filter(b=>b.status==="confirmed");const received=opsPayments.filter(x=>!x.isTest&&(!x.bookingId||formalIds.has(x.bookingId))).reduce((s,x)=>s+(x.type==="refund"?-1:1)*(Number(x.amount)||0),0);const balance=confirmed.reduce((s,b)=>s+Math.max(0,(Number(b.totalAmount??b.quotedTotal)||0)-paidFor(b.id)),0);const expenses=opsExpenses.filter(x=>!x.isTest&&(!x.bookingId||formalIds.has(x.bookingId))).reduce((s,x)=>s+(Number(x.amount)||0),0);
   const displayOrders=filteredOrdersForDisplay(); const orders=$("#operationsOrders"); const filterDate=$("#orderArrivalFilter")?.value||""; if($("#orderFilterSummary"))$("#orderFilterSummary").textContent=orderArrivalMode==="all"?`顯示全部 ${opsBookings.length} 筆`:`入住日 ${filterDate||"—"}・${displayOrders.length} 筆`; orders.innerHTML=displayOrders.length?displayOrders.map(b=>{const paid=paidFor(b.id),total=Number(b.totalAmount??b.quotedTotal)||0,bal=Math.max(0,total-paid),fs=financeStatusFor(b,paid),cls=fs==="已結清"?"done":fs==="已取消"?"cancel":"warn";return `<article class="ops-order ${b.isTest?"test-order":""}"><div class="ops-order-head"><div><strong>${esc(b.guestName||"未填")}｜${esc(b.id)}${b.isTest?'<span class="test-badge">TEST</span>':''}</strong><div class="ops-order-meta"><span>${esc(b.startDate||"—")} → ${esc(b.endDate||"—")}</span><span>${Number(b.people)||"—"} 人</span><span>${esc(b.phone||"")}</span><span>${esc(b.email||"")}</span></div>${serviceRequestNotice(b)}${b.paymentReportStatus==="pending"?`<div class="ops-request-alert payment-report-alert"><strong>客戶已回報訂金｜待核帳</strong><span>付款人：${esc(b.paymentReportPayerName||"未填")}｜末五碼：${esc(b.paymentReportLast5||"—")}｜回報金額：${twd(b.paymentReportAmount||b.depositRequired||3000)}</span></div>`:""}</div><span class="status-pill ${cls}">${esc(b.status==="confirmed"?fs:b.status==="cancelled"?"已取消":"等待後台確認")}</span></div><div class="ops-order-money"><span>訂單總額<br><strong>${twd(total)}</strong></span><span>訂金<br><strong>${Number(b.depositRequired)>0?twd(b.depositRequired):"未設定"}</strong></span><span>已收<br><strong>${twd(paid)}</strong></span><span>未收<br><strong>${twd(bal)}</strong></span></div><div class="ops-order-actions"><button class="secondary" type="button" data-total="${esc(b.id)}">調整總額</button>${b.paymentReportStatus==="pending"&&paid<Number(b.depositRequired||3000)?`<button class="primary" type="button" data-verify-deposit="${esc(b.id)}">確認訂金入帳</button>`:""}${b.status==="pending"&&paid>=Number(b.depositRequired||3000)?`<button class="primary" type="button" data-confirm-booking="${esc(b.id)}">確認預約</button>`:""}${b.status!=="cancelled"?`<button class="danger" type="button" data-cancel="${esc(b.id)}">後台取消預約</button>`:""}</div></article>`}).join(""):`<p class='muted'>${orderArrivalMode==="all"?"目前沒有訂單。":"這個入住日目前沒有訂單。"}</p>`;
   orders.querySelectorAll("[data-total]").forEach(btn=>btn.addEventListener("click",()=>editOrderTotal(btn.dataset.total)));orders.querySelectorAll("[data-verify-deposit]").forEach(btn=>btn.addEventListener("click",()=>verifyReportedDeposit(btn.dataset.verifyDeposit)));orders.querySelectorAll("[data-confirm-booking]").forEach(btn=>btn.addEventListener("click",()=>confirmBookingInAdmin(btn.dataset.confirmBooking)));orders.querySelectorAll("[data-cancel]").forEach(btn=>btn.addEventListener("click",()=>cancelOrderById(btn.dataset.cancel)));
-  renderArrivalCalendar();
   syncPaymentBookingOptions();
 }
 async function syncBookingFinance(id){if(!id)return;const b=opsBookings.find(x=>x.id===id);if(!b)return;const paid=paidFor(id),total=Number(b.totalAmount??b.quotedTotal)||0;await setDoc(doc(db,"bookings",id),{paidAmount:paid,balanceAmount:Math.max(0,total-paid),financeStatus:financeStatusFor(b,paid),updatedAt:serverTimestamp()},{merge:true});}
