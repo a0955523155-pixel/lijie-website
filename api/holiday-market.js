@@ -3,6 +3,46 @@ const NTPC_CALENDAR_URL = 'https://data.ntpc.gov.tw/api/datasets/308dcd75-6434-4
 const PINGTUNG_FESTIVAL_URL = 'https://www.i-pingtung.com/ptfestival';
 
 let cache = { at: 0, holidays: [], pingtungAnnualOk: false };
+
+// 官方人事行政總處已公告之連續假期備援表。
+// 遠端開放資料來源若欄位格式改變或暫時失效，仍可正確套用旺季價。
+const OFFICIAL_LONG_WEEKENDS = {
+  2026: [
+    ['2026-02-14','2026-02-22','春節連假'],
+    ['2026-02-27','2026-03-01','228連假'],
+    ['2026-04-03','2026-04-06','清明連假'],
+    ['2026-05-01','2026-05-03','勞動節連假'],
+    ['2026-06-19','2026-06-21','端午連假'],
+    ['2026-09-25','2026-09-28','中秋連假'],
+    ['2026-10-09','2026-10-11','國慶連假'],
+    ['2026-10-24','2026-10-26','光復節連假'],
+    ['2026-12-25','2026-12-27','行憲紀念日連假'],
+  ],
+  2027: [
+    ['2027-01-01','2027-01-03','元旦連假'],
+    ['2027-02-04','2027-02-10','春節連假'],
+    ['2027-02-27','2027-03-01','228連假'],
+    ['2027-04-03','2027-04-06','清明連假'],
+    ['2027-04-30','2027-05-02','勞動節連假'],
+    ['2027-10-09','2027-10-11','國慶連假'],
+    ['2027-10-23','2027-10-25','光復節連假'],
+    ['2027-12-24','2027-12-26','行憲紀念日連假'],
+    ['2027-12-31','2028-01-02','元旦連假'],
+  ],
+};
+function addOfficialFallback(out,startKey,endKey){
+  const startYear=Number(startKey.slice(0,4)), endYear=Number(endKey.slice(0,4));
+  for(let year=startYear; year<=endYear; year++){
+    for(const [start,end,label] of OFFICIAL_LONG_WEEKENDS[year]||[]){
+      let d=new Date(`${start}T00:00:00Z`), last=new Date(`${end}T00:00:00Z`);
+      while(d<=last){
+        const k=dateKey(d);
+        if(k>=startKey&&k<=endKey&&!out.has(k)) out.set(k,{type:'holiday',label});
+        d=new Date(d.getTime()+DAY_MS);
+      }
+    }
+  }
+}
 const CACHE_MS = 6 * 60 * 60 * 1000;
 
 function dateKey(date) { return date.toISOString().slice(0,10); }
@@ -77,6 +117,7 @@ export async function autoSeasonMap(startKey,endKey,{government=true,kenting=tru
       for(const item of cluster){ const k=dateKey(item.date); if(k>=startKey&&k<=endKey) out.set(k,{type:'holiday',label}); }
     }
   }
+  if(government) addOfficialFallback(out,startKey,endKey);
   if(kenting){
     // 跨年固定旺季：12/31 與 1/1。
     const start=new Date(`${startKey}T00:00:00Z`), end=new Date(`${endKey}T00:00:00Z`);
