@@ -41,7 +41,7 @@ function addOfficialFallback(out,startKey,endKey){
       for(let holidayDay=new Date(firstHoliday); holidayDay<=lastHoliday; holidayDay=new Date(holidayDay.getTime()+DAY_MS)){
         const nightBefore=new Date(holidayDay.getTime()-DAY_MS);
         const k=dateKey(nightBefore);
-        if(k>=startKey&&k<=endKey&&!out.has(k)) out.set(k,{type:'holiday',label});
+        if(k>=startKey&&k<=endKey&&!out.has(k)) out.set(k,{type:'holiday',label,holidayDate:dateKey(holidayDay)});
       }
     }
   }
@@ -122,7 +122,7 @@ export async function autoSeasonMap(startKey,endKey,{government=true,kenting=tru
       for(const item of cluster){
         const nightBefore=new Date(item.date.getTime()-DAY_MS);
         const k=dateKey(nightBefore);
-        if(k>=startKey&&k<=endKey) out.set(k,{type:'holiday',label});
+        if(k>=startKey&&k<=endKey) out.set(k,{type:'holiday',label,holidayDate:dateKey(item.date)});
       }
     }
   }

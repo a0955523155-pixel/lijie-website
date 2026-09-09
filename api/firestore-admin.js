@@ -187,15 +187,24 @@ export async function quoteStay(ci,co){
     const special=specials.find(x=>x && inRange(day,String(x.startDate||''),String(x.endDate||'')) && Number(x.nightlyPrice)>0);
     if(special) return {date:day,label:String(special.label||'特殊假期'),price:Number(special.nightlyPrice),source:'manual-special'};
     const season=auto.get(day);
-    if(season?.type==='event' && eventPrice>0) return {date:day,label:season.label,price:eventPrice,source:'auto-event'};
-    if(season?.type==='holiday' && holidayPrice>0) return {date:day,label:season.label,price:holidayPrice,source:'auto-holiday'};
     const dow=new Date(`${day}T00:00:00Z`).getUTCDay();
+    if(season?.type==='event' && eventPrice>0) return {date:day,label:season.label,price:eventPrice,source:'auto-event'};
+
+    // 俐姐的家週日規則採「隔天週一是否放假」的明確判斷：
+    // 一般週日永遠 NT$10,000；只有該週日的下一天（週一）確實是政府放假日，
+    // 才允許 auto-holiday 覆蓋成政府連假價。這可避免週五～週日三天連假誤漲週日晚。
+    if(dow===0){
+      const monday=new Date(`${day}T00:00:00Z`); monday.setUTCDate(monday.getUTCDate()+1);
+      const mondayKey=monday.toISOString().slice(0,10);
+      if(season?.type==='holiday' && season.holidayDate===mondayKey && holidayPrice>0){
+        return {date:day,label:season.label,price:holidayPrice,source:'auto-holiday-monday-off'};
+      }
+      return {date:day,label:'週日',price:10000,source:'sunday-fixed-rule'};
+    }
+
+    if(season?.type==='holiday' && holidayPrice>0) return {date:day,label:season.label,price:holidayPrice,source:'auto-holiday'};
     if(dow===5) return {date:day,label:'週五',price:weekend,source:'weekend-rule'};
     if(dow===6) return {date:day,label:'週六',price:weekend,source:'weekend-rule'};
-    // 俐姐的家固定規則：一般週日晚為 NT$10,000。
-    // 若週一仍屬 3 天以上政府連假，autoSeasonMap 會先把週日標成連假夜，
-    // 因而在上方 auto-holiday 規則套用連假價。
-    if(dow===0) return {date:day,label:'週日',price:10000,source:'sunday-fixed-rule'};
     return {date:day,label:'平日',price:weekday,source:'weekday-rule'};
   });
   const total=details.reduce((sum,x)=>sum+Number(x.price||0),0);
