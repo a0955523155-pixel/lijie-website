@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 import { getBooking, putBooking, listBookingsByLineUser } from "./firestore-admin.js";
+import { gmailReady, sendMail, adminNotificationEmail, cancellationRequestMail, refundRequestMail } from "./gmail-mailer.js";
 
 function createBookingSession(userId, secret, ttlMs = 2 * 60 * 60 * 1000) {
   const payload = Buffer.from(JSON.stringify({ uid: userId, exp: Date.now() + ttlMs })).toString("base64url");
@@ -16,7 +17,8 @@ function bookingButtonMessage(url) {
     type: "template",
     altText: "俐姐的家｜開啟預約日曆",
     template: { type: "buttons", title: "俐姐的家｜住宿預約", text: "安全連線已建立，請開啟日曆選擇入住與退房日期。", actions: [
-      { type: "uri", label: "開啟預約日曆", uri: url }
+      { type: "uri", label: "開啟預約日曆", uri: url },
+      { type: "message", label: "取消預約", text: "取消預約" }
     ]}
   };
 }
@@ -263,7 +265,7 @@ function keywordReply(text = "") {
   if (!t) return null;
 
   // 取消類關鍵字必須優先於「預約」，避免「取消預約」被誤判成新預約。
-  if (/取消訂單|取消預約|取消訂房|我要取消|想取消|退訂|取消住宿/.test(t)) {
+  if (/取消訂單|取消預約|取消訂房|取消預定|取消預訂|我要取消|我想取消|想取消|退訂|取消住宿|不住了|行程取消/.test(t)) {
     return {
       text: [
         "【取消預約須知】",
@@ -280,6 +282,17 @@ function keywordReply(text = "") {
         "若忘記訂單編號，可先傳『查詢訂單』。"
       ].join("\n")
     };
+  }
+
+  if (/退款|退費|申請退款|我要退款|想退款/.test(t)) {
+    return { text: [
+      "【退款申請】",
+      "若您需要申請退款，請回覆：『退款 訂單編號＋原因』。",
+      "例如：退款 WABC1234，行程臨時取消。",
+      "",
+      "送出申請後，客戶與民宿管理者都會收到 Email 通知；實際退款金額與方式仍由民宿後台核對後處理。",
+      "若忘記訂單編號，可先傳『查詢訂單』。"
+    ].join("\n") };
   }
 
   if (/預約|空房|日曆|日期|訂房/.test(t)) {
@@ -337,6 +350,33 @@ function keywordReply(text = "") {
   return null;
 }
 
+function parseServiceRequest(text){
+  const raw=String(text||"").trim();
+  const refund=/^退款\s*/.test(raw)||/退款|退費/.test(raw);
+  const cancel=/取消預約|取消訂房|取消訂單|取消預定|取消預訂|我要取消|我想取消|退訂|取消住宿|不住了/.test(raw);
+  if(!refund&&!cancel)return null;
+  const idMatch=raw.match(/(?:TEST-)?[WB][A-Z0-9]{6,}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
+  if(!idMatch)return null;
+  const id=idMatch[0];
+  let reason=raw.replace(idMatch[0],"").replace(/退款|退費|申請退款|我要退款|想退款|取消預約|取消訂房|取消訂單|取消預定|取消預訂|我要取消|我想取消|退訂|取消住宿|不住了|行程取消/g," ").replace(/[，,：:｜|]/g," ").trim();
+  return {type:refund?"refund":"cancel",id,reason};
+}
+async function submitServiceRequest(reqInfo,uid){
+  const b=await getBooking(reqInfo.id); if(!b)throw new Error("BOOKING_NOT_FOUND");
+  if(b.lineUserId&&uid&&b.lineUserId!==uid)throw new Error("BOOKING_LINE_MISMATCH");
+  if(!b.lineUserId&&uid){b.lineUserId=uid;b.lineBoundAt=new Date().toISOString();}
+  if(!reqInfo.reason)throw new Error("REQUEST_REASON_REQUIRED");
+  const now=new Date().toISOString();
+  if(reqInfo.type==="cancel") Object.assign(b,{cancellationRequestStatus:"pending",cancellationRequestedAt:now,cancellationRequestReason:reqInfo.reason,cancellationRequestedBy:"customer",updatedAt:now});
+  else Object.assign(b,{refundRequestStatus:"pending",refundRequestedAt:now,refundRequestReason:reqInfo.reason,refundRequestedBy:"customer",updatedAt:now});
+  const save={...b};delete save.id;await putBooking(reqInfo.id,save);
+  if(gmailReady()){
+    const fn=reqInfo.type==="cancel"?cancellationRequestMail:refundRequestMail;
+    if(b.email){try{const m=fn({id:reqInfo.id,...b},reqInfo.reason,{admin:false});await sendMail({to:b.email,subject:m.subject,text:m.text,html:m.html});}catch(e){console.warn("customer service request email failed",e)}}
+    const adminTo=adminNotificationEmail(); if(adminTo){try{const m=fn({id:reqInfo.id,...b},reqInfo.reason,{admin:true});await sendMail({to:adminTo,subject:m.subject,text:m.text,html:m.html});}catch(e){console.warn("admin service request email failed",e)}}
+  }
+  return {id:reqInfo.id,...b};
+}
 async function replyLine(replyToken, messages, token) {
   const normalized = (Array.isArray(messages) ? messages : [messages]).map(message =>
     typeof message === "string" ? { type: "text", text: message } : message
@@ -389,6 +429,20 @@ export default async function handler(req, res) {
 
       const customerInput=String(event.message.text||"").trim();
       const uid=String(event.source?.userId||"").trim();
+
+      const serviceReq=parseServiceRequest(customerInput);
+      if(serviceReq){
+        try{
+          const saved=await submitServiceRequest(serviceReq,uid);
+          await replyLine(event.replyToken, serviceReq.type==="cancel"
+            ? `✅ 已收到取消預約申請。\n訂單：${saved.id}\n原因：${serviceReq.reason}\n\n目前訂單尚未正式取消、日期也尚未釋出。後續訂金保留或退款方式會由民宿後台確認。`
+            : `✅ 已收到退款申請。\n訂單：${saved.id}\n原因：${serviceReq.reason}\n\n退款尚未完成，實際退款金額與方式會由民宿後台核對後處理。`, token);
+        }catch(e){
+          const m=String(e?.message||e);
+          await replyLine(event.replyToken,m.includes("REQUEST_REASON_REQUIRED")?"請補上申請原因，例如：取消預約 WABC1234，行程臨時取消。":m.includes("BOOKING_NOT_FOUND")?"找不到這個訂單編號，請先傳『查詢訂單』確認。":m.includes("BOOKING_LINE_MISMATCH")?"這筆訂單已綁定其他 LINE 使用者，無法由目前帳號提出申請。":"目前無法送出申請，請稍後再試。",token);
+        }
+        continue;
+      }
 
       // 官網訂單可直接在官方 LINE 輸入訂單編號完成一次性綁定。
       if(looksLikeBookingId(customerInput)){

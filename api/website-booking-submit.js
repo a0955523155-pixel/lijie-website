@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import {putBooking,firestoreReady,quoteStay,getPublicPricingSettings} from "./firestore-admin.js";
-import {gmailReady,sendMail,receivedEmailText,adminNotificationEmail,newBookingAdminMail} from "./gmail-mailer.js";
+import {gmailReady,sendMail,receivedEmailText,receivedEmailHtml,adminNotificationEmail,newBookingAdminMail} from "./gmail-mailer.js";
 function c(v,m=500){return String(v??"").replace(/[\u0000-\u001F\u007F]/g," ").trim().slice(0,m)}
 function validDate(v){const s=c(v,10);return /^\d{4}-\d{2}-\d{2}$/.test(s)?s:null}
 function bid(){return`W${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(3).toString("hex").toUpperCase()}`}
@@ -36,7 +36,7 @@ export default async function handler(req,res){
     await putBooking(id,data);
     let emailSent=false,adminNotified=false;
     if(gmailReady()) {
-      try{await sendMail({to:email,subject:isTest?"俐姐的家｜【測試】已收到您的預約需求":"俐姐的家｜已收到您的預約需求",text:receivedEmailText(data)});emailSent=true}catch(e){console.warn("website booking customer email failed",String(e?.message||e))}
+      try{await sendMail({to:email,subject:isTest?"俐姐的家｜【測試】已收到您的預約需求":"俐姐的家｜已收到您的預約需求",text:receivedEmailText(data),html:receivedEmailHtml(data)});emailSent=true}catch(e){console.warn("website booking customer email failed",String(e?.message||e))}
       const adminTo=adminNotificationEmail();
       if(adminTo) try{const m=newBookingAdminMail(data);await sendMail({to:adminTo,subject:m.subject,text:m.text,html:m.html});adminNotified=true}catch(e){console.warn("website booking admin email failed",String(e?.message||e))}
     }
