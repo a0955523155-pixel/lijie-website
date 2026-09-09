@@ -11,19 +11,39 @@ function safeEqual(a,b){
   try { const x=Buffer.from(a); const y=Buffer.from(b); return x.length===y.length && crypto.timingSafeEqual(x,y); }
   catch { return false; }
 }
-function verifySession(token, secret){
-  if (!token || !secret) throw new Error("BOOKING_SESSION_REQUIRED");
+function verifySessionWithSecrets(token, secrets=[]){
+  if (!token) throw new Error("BOOKING_SESSION_REQUIRED");
   const parts=String(token).split(".");
   if(parts.length!==2) throw new Error("BOOKING_SESSION_INVALID");
   const [payloadPart,sig]=parts;
-  const expected=crypto.createHmac("sha256", secret).update(payloadPart).digest("base64url");
-  if(!safeEqual(sig,expected)) throw new Error("BOOKING_SESSION_INVALID");
+  const candidates=[...new Set(secrets.map(v=>String(v||"").trim()).filter(Boolean))];
+  if(!candidates.length) throw new Error("BOOKING_SESSION_REQUIRED");
+  const matched=candidates.some(secret=>{
+    const expected=crypto.createHmac("sha256", secret).update(payloadPart).digest("base64url");
+    return safeEqual(sig,expected);
+  });
+  if(!matched) throw new Error("BOOKING_SESSION_INVALID");
   let payload;
   try { payload=JSON.parse(Buffer.from(payloadPart,"base64url").toString("utf8")); }
   catch { throw new Error("BOOKING_SESSION_INVALID"); }
   if(!payload?.uid || !payload?.exp) throw new Error("BOOKING_SESSION_INVALID");
   if(Date.now()>Number(payload.exp)) throw new Error("BOOKING_SESSION_EXPIRED");
   return payload;
+}
+
+function resolveSession(req, explicit){
+  const cookieSession=parseCookies(req)[COOKIE_NAME] || "";
+  // LINE Login cookie is the preferred identity. This avoids an old ?session= query
+  // overriding a newer, valid login cookie after the user has authenticated.
+  if(cookieSession){
+    try { return {payload:verifyCookieSession(cookieSession), source:"line-login-cookie"}; }
+    catch(e){ console.warn("booking cookie session invalid", String(e?.message||e)); }
+  }
+  if(explicit){
+    const payload=verifySessionWithSecrets(explicit,[process.env.BOOKING_SESSION_SECRET,process.env.LINE_CHANNEL_SECRET]);
+    return {payload, source:"secure-link"};
+  }
+  throw new Error("BOOKING_SESSION_REQUIRED");
 }
 function parseDateKey(v){
   const s=clean(v,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
@@ -119,16 +139,15 @@ async function push(to,msgs,token){
 }
 export default async function handler(req,res){
   if(req.method!=="POST"){res.setHeader("Allow","POST");return res.status(405).json({ok:false,error:"Method Not Allowed"});}
-  const token=process.env.LINE_CHANNEL_ACCESS_TOKEN, secret=process.env.LINE_CHANNEL_SECRET;
-  if(!token||!secret) return res.status(500).json({ok:false,error:"LINE environment variables are not configured"});
+  const token=String(process.env.LINE_CHANNEL_ACCESS_TOKEN||"").trim();
   try{
     const body=typeof req.body==="string"?JSON.parse(req.body):(req.body||{});
     const explicit = clean(body.session,4000);
-    const cookieSession = parseCookies(req)[COOKIE_NAME] || "";
-    const session = explicit ? verifySession(explicit, secret) : verifyCookieSession(cookieSession);
+    const resolvedSession = resolveSession(req, explicit);
+    const session = resolvedSession.payload;
     const booking=normalizeBooking(body.booking);
     const id=bookingId();
-    console.log("booking-secure-submit",{userId:String(session.uid).slice(0,8)+"…",checkIn:booking.checkIn,checkOut:booking.checkOut,people:booking.people});
+    console.log("booking-secure-submit",{userId:String(session.uid).slice(0,8)+"…",sessionSource:resolvedSession.source,checkIn:booking.checkIn,checkOut:booking.checkOut,people:booking.people});
 
     // 先把預約寫進 Firestore。之後 LINE Push 就算暫時失敗，訂單也不會遺失。
     if(!firestoreReady()){
@@ -161,7 +180,7 @@ export default async function handler(req,res){
 
     // 先確保管理者一定收到管理卡。就算 LINE Login 取得的 userId 與
     // Messaging API 所屬 Provider 不一致，管理者仍可看到「確認／取消」按鈕。
-    if(notifyTo){
+    if(notifyTo && token){
       try{
         if(notifyTo===session.uid){
           await push(notifyTo,[...customerMessages,ownerFlex(booking,session.uid,id)],token);
@@ -177,10 +196,11 @@ export default async function handler(req,res){
         console.warn("owner notify failed",e);
       }
     }else{
-      console.warn("LINE_BOOKING_NOTIFY_TO not configured; owner card skipped");
+      if(!notifyTo) console.warn("LINE_BOOKING_NOTIFY_TO not configured; owner card skipped");
+      if(!token) console.warn("LINE_CHANNEL_ACCESS_TOKEN not configured; LINE push skipped");
     }
 
-    if(!customerDelivered){
+    if(!customerDelivered && token){
       try{
         await push(session.uid,customerMessages,token);
         customerDelivered=true;
@@ -201,6 +221,7 @@ export default async function handler(req,res){
       customerDelivered,
       ownerDelivered,
       warning: (!customerDelivered || !ownerDelivered) ? "LINE_NOTIFICATION_PARTIAL" : null,
+      sessionSource: resolvedSession.source,
       diagnostic: (!customerDelivered || !ownerDelivered)
         ? "預約已安全存入 Firestore。若管理通知未收到，請在官方 LINE 傳『待確認預約』；若要檢查 Push，請傳『管理者測試』。"
         : null

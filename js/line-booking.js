@@ -43,7 +43,8 @@ function readBookingSession(){
 }
 
 async function ensureLineIdentity(){
-  if (bookingSession) return true;
+  // Always check the server cookie first. A stale secure-link query must not mask a
+  // valid LINE Login session. The backend also uses the same preference order.
   try {
     const r = await fetch("/api/line-session", {cache:"no-store", credentials:"same-origin"});
     const data = await r.json().catch(()=>({}));
@@ -52,6 +53,12 @@ async function ensureLineIdentity(){
       return true;
     }
   } catch (e) { console.warn("LINE session check failed", e); }
+
+  // Old webhook-generated secure links are still accepted as a fallback.
+  if (bookingSession) {
+    els.mode.textContent = "官方 LINE 安全預約連線已建立";
+    return true;
+  }
 
   const p = new URLSearchParams(location.search);
   if (p.get("lineAuth") === "error") {
@@ -313,8 +320,10 @@ async function sendMessage(){
       els.status.textContent="這組預約連結已過期。請回官方 LINE 再點一次『立即預約』取得新連結。";
     } else if (reason.includes("FIRESTORE_SAVE_FAILED")) {
       els.status.textContent="預約尚未寫入資料庫，請稍後再試；若持續出現，請聯絡俐姐。";
+    } else if (reason.includes("BOOKING_SESSION_INVALID")) {
+      els.status.textContent="目前預約連線已更新，請重新整理此頁或重新從官網／官方 LINE 進入，已填資料會保留。";
     } else {
-      els.status.textContent=`送出未完成（${reason}）。請回官方 LINE 點『立即預約』重新取得安全連結。`;
+      els.status.textContent=`送出未完成（${reason}）。已填日期與資料仍會保留，請重新整理後再送一次。`;
     }
     saveDraft();
     setTimeout(refreshForm,1800);
