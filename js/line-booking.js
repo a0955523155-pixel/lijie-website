@@ -9,7 +9,8 @@ const els = {
   start: $("#startText"), end: $("#endText"), note: $("#selectionNote"), error: $("#dateError"),
   name: $("#guestName"), phone: $("#phone"), people: $("#people"), purpose: $("#purpose"), notes: $("#notes"),
   send: $("#sendBtn"), copy: $("#copyBtn"), status: $("#sendStatus"), summary: $("#summary"), mode: $("#lineModeText"),
-  checkInTime: $("#checkInTime"), checkOutTime: $("#checkOutTime"), stayRulesList: $("#stayRulesList")
+  checkInTime: $("#checkInTime"), checkOutTime: $("#checkOutTime"), stayRulesList: $("#stayRulesList"),
+  quickStart: $("#lineCheckIn"), quickEnd: $("#lineCheckOut"), quickGuests: $("#lineGuests"), quickApply: $("#lineApplySelection")
 };
 
 const today = new Date(); today.setHours(0,0,0,0);
@@ -189,7 +190,14 @@ async function pickDate(d){
 function hideError(){els.error.classList.add("hidden")}
 function showError(msg){els.error.textContent=msg;els.error.classList.remove("hidden")}
 function nightsCount(){if(!startDate||!endDate)return 0;return Math.round((endDate-startDate)/86400000)}
+function syncQuickSelector(){
+  const min=keyOf(today), max=keyOf(maxBookableDate());
+  if(els.quickStart){els.quickStart.min=min;els.quickStart.max=max;els.quickStart.value=startDate?keyOf(startDate):"";}
+  if(els.quickEnd){els.quickEnd.min=startDate?keyOf(new Date(startDate.getFullYear(),startDate.getMonth(),startDate.getDate()+1)):min;els.quickEnd.max=max;els.quickEnd.value=endDate?keyOf(endDate):"";}
+  if(els.quickGuests) els.quickGuests.value=els.people.value||"";
+}
 function updateSelection(){
+  syncQuickSelector();
   els.start.textContent=startDate?fmt.format(startDate):"請選擇";els.end.textContent=endDate?fmt.format(endDate):"請選擇";
   const price=currentQuote?.total?`｜預估 NT$ ${moneyFmt.format(currentQuote.total)}`:"";
   els.note.textContent=startDate&&!endDate?"已選開始日期，請再點結束日期。":startDate&&endDate?`入住 ${nightsCount()} 晚${price}；最終金額以俐姐確認為準。`:`先點入住日期，再點退房日期。日曆顯示每晚價格，開放未來 ${pricingSettings.bookingWindowMonths||6} 個月。`;
@@ -361,9 +369,33 @@ async function sendMessage(){
   }
 }
 
+async function applyLineQuickSelection(){
+  hideError();
+  const sKey=els.quickStart?.value||"", eKey=els.quickEnd?.value||"";
+  if(els.quickGuests?.value) els.people.value=els.quickGuests.value;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(sKey)){showError("請先選擇入住日期。");refreshForm();return;}
+  const sDate=parseKey(sKey);
+  if(sDate<today||isBeyondWindow(sDate)){showError(`入住日期需在未來 ${pricingSettings.bookingWindowMonths||6} 個月內。`);return;}
+  startDate=sDate; endDate=null; currentQuote=null; cursor=new Date(sDate.getFullYear(),sDate.getMonth(),1);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(eKey)){
+    const eDate=parseKey(eKey);
+    if(eDate<=sDate||isBeyondWindow(eDate)){showError("退房日期需晚於入住日期，且需在開放期間內。");updateSelection();await render();return;}
+    const lastNight=new Date(eDate); lastNight.setDate(lastNight.getDate()-1);
+    const [ok,quote]=await Promise.all([rangeIsAvailable(sDate,lastNight),quoteRange(sDate,eDate)]);
+    if(!ok){showError("住宿期間有已預約或暫停開放的日期，請重新選擇。");updateSelection();await render();return;}
+    endDate=eDate; currentQuote=quote;
+  }
+  updateSelection(); await render();
+  els.note.textContent=endDate?`已帶入 ${nightsCount()} 晚${currentQuote?.total?`｜預估 NT$ ${moneyFmt.format(currentQuote.total)}`:""}。`:`已帶入入住日期，請再選退房日期。`;
+}
+if(els.quickApply) els.quickApply.addEventListener("click",applyLineQuickSelection);
+if(els.quickGuests) els.quickGuests.addEventListener("change",()=>{els.people.value=els.quickGuests.value;refreshForm();saveDraft();});
+if(els.quickStart) els.quickStart.addEventListener("change",()=>{const k=els.quickStart.value;if(/^\d{4}-\d{2}-\d{2}$/.test(k)){const d=parseKey(k);cursor=new Date(d.getFullYear(),d.getMonth(),1);render();}});
+if(els.quickEnd) els.quickEnd.addEventListener("change",()=>{if(els.quickStart?.value) applyLineQuickSelection();});
+
 els.prev.addEventListener("click",()=>{if(els.prev.disabled)return;cursor=new Date(cursor.getFullYear(),cursor.getMonth()-1,1);render()});
 els.next.addEventListener("click",()=>{if(els.next.disabled)return;cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,1);render()});
-[els.name,els.phone,els.people,els.purpose,els.notes].forEach(e=>e.addEventListener("input",()=>{refreshForm();saveDraft();}));
+[els.name,els.phone,els.people,els.purpose,els.notes].forEach(e=>e.addEventListener("input",()=>{if(e===els.people&&els.quickGuests)els.quickGuests.value=els.people.value;refreshForm();saveDraft();}));
 els.copy.addEventListener("click", copyMessage);
 let submitInFlight = false;
 async function triggerSend(e){

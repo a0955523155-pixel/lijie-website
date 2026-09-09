@@ -35,7 +35,9 @@ function addOfficialFallback(out,startKey,endKey){
   for(let year=startYear; year<=endYear; year++){
     for(const [start,end,label] of OFFICIAL_LONG_WEEKENDS[year]||[]){
       let d=new Date(`${start}T00:00:00Z`), last=new Date(`${end}T00:00:00Z`);
-      while(d<=last){
+      // 住宿價格以「當晚」計價：連假的最後一天通常是退房／返程日，
+      // 最後一天晚上不再套連假價，避免週一假日夜仍被算成連假旺季。
+      while(d<last){
         const k=dateKey(d);
         if(k>=startKey&&k<=endKey&&!out.has(k)) out.set(k,{type:'holiday',label});
         d=new Date(d.getTime()+DAY_MS);
@@ -114,7 +116,9 @@ export async function autoSeasonMap(startKey,endKey,{government=true,kenting=tru
       // 一般週末不視為「連續假期」；至少三天才套連假價。
       if(cluster.length<3) continue;
       const label=holidayLabel(cluster);
-      for(const item of cluster){ const k=dateKey(item.date); if(k>=startKey&&k<=endKey) out.set(k,{type:'holiday',label}); }
+      // 連假「最後一天」本身仍是放假日，但住宿計價是當晚入住到隔日，
+      // 因此最後一天夜晚回到一般星期價格。
+      for(const item of cluster.slice(0,-1)){ const k=dateKey(item.date); if(k>=startKey&&k<=endKey) out.set(k,{type:'holiday',label}); }
     }
   }
   if(government) addOfficialFallback(out,startKey,endKey);
