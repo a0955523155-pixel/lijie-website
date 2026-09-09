@@ -38,12 +38,13 @@ function ownerBookingFlex(b){
   return {type:"flex",altText:`待確認預約 ${id}｜${b.startDate} → ${b.endDate}`,contents:{type:"bubble",size:"mega",
     header:{type:"box",layout:"vertical",backgroundColor:"#173A35",paddingAll:"18px",contents:[
       {type:"text",text:"LIJIE'S HOME",color:"#CDBD92",size:"xs",weight:"bold"},
-      {type:"text",text:"俐姐的家｜待確認預約",color:"#FFFFFF",weight:"bold",size:"lg"},
+      {type:"text",text:b.isTest?"俐姐的家｜TEST 測試預約":"俐姐的家｜待確認預約",color:"#FFFFFF",weight:"bold",size:"lg"},
       {type:"text",text:`編號 ${id}`,color:"#D7E4DF",size:"xs"}]},
     body:{type:"box",layout:"vertical",paddingAll:"18px",spacing:"sm",contents:[
       {type:"text",text:`${b.startDate} → ${b.endDate}`,weight:"bold",size:"xl",color:"#173A35",wrap:true},
       {type:"text",text:`${nights} 晚 · ${b.people?`${b.people} 人`:"人數未填"}`,size:"sm",color:"#7A8581"},
       ...(b.quotedTotal?[{type:"text",text:`系統試算｜NT$ ${Number(b.quotedTotal).toLocaleString("zh-TW")}`,size:"md",weight:"bold",color:"#8A6C2E",margin:"sm"}]:[]),
+      {type:"text",text:Number(b.depositRequired)>0?`訂金｜NT$ ${Number(b.depositRequired).toLocaleString("zh-TW")}　已收 NT$ ${Number(b.paidAmount||0).toLocaleString("zh-TW")}`:"訂金｜NT$ 3,000",size:"sm",weight:"bold",color:Number(b.depositRequired)>0&&Number(b.paidAmount||0)>=Number(b.depositRequired)?"#1C6B59":"#9A6A2A",wrap:true,margin:"sm"},
       {type:"separator",margin:"md",color:"#E5E0D6"},
       {type:"text",text:`姓名｜${b.guestName||"未填"}
 電話｜${b.phone||"未填"}
@@ -86,7 +87,7 @@ function customerStatusFlex(p,status,actionToken){
       {type:"separator",margin:"md",color:"#E5E0D6"},
       {type:"text",text:`預約編號｜${p.id}\n姓名｜${p.n||"未填"}`,size:"sm",wrap:true,color:"#394743",lineSpacing:"4px"},
       {type:"separator",margin:"md",color:"#E5E0D6"},
-      {type:"text",text:confirmed?"接下來請依官方 LINE 提供的訂金方式完成轉帳，完成後再回傳末五碼。":"本次日期已釋出；若想重新安排，歡迎再次開啟預約日曆。",size:"sm",wrap:true,color:"#394743"}]},
+      {type:"text",text:confirmed?"訂金已確認入帳，您的預約已正式成立。尾款與住宿細節請依官方 LINE 後續通知。":"本次日期已釋出；若想重新安排，歡迎再次開啟預約日曆。",size:"sm",wrap:true,color:"#394743"}]},
     footer:{type:"box",layout:"vertical",paddingAll:"16px",spacing:"sm",contents:[
       ...(confirmed&&calendarUrl?[{type:"button",style:"primary",color:"#153C36",height:"sm",action:{type:"uri",label:"加入行事曆",uri:calendarUrl}}]:[]),
       {type:"box",layout:"vertical",paddingAll:"11px",backgroundColor:confirmed?"#EAF4F0":"#F6ECEC",cornerRadius:"10px",contents:[
@@ -414,9 +415,17 @@ export default async function handler(req, res) {
           if(current.status === "confirmed" && action === "confirm"){
             await replyLine(event.replyToken,`這筆預約 ${payload.id} 已經確認過了。`,token); continue;
           }
+          const depositRequired=Number(current.depositRequired||0);
+          const paidAmount=Number(current.paidAmount||current.amountReceived||0);
+          if(!(depositRequired>0)){
+            await replyLine(event.replyToken,`這筆預約 ${payload.id} 尚未設定訂金金額。請先到後台設定訂金並登記收款，之後再回 LINE 按「確認預約」。`,token); continue;
+          }
+          if(paidAmount<depositRequired){
+            await replyLine(event.replyToken,`這筆預約尚未收足訂金，不能確認。\n訂金：NT$ ${depositRequired.toLocaleString("zh-TW")}\n目前已收：NT$ ${paidAmount.toLocaleString("zh-TW")}\n尚差：NT$ ${(depositRequired-paidAmount).toLocaleString("zh-TW")}\n\n請先到後台新增收款紀錄。`,token); continue;
+          }
           const nextStatus="confirmed";
           const updated=await setBookingStatus(payload.id,nextStatus);
-          const statusPayload={id:payload.id,uid:updated.lineUserId||"",ci:updated.startDate,co:updated.endDate,n:updated.guestName,total:updated.quotedTotal||null};
+          const statusPayload={id:payload.id,uid:updated.lineUserId||"",ci:updated.startDate,co:updated.endDate,n:updated.guestName,total:updated.quotedTotal||null,isTest:Boolean(updated.isTest)};
           let customerNotified=false, notifyError="";
           if(statusPayload.uid){
             try{
@@ -427,14 +436,14 @@ export default async function handler(req, res) {
           }
           let emailNotified=false;
           if(updated.email && gmailReady()){
-            try{ await sendMail({to:updated.email,subject:"俐姐的家｜您的預約已確認",text:confirmedEmailText(updated)}); emailNotified=true; }
+            try{ await sendMail({to:updated.email,subject:updated.isTest?"俐姐的家｜【測試】預約流程已完成":"俐姐的家｜您的預約已確認",text:confirmedEmailText(updated)}); emailNotified=true; }
             catch(e){ console.warn("confirmed email failed",e); }
           }
           const adminText=[
             `✅ 已確認預約 ${payload.id}`,
             `${updated.startDate} → ${updated.endDate}`,
             `客人：${updated.guestName||"未填"}`,
-            "官網日曆已鎖定。",
+            updated.isTest?"🧪 測試訂單：未鎖正式官網日期。":"官網日曆已鎖定。",
             updated.lineUserId ? (customerNotified ? "已通知客戶 LINE。" : "⚠️ 客戶 LINE Push 失敗，但預約已確認。") : "此筆為官網預約。",
             updated.email ? (emailNotified ? "已寄出確認 Email。" : "⚠️ 確認 Email 尚未寄出，請檢查 Gmail 設定。") : "客戶未填 Email。",
             "其餘取消、收款、支出與庫存請到後台操作。"

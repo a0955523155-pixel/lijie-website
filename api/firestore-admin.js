@@ -123,7 +123,8 @@ export async function setBookingStatus(id,status){
   if(status==="cancelled") updated.cancelledAt=nowIso();
   await putBooking(id,updated);
   const days=dateRangeNights(b.startDate,b.endDate);
-  if(status==="confirmed"){
+  if(status==="confirmed" && !b.isTest){
+    // 正式訂單才鎖住宿日期；測試訂單不影響官網可預約狀態。
     // 先檢查所有住宿晚數，避免確認新訂單時覆蓋另一筆已確認預約。
     for(const day of days){
       const existing=await authedFetch(`${base()}/availability/${day}`);
@@ -139,7 +140,7 @@ export async function setBookingStatus(id,status){
       if(!r.ok) throw new Error(`FIRESTORE_AVAILABILITY_SAVE_FAILED ${r.status} ${await r.text()}`);
     }
   }
-  if(status==="cancelled"){
+  if(status==="cancelled" && !b.isTest){
     for(const day of days){
       const url=`${base()}/availability/${day}`;
       const existing=await authedFetch(url);

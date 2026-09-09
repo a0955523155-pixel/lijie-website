@@ -69,7 +69,7 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
       allow update: if isAdmin();
-      allow delete: if false;
+      allow delete: if isAdmin() && resource.data.isTest == true;
     }
 
 
@@ -82,8 +82,8 @@ service cloud.firestore {
     }
 
     // 營運管理：收款／退款、支出、備品與進出庫僅管理員可存取。
-    match /paymentTransactions/{id} { allow read, create, update: if isAdmin(); allow delete: if false; }
-    match /expenseTransactions/{id} { allow read, create, update: if isAdmin(); allow delete: if false; }
+    match /paymentTransactions/{id} { allow read, create, update: if isAdmin(); allow delete: if isAdmin() && resource.data.isTest == true; }
+    match /expenseTransactions/{id} { allow read, create, update: if isAdmin(); allow delete: if isAdmin() && resource.data.isTest == true; }
     match /inventoryItems/{id} { allow read, create, update: if isAdmin(); allow delete: if false; }
     match /inventoryTransactions/{id} { allow read, create, update: if isAdmin(); allow delete: if false; }
 

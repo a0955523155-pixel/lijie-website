@@ -291,6 +291,9 @@ if (grid) {
   guestsSelect?.addEventListener("change",()=>{guests=guestsSelect.value;updateSelectionUI();});
   checkInInput?.addEventListener("change",()=>{const k=checkInInput.value;if(/^\d{4}-\d{2}-\d{2}$/.test(k)){const d=localDateFromKey(k);cursor=new Date(d.getFullYear(),d.getMonth(),1);render();}});
   checkOutInput?.addEventListener("change",()=>{if(checkInInput?.value) applyQuickSelection();});
+  const websiteTestMode=new URLSearchParams(location.search).get("test")==="1";
+  const testBanner=document.querySelector("#bookingTestBanner");
+  if(websiteTestMode) testBanner?.classList.add("show");
   const websiteBookingForm=document.querySelector("#websiteBookingForm");
   websiteBookingForm?.addEventListener("submit",async(e)=>{
     e.preventDefault();
@@ -303,9 +306,9 @@ if (grid) {
     if(!selectedQuote||selectedQuote.total==null){setMsg("價格明細尚未完成，請稍候或重新選擇日期。","error");return;}
     btn.disabled=true; setMsg("正在送出預約需求…");
     try{
-      const r=await fetch("/api/website-booking-submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({checkIn:keyOf(startDate),checkOut:keyOf(endDate),people:Number(guests||guestsSelect?.value)||1,name,phone,email,website:document.querySelector("#websiteTrap")?.value||""})});
+      const r=await fetch("/api/website-booking-submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({checkIn:keyOf(startDate),checkOut:keyOf(endDate),people:Number(guests||guestsSelect?.value)||1,name,phone,email,testMode:websiteTestMode,website:document.querySelector("#websiteTrap")?.value||""})});
       const data=await r.json().catch(()=>({})); if(!r.ok||!data.ok) throw new Error(data.error||`HTTP ${r.status}`);
-      setMsg(`已送出，預約編號 ${data.bookingId}。請查看 Email，等待俐姐於官方 LINE 確認。`,"success");
+      setMsg(`${data.isTest?"【測試】":""}已送出，預約編號 ${data.bookingId}。目前尚未成立。固定訂金 NT$3,000。請依付款資訊完成訂金：高雄市鳥松區農會／農分會代號 619-1089／戶名 吳俐潔 小姐／帳號 01089210623310。訂金入帳後，俐姐會在官方 LINE 正式確認。`,"success");
       btn.textContent="已送出預約需求";
     }catch(err){setMsg("送出失敗，請稍後再試或改用官方 LINE。","error");btn.disabled=false;}
   });

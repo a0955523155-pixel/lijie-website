@@ -104,7 +104,7 @@
             <div><p class="eyebrow">ACCOUNTING</p><h3>帳務與收款紀錄</h3><p class="muted">先從左側日曆點選已預約日期。官方 LINE 只負責確認預約；收款、匯款、退款與取消都在這裡管理。</p></div>
             <div class="finance-summary">
               <label>訂單總額<input id="financeTotal" type="number" min="0" step="100" placeholder="例如 20000"></label>
-              <label>訂金應收<input id="financeDepositRequired" type="number" min="0" step="100" placeholder="例如 5000"></label>
+              <label>固定訂金<input id="financeDepositRequired" type="number" value="3000" readonly></label>
               <div class="finance-stat"><span>累計已收</span><strong id="financeReceived">NT$ 0</strong></div>
               <div class="finance-stat"><span>尚未收款</span><strong id="financeBalance">NT$ 0</strong></div>
             </div>
@@ -124,7 +124,7 @@
       </section>
 
       <section id="operationsPanel" class="panel hidden">
-        <div class="panel-heading"><div><p class="eyebrow">OPERATIONS</p><h2>訂單・帳務・支出・備品</h2><p>官方 LINE 只負責確認預約；確認後的收款、退款、支出、取消與備品庫存都在這裡管理，並可綁定同一筆訂單。</p></div><button id="refreshOperations" class="secondary" type="button">重新整理</button></div>
+        <div class="panel-heading"><div><p class="eyebrow">OPERATIONS</p><h2>訂單・帳務・支出・備品</h2><p>官方 LINE 只負責確認預約；確認後的收款、退款、支出、取消與備品庫存都在這裡管理，並可綁定同一筆訂單。</p></div><button id="refreshOperations" class="secondary" type="button">重新整理</button></div><div class="ops-test-panel"><div><strong>🧪 測試模式</strong><p class="muted">用測試連結送出的訂單會標記 TEST、不鎖正式日期、不列入營運統計。可模擬 NT$3,000 訂金後從 LINE 按確認，完成後一鍵清除。</p></div><div class="ops-order-actions"><button id="openTestWebsite" class="secondary" type="button">開啟官網測試模式</button><button id="clearTestData" class="danger" type="button">清除全部測試資料</button></div><p id="testModeMessage" class="message"></p></div>
         <div class="ops-metrics"><article><span>已確認訂單</span><strong id="metricConfirmed">0</strong></article><article><span>累計已收</span><strong id="metricReceived">NT$ 0</strong></article><article><span>尚未收款</span><strong id="metricBalance">NT$ 0</strong></article><article><span>支出合計</span><strong id="metricExpenses">NT$ 0</strong></article></div>
         <div class="ops-section"><div class="ops-title"><h3>訂單進度</h3><p>收款後會自動更新「待收訂金／部分付款／已結清」。</p></div><div id="operationsOrders" class="ops-orders"></div></div>
         <form id="cancellationForm" class="ops-card hidden" style="margin-bottom:18px">

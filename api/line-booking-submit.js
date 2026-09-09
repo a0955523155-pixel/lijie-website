@@ -128,7 +128,7 @@ function messages(b){
         infoRow("備註",b.notes||"沒有"),
         {type:"separator",margin:"md",color:"#E5E0D6"},
         {type:"text",text:"🌿 入住提醒",weight:"bold",size:"md",color:"#153C36",margin:"sm"},
-        {type:"text",text:`訂金需先轉帳；尾款可轉帳或現金。\n整棟最多入住 ${BOOKING_RULES.maxGuests} 人。`,size:"sm",color:"#48534F",wrap:true,lineSpacing:"4px"},
+        {type:"text",text:`固定訂金 NT$${Number(BOOKING_RULES.payment.depositAmount||3000).toLocaleString("zh-TW")}，需先轉帳；尾款可轉帳或現金。\n整棟最多入住 ${BOOKING_RULES.maxGuests} 人。`,size:"sm",color:"#48534F",wrap:true,lineSpacing:"4px"},
         {type:"text",text:"此為預約申請，實際成立仍以俐姐於官方 LINE 最終確認為準。",size:"xs",color:"#8B938F",wrap:true}
       ]},
       footer:{type:"box",layout:"vertical",paddingAll:"16px",spacing:"sm",contents:[
@@ -138,7 +138,7 @@ function messages(b){
       ]}
     }
   };
-  const text={type:"text",text:["【俐姐的家｜預約申請】",`入住：${b.checkIn}`,`退房：${b.checkOut}（${b.nights} 晚）`,`姓名：${b.name}`,`電話：${b.phone||"未填"}`,`人數：${b.people?`${b.people} 人`:"未填"}`,`需求：${b.purpose||"未填"}`,`備註：${b.notes||"沒有"}`,...(b.quotedTotal?[`試算金額：NT$ ${Number(b.quotedTotal).toLocaleString("zh-TW")}`]:[]),"","預約資料已送達，請等待俐姐確認日期與訂金安排。"].join("\n")};
+  const text={type:"text",text:["【俐姐的家｜預約申請】",`入住：${b.checkIn}`,`退房：${b.checkOut}（${b.nights} 晚）`,`姓名：${b.name}`,`電話：${b.phone||"未填"}`,`人數：${b.people?`${b.people} 人`:"未填"}`,`需求：${b.purpose||"未填"}`,`備註：${b.notes||"沒有"}`,...(b.quotedTotal?[`試算金額：NT$ ${Number(b.quotedTotal).toLocaleString("zh-TW")}`]:[]),"",`預約資料已送達；固定訂金 NT$${Number(BOOKING_RULES.payment.depositAmount||3000).toLocaleString("zh-TW")}。訂金入帳且俐姐於官方 LINE 確認後，預約才正式成立。`].join("\n")};
   return [text,flex];
 }
 
@@ -189,7 +189,10 @@ export default async function handler(req,res){
       people:booking.people,
       purpose:booking.purpose,
       notes:booking.notes,
-      deposit:"待確認",
+      deposit:"NT$ 3,000",
+      depositRequired:3000,
+      paidAmount:0,
+      financeStatus:"待收訂金",
       status:"pending",
       lineUserId:String(session.uid),
       source:booking.source,
@@ -197,7 +200,7 @@ export default async function handler(req,res){
       totalAmount:booking.quotedTotal||0,
       paidAmount:0,
       balanceAmount:booking.quotedTotal||0,
-      financeStatus:"待確認",
+      financeStatus:"待收訂金",
       quoteBreakdown:booking.quoteBreakdown||[],
       pricingUpdatedAt:booking.pricingUpdatedAt||null,
       createdAt:now,
