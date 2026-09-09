@@ -98,6 +98,19 @@ export async function getBooking(id){
   const j=await r.json(); return { id, ...fromFields(j.fields||{}) };
 }
 
+export async function listBookingsByLineUser(lineUserId,limit=8){
+  const uid=String(lineUserId||"").trim();
+  if(!uid) return [];
+  const c=credentials(); if(!c) throw new Error("FIRESTORE_NOT_CONFIGURED");
+  const url=`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(c.project_id)}/databases/(default)/documents:runQuery`;
+  const query={ structuredQuery:{ from:[{collectionId:"bookings"}], where:{fieldFilter:{field:{fieldPath:"lineUserId"},op:"EQUAL",value:{stringValue:uid}}}, limit:Math.min(Math.max(Number(limit)||8,1),20) } };
+  const r=await authedFetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(query)});
+  if(!r.ok) throw new Error(`FIRESTORE_LINE_BOOKING_QUERY_FAILED ${r.status} ${await r.text()}`);
+  const rows=await r.json();
+  return rows.filter(x=>x.document).map(x=>({id:docIdFromName(x.document.name),...fromFields(x.document.fields||{})}))
+    .sort((a,b)=>String(b.startDate||b.createdAt||"").localeCompare(String(a.startDate||a.createdAt||""))).slice(0,limit);
+}
+
 export async function listPendingBookings(limit=4){
   const c=credentials(); if(!c) throw new Error("FIRESTORE_NOT_CONFIGURED");
   const url=`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(c.project_id)}/databases/(default)/documents:runQuery`;

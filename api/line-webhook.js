@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 import { lineConfig } from "../js/line-config.js";
-import { getBooking, listPendingBookings, setBookingStatus, firestoreDiagnostic, firestoreReady } from "./firestore-admin.js";
+import { getBooking, putBooking, listPendingBookings, listBookingsByLineUser, setBookingStatus, firestoreDiagnostic, firestoreReady } from "./firestore-admin.js";
 import { gmailReady, sendMail, confirmedEmailText } from "./gmail-mailer.js";
 
 function createBookingSession(userId, secret, ttlMs = 2 * 60 * 60 * 1000) {
@@ -21,6 +21,64 @@ function bookingButtonMessage(url) {
       { type: "uri", label: "開啟預約日曆", uri: url }
     ]}
   };
+}
+
+function lineMainMenuMessage(url){
+  return {
+    type:"template",
+    altText:"俐姐的家｜預約服務",
+    template:{type:"buttons",title:"俐姐的家｜預約服務",text:"可立即預約、查詢已綁定訂單或查看取消預約須知。",actions:[
+      {type:"uri",label:"立即預約",uri:url},
+      {type:"message",label:"查詢訂單",text:"查詢訂單"},
+      {type:"message",label:"取消預約",text:"取消預約"}
+    ]}
+  };
+}
+function bookingStatusLabel(status){
+  return ({pending:"預約申請／待訂金",confirmed:"預約已成立",cancelled:"已取消"})[String(status||"")]||String(status||"處理中");
+}
+function customerOrderFlex(b,{justBound=false}={}){
+  const total=Number(b.quotedTotal||b.totalAmount||0),deposit=Number(b.depositRequired||3000),paid=Number(b.paidAmount||b.amountReceived||0);
+  const remain=Math.max(0,total-paid);
+  const status=bookingStatusLabel(b.status);
+  return {type:"flex",altText:`俐姐的家｜訂單 ${b.id}`,contents:{type:"bubble",size:"mega",
+    header:{type:"box",layout:"vertical",backgroundColor:"#173A35",paddingAll:"20px",contents:[
+      {type:"text",text:"LIJIE'S HOME",color:"#CDBD92",size:"xs",weight:"bold"},
+      {type:"text",text:justBound?"LINE 訂單綁定完成":"我的預約訂單",color:"#FFFFFF",weight:"bold",size:"xl"},
+      {type:"text",text:`編號 ${b.id}`,color:"#D7E4DF",size:"xs",wrap:true}]},
+    body:{type:"box",layout:"vertical",paddingAll:"20px",spacing:"sm",contents:[
+      {type:"text",text:`${b.startDate||"—"} → ${b.endDate||"—"}`,weight:"bold",size:"xl",color:"#173A35",wrap:true},
+      {type:"text",text:`${b.people?`${b.people} 人｜`:""}${status}`,size:"sm",color:"#66736E",wrap:true},
+      {type:"separator",margin:"md",color:"#E7E1D7"},
+      {type:"text",text:`姓名｜${b.guestName||"未填"}
+電話｜${b.phone||"未填"}
+Email｜${b.email||"未填"}`,size:"sm",wrap:true,color:"#26332F",lineSpacing:"4px"},
+      ...(total>0?[{type:"text",text:`住宿總額｜NT$ ${total.toLocaleString("zh-TW")}
+固定訂金｜NT$ ${deposit.toLocaleString("zh-TW")}
+目前已收｜NT$ ${paid.toLocaleString("zh-TW")}
+尚餘｜NT$ ${remain.toLocaleString("zh-TW")}`,size:"sm",wrap:true,color:"#36534B",margin:"md",lineSpacing:"4px"}]:[]),
+      {type:"text",text:"此 LINE 帳號已與本訂單綁定；同一筆訂單無法再綁定其他 LINE 使用者。",size:"xs",wrap:true,color:"#7A8581",margin:"md"}]},
+    footer:{type:"box",layout:"vertical",paddingAll:"14px",spacing:"sm",contents:[
+      {type:"button",style:"secondary",height:"sm",action:{type:"message",label:"取消預約",text:`取消預約 ${b.id}`}}
+    ]}}};
+}
+function looksLikeBookingId(text){
+  const t=String(text||"").trim();
+  return /^(?:TEST-)?[WB][A-Z0-9]{6,}$/i.test(t)||/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(t);
+}
+async function bindBookingToLine(bookingId,userId){
+  const id=String(bookingId||"").trim();
+  const uid=String(userId||"").trim();
+  const b=await getBooking(id);
+  if(!b) throw new Error("BOOKING_NOT_FOUND");
+  if(b.lineUserId && b.lineUserId!==uid) throw new Error("BOOKING_ALREADY_BOUND");
+  if(!b.lineUserId){
+    const data={...b,lineUserId:uid,lineBoundAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    delete data.id;
+    await putBooking(id,data);
+    return {id,...data,justBound:true};
+  }
+  return {...b,justBound:false};
 }
 
 
@@ -282,17 +340,18 @@ function keywordReply(text = "") {
   if (/取消訂單|取消預約|取消訂房|我要取消|想取消|退訂|取消住宿/.test(t)) {
     return {
       text: [
-        "【取消預約申請】",
-        "可以的，請直接在這個聊天室回覆以下資料：",
+        "【取消預約須知】",
+        "如需取消，請先閱讀以下內容：",
         "",
-        "1. 預約姓名",
-        "2. 入住日期",
-        "3. 聯絡電話末 3 碼",
-        "4. 取消原因",
+        "1. 提出取消不代表訂單立即取消，須由俐姐核對訂單後才會正式處理。",
+        "2. 取消原因為必填，後台會永久保留取消原因與處理紀錄。",
+        "3. 若已支付訂金，訂金是否保留、部分退款或全額退款，會依該筆訂單約定與實際情況確認，不會由系統自動退款。",
+        "4. 正式取消完成後，原住宿日期才會重新釋出。",
         "",
-        "收到後會由俐姐核對訂單，再確認取消與訂金處理方式。",
-        "⚠️ 傳送此訊息不代表訂單已自動取消；請以官方 LINE 最後確認結果為準。",
-        "如已支付訂金，是否保留、退款或部分退款，會依該筆訂單約定與實際情況確認。"
+        "請回覆：『訂單編號＋取消原因』。",
+        "例如：BXXXXXXX，行程臨時取消。",
+        "",
+        "若忘記訂單編號，可先傳『查詢訂單』。"
       ].join("\n")
     };
   }
@@ -394,7 +453,7 @@ export default async function handler(req, res) {
       if (!event?.replyToken) continue;
 
       if (event.type === "follow") {
-        await replyLine(event.replyToken, [welcomeText(), bookingButtonMessage(bookingUrlFor(event.source?.userId, secret))], token);
+        await replyLine(event.replyToken, [welcomeText(), lineMainMenuMessage(bookingUrlFor(event.source?.userId, secret))], token);
         continue;
       }
 
@@ -518,6 +577,43 @@ export default async function handler(req, res) {
         continue;
       }
 
+      const customerInput=String(event.message.text||"").trim();
+      const uid=String(event.source?.userId||"").trim();
+
+      // 官網訂單可直接在官方 LINE 輸入訂單編號完成一次性綁定。
+      if(looksLikeBookingId(customerInput)){
+        try{
+          const bound=await bindBookingToLine(customerInput,uid);
+          await replyLine(event.replyToken,[
+            bound.justBound?`✅ 訂單 ${bound.id} 已綁定到目前這個 LINE 帳號。之後傳「查詢訂單」即可查看。`:`訂單 ${bound.id} 已經綁定目前這個 LINE 帳號。`,
+            customerOrderFlex(bound,{justBound:bound.justBound})
+          ],token);
+        }catch(e){
+          const m=String(e?.message||e);
+          await replyLine(event.replyToken,m.includes("BOOKING_ALREADY_BOUND")
+            ? "⚠️ 這筆訂單已綁定其他 LINE 使用者，為保護預約資料，無法重複綁定。若需要協助請直接留言給俐姐。"
+            : m.includes("BOOKING_NOT_FOUND")
+              ? "找不到這個訂單編號，請確認英文字母、數字與連字號是否完整。"
+              : "目前無法綁定訂單，請稍後再試。",token);
+        }
+        continue;
+      }
+
+      if(/^查詢訂單$/.test(customerInput.replace(/\s+/g,""))){
+        try{
+          const orders=await listBookingsByLineUser(uid,8);
+          if(!orders.length){
+            await replyLine(event.replyToken,"目前這個 LINE 帳號還沒有綁定訂單。\n\n若您是在電腦版官網完成預約，請直接在這裡輸入『預約編號』，系統會把該筆訂單同步到目前這個 LINE 帳號。\n\n一筆訂單最多只能綁定一位 LINE 使用者。",token);
+          }else{
+            await replyLine(event.replyToken,[{type:"text",text:`找到 ${orders.length} 筆已綁定訂單：`},...orders.slice(0,4).map(b=>customerOrderFlex(b))],token);
+          }
+        }catch(e){
+          console.error("customer order query failed",e);
+          await replyLine(event.replyToken,"目前無法查詢訂單，請稍後再試。",token);
+        }
+        continue;
+      }
+
       const booking = parseBooking(event.message.text);
       if (booking) {
         await replyLine(event.replyToken, bookingFlexReply(booking), token);
@@ -534,7 +630,7 @@ export default async function handler(req, res) {
 
       // 一般聊天不搶話，只做輕量接收提示；後續可由人工接手。
       await replyLine(event.replyToken,
-        "訊息已收到 😊\n若要查空房或預約，可傳『預約』，我會開啟入住／退房日期日曆；其他問題俐姐會再回覆您。",
+        "訊息已收到 😊\n可傳『立即預約』、『查詢訂單』或『取消預約』使用預約服務；其他問題俐姐會再回覆您。",
         token
       );
     }

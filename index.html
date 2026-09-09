@@ -38,6 +38,8 @@
 .booking-quick-select.people-only{grid-template-columns:minmax(180px,260px) 1fr;align-items:end}.booking-quick-select.people-only .quick-select-hint{margin:0;color:#788681;font-size:11px;line-height:1.7;align-self:center}.booking-quick-select.people-only label{grid-column:auto!important}.booking-quick-select.people-only select{font-size:16px}
 @media(max-width:680px){.booking-quick-select.people-only{grid-template-columns:1fr}.booking-quick-select.people-only .quick-select-hint{grid-column:1}.booking-quick-select.people-only label{grid-column:1!important;width:100%}}
 .calendar-day .night-price{display:none!important}
+
+.booking-submit-message.success{font-size:16px!important;line-height:1.85!important;padding:16px 18px!important;background:#eef6f2!important;border:1px solid #cfe2d9!important;border-radius:10px!important;color:#205e4e!important;font-weight:650!important}.booking-submit-message.error{font-size:14px!important;line-height:1.7!important;padding:12px 14px!important;background:#fff3f1!important;border:1px solid #efd4cf!important;border-radius:9px!important}.booking-bind-hint{display:block;margin-top:10px;font-size:13px;font-weight:500;color:#527168}@media(min-width:851px){.desktop-line-promo{display:none!important}}
 </style>
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"EventVenue","name":"俐姐的家","description":"位於墾丁後壁湖的庭園式私人團體活動場地，適合朋友與家庭相聚。","url":"https://www.5-1bbs.com/","image":"https://www.5-1bbs.com/images/villa-hero-1-new.jpg","telephone":"0800666738","openingHours":"Mo-Su 08:30-17:30","geo":{"@type":"GeoCoordinates","latitude":21.945560514053177,"longitude":120.73903972238396},"address":{"@type":"PostalAddress","addressLocality":"恆春鎮","addressRegion":"屏東縣","addressCountry":"TW"},"areaServed":["墾丁","後壁湖","恆春"],"maximumAttendeeCapacity":10,"inLanguage":"zh-Hant"}</script>
 
@@ -116,18 +118,18 @@
         <div class="booking-copy">
           <p class="eyebrow eyebrow-dark">AVAILABILITY</p>
           <h2 id="booking-title">把想來的日子，<br>先留給彼此。</h2>
-          <p>直接查看俐姐的家目前可安排日期。先選入住日，再選退房日；選好後即可前往官方 LINE 確認日期、人數與住宿需求。</p>
+          <p>直接查看俐姐的家目前可安排日期。先選入住日，再選退房日；確認住宿明細後即可直接從官網送出預約申請。</p>
           <div class="booking-legend" aria-label="日期狀態說明">
             <span><i class="legend-dot available"></i>可詢問</span>
             <span><i class="legend-dot booked"></i>已預約</span>
             <span><i class="legend-dot blocked"></i>暫停開放</span>
           </div>
-          <a class="booking-line" href="https://lin.ee/w28dW98A" rel="noopener noreferrer"><span class="line-mark">LINE</span> 加入官方 LINE 預約 <span>→</span></a>
+          <a class="booking-line desktop-line-promo" href="https://lin.ee/w28dW98A" rel="noopener noreferrer"><span class="line-mark">LINE</span> 加入官方 LINE <span>→</span></a>
         </div>
         <div class="calendar-card" aria-live="polite">
           <div class="booking-quick-select people-only" aria-label="入住人數">
             <label><span>入住人數</span><select id="websiteGuests"><option value="">請選擇</option><option value="1">1 人</option><option value="2">2 人</option><option value="3">3 人</option><option value="4">4 人</option><option value="5">5 人</option><option value="6">6 人</option><option value="7">7 人</option><option value="8">8 人</option><option value="9">9 人</option><option value="10">10 人</option><option value="11">11 人</option><option value="12">12 人</option></select></label>
-            <p class="quick-select-hint">日期直接從下方日曆選擇；選好後前往官方 LINE 時會自動帶入日期與人數。</p>
+            <p class="quick-select-hint">日期直接從下方日曆選擇；選好後會先顯示完整住宿明細，再從官網送出預約申請。</p>
           </div>
           <div class="calendar-toolbar">
             <button id="calendarPrev" class="calendar-nav" type="button" aria-label="上個月">←</button>
@@ -156,10 +158,10 @@
               <label>姓名<input id="websiteGuestName" type="text" maxlength="60" autocomplete="name" required></label>
               <label>電話<input id="websiteGuestPhone" type="tel" maxlength="40" autocomplete="tel"></label>
               <label class="wide">Email<input id="websiteGuestEmail" type="email" maxlength="120" autocomplete="email" required placeholder="預約通知與確認信會寄到這裡"></label>
-              <input id="websiteTrap" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">
+              <input id="websiteTrap" autocomplete="off" tabindex="-1" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">
               <button id="websiteBookingSubmit" type="submit">送出預約需求</button>
               <p id="websiteBookingMessage" class="booking-submit-message" aria-live="polite"></p>
-              <p class="booking-alt-line">也可以改從 <a id="selectedDateLine" href="https://www.5-1bbs.com/line-booking.html" rel="noopener noreferrer">官方 LINE 預約日曆</a> 送出。</p>
+              <p class="booking-alt-line desktop-line-promo">手機也可從 <a id="selectedDateLine" href="https://www.5-1bbs.com/line-booking.html" rel="noopener noreferrer">官方 LINE 預約日曆</a> 送出。</p>
             </form>
           </div>
         </div>

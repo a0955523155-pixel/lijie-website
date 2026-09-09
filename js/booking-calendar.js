@@ -306,9 +306,9 @@ if (grid) {
     if(!selectedQuote||selectedQuote.total==null){setMsg("價格明細尚未完成，請稍候或重新選擇日期。","error");return;}
     btn.disabled=true; setMsg("正在送出預約需求…");
     try{
-      const r=await fetch("/api/website-booking-submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({checkIn:keyOf(startDate),checkOut:keyOf(endDate),people:Number(guests||guestsSelect?.value)||1,name,phone,email,testMode:websiteTestMode,website:document.querySelector("#websiteTrap")?.value||""})});
-      const data=await r.json().catch(()=>({})); if(!r.ok||!data.ok) throw new Error(data.error||`HTTP ${r.status}`);
-      setMsg(`${data.isTest?"【測試】":""}已送出，預約編號 ${data.bookingId}。目前尚未成立。固定訂金 NT$3,000。請依付款資訊完成訂金：高雄市鳥松區農會／農分會代號 619-1089／戶名 吳俐潔 小姐／帳號 01089210623310。訂金入帳後，俐姐會在官方 LINE 正式確認。`,"success");
+      const r=await fetch("/api/website-booking-submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({checkIn:keyOf(startDate),checkOut:keyOf(endDate),people:Number(guests||guestsSelect?.value)||1,name,phone,email,testMode:websiteTestMode,companyUrlDoNotFill:document.querySelector("#websiteTrap")?.value||""})});
+      const data=await r.json().catch(()=>({})); if(!r.ok||!data.ok||!data.bookingId) throw new Error(data.error||"BOOKING_ID_MISSING");
+      setMsg(`${data.isTest?"【測試訂單】\n":""}預約申請已送出 ✓\n\n預約編號：${data.bookingId}\n目前狀態：等待訂金入帳\n固定訂金：NT$3,000\n\n付款資訊\n高雄市鳥松區農會\n農分會代號：619-1089\n戶名：吳俐潔 小姐\n帳號：01089210623310\n\n訂金確認入帳後，民宿才會正式確認預約。\n\n若想在官方 LINE 查詢這筆訂單，只要在官方 LINE 輸入預約編號「${data.bookingId}」即可綁定；一筆訂單最多綁定一位 LINE 使用者。`,"success");
       btn.textContent="已送出預約需求";
     }catch(err){setMsg("送出失敗，請稍後再試或改用官方 LINE。","error");btn.disabled=false;}
   });
