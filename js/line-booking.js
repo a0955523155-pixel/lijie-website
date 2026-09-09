@@ -296,10 +296,10 @@ async function sendMessage(){
     saveDraft();
     const result = await submitBookingToOfficialLine();
     clearDraft();
-    if(result?.warning === "CUSTOMER_LINE_PUSH_FAILED"){
-      els.status.textContent="預約已送達俐姐管理端 ✓ 管理者確認／取消按鈕已送出；目前客戶 LINE 身分無法由 Messaging API 直接回覆，請檢查 LINE Login 與 Messaging API 是否位於同一個 Provider。";
+    if(result?.warning){
+      els.status.textContent=`預約申請已送出 ✓ 編號 ${result.bookingId||""}。資料已安全保存；若 LINE 通知暫時沒有出現，俐姐可在官方 LINE 傳「待確認預約」查看並確認／取消。`;
     }else{
-      els.status.textContent="預約申請已送出 ✓ 請回官方 LINE 查看確認卡片。";
+      els.status.textContent=`預約申請已送出 ✓ 編號 ${result.bookingId||""}。請回官方 LINE 查看確認卡片。`;
     }
     els.send.textContent="已送出預約申請";
     els.send.disabled=true;
@@ -311,8 +311,8 @@ async function sendMessage(){
       els.status.textContent="這個頁面不是從官方 LINE 的安全預約入口開啟。請回官方 LINE，點圖文選單『立即預約』重新開始。";
     } else if (reason.includes("BOOKING_SESSION_EXPIRED")) {
       els.status.textContent="這組預約連結已過期。請回官方 LINE 再點一次『立即預約』取得新連結。";
-    } else if (reason.includes("LINE_PUSH_FAILED")) {
-      els.status.textContent="預約資料已送到系統，但 LINE 無法回覆這個帳號。請確認沒有封鎖俐姐的家官方 LINE，再重新送出。";
+    } else if (reason.includes("FIRESTORE_SAVE_FAILED")) {
+      els.status.textContent="預約尚未寫入資料庫，請稍後再試；若持續出現，請聯絡俐姐。";
     } else {
       els.status.textContent=`送出未完成（${reason}）。請回官方 LINE 點『立即預約』重新取得安全連結。`;
     }

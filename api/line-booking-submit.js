@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { COOKIE_NAME, parseCookies, verifyPayload as verifyCookieSession } from "./line-auth-lib.js";
 import { BOOKING_RULES } from "../js/booking-rules.js";
+import { putBooking, firestoreReady } from "./firestore-admin.js";
 
 function clean(value, max = 500) {
   return String(value ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, max);
@@ -128,6 +129,29 @@ export default async function handler(req,res){
     const booking=normalizeBooking(body.booking);
     const id=bookingId();
     console.log("booking-secure-submit",{userId:String(session.uid).slice(0,8)+"…",checkIn:booking.checkIn,checkOut:booking.checkOut,people:booking.people});
+
+    // 先把預約寫進 Firestore。之後 LINE Push 就算暫時失敗，訂單也不會遺失。
+    if(!firestoreReady()){
+      const e=new Error("FIRESTORE_NOT_CONFIGURED"); e.code="FIRESTORE_NOT_CONFIGURED"; throw e;
+    }
+    const now=new Date().toISOString();
+    await putBooking(id,{
+      startDate:booking.checkIn,
+      endDate:booking.checkOut,
+      guestName:booking.name,
+      phone:booking.phone,
+      people:booking.people,
+      purpose:booking.purpose,
+      notes:booking.notes,
+      deposit:"待確認",
+      status:"pending",
+      lineUserId:String(session.uid),
+      source:booking.source,
+      createdAt:now,
+      updatedAt:now
+    });
+    console.log("booking-firestore-saved",{bookingId:id});
+
     const notifyTo=String(process.env.LINE_BOOKING_NOTIFY_TO||"").trim();
     const customerMessages=messages(booking);
     let customerDelivered=false;
@@ -167,22 +191,26 @@ export default async function handler(req,res){
     }
 
     console.log("booking-secure-delivery",{bookingId:id,customerDelivered,ownerDelivered,checkIn:booking.checkIn,checkOut:booking.checkOut});
-    // 預約資料已進後端且管理者收到時，不把整筆預約判定為失敗。
-    // 前端可以提示「已送達管理端，但客戶 LINE 身分需檢查」。
-    if(ownerDelivered || customerDelivered){
-      return res.status(200).json({
-        ok:true,bookingId:id,customerDelivered,ownerDelivered,
-        warning: customerDelivered ? null : "CUSTOMER_LINE_PUSH_FAILED",
-        diagnostic: customerDelivered ? null : "LINE Login userId 與目前 Messaging API 無法互相傳訊，請確認兩個 Channel 在同一個 Provider 且 Access Token 屬於俐姐的家官方帳號。"
-      });
-    }
-    const err=new Error(`LINE_DELIVERY_FAILED customer=${customerError} owner=${ownerError}`);
-    err.code="LINE_PUSH_FAILED";
-    throw err;
+
+    // 只要 Firestore 已成功存檔，就回傳預約成功。
+    // LINE 主動 Push 是通知層，不再決定預約是否成立為「待確認」。
+    return res.status(200).json({
+      ok:true,
+      saved:true,
+      bookingId:id,
+      customerDelivered,
+      ownerDelivered,
+      warning: (!customerDelivered || !ownerDelivered) ? "LINE_NOTIFICATION_PARTIAL" : null,
+      diagnostic: (!customerDelivered || !ownerDelivered)
+        ? "預約已安全存入 Firestore。若管理通知未收到，請在官方 LINE 傳『待確認預約』；若要檢查 Push，請傳『管理者測試』。"
+        : null
+    });
   }catch(e){
     console.error("booking secure submit error",e);
     const code=String(e?.message||"UNKNOWN_ERROR");
-    if(e?.code==="LINE_PUSH_FAILED") return res.status(409).json({ok:false,code:"LINE_PUSH_FAILED",error:"Official LINE cannot message this user"});
+    if(e?.code==="FIRESTORE_NOT_CONFIGURED" || code.includes("FIRESTORE_")){
+      return res.status(503).json({ok:false,code:"FIRESTORE_SAVE_FAILED",error:"預約資料庫尚未完成伺服器設定，請確認 FIREBASE_SERVICE_ACCOUNT_JSON。"});
+    }
     const status=code.includes("SESSION")?401:400;
     return res.status(status).json({ok:false,code,error:code});
   }

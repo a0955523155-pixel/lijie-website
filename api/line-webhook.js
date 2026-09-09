@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 import { lineConfig } from "../js/line-config.js";
+import { getBooking, listPendingBookings, setBookingStatus, firestoreDiagnostic, firestoreReady } from "./firestore-admin.js";
 
 function createBookingSession(userId, secret, ttlMs = 2 * 60 * 60 * 1000) {
   const payload = Buffer.from(JSON.stringify({ uid: userId, exp: Date.now() + ttlMs })).toString("base64url");
@@ -23,6 +24,34 @@ function bookingButtonMessage(url) {
 
 
 function actionSecret(){ return process.env.BOOKING_SESSION_SECRET || process.env.LINE_CHANNEL_SECRET || ""; }
+function makeActionToken(payload){
+  const body=Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const sig=crypto.createHmac("sha256",actionSecret()).update(body).digest("base64url");
+  return `${body}.${sig}`;
+}
+function ownerBookingFlex(b){
+  const id=b.id;
+  const uid=b.lineUserId || "";
+  const token=makeActionToken({uid,id,ci:b.startDate,co:b.endDate,n:b.guestName,exp:Date.now()+7*24*60*60*1000});
+  const nights=Math.max(1,Math.round((new Date(`${b.endDate}T00:00:00Z`)-new Date(`${b.startDate}T00:00:00Z`))/86400000));
+  return {type:"flex",altText:`待確認預約 ${id}｜${b.startDate} → ${b.endDate}`,contents:{type:"bubble",size:"mega",
+    header:{type:"box",layout:"vertical",backgroundColor:"#173A35",paddingAll:"18px",contents:[
+      {type:"text",text:"LIJIE'S HOME",color:"#CDBD92",size:"xs",weight:"bold"},
+      {type:"text",text:"俐姐的家｜待確認預約",color:"#FFFFFF",weight:"bold",size:"lg"},
+      {type:"text",text:`編號 ${id}`,color:"#D7E4DF",size:"xs"}]},
+    body:{type:"box",layout:"vertical",paddingAll:"18px",spacing:"sm",contents:[
+      {type:"text",text:`${b.startDate} → ${b.endDate}`,weight:"bold",size:"xl",color:"#173A35",wrap:true},
+      {type:"text",text:`${nights} 晚 · ${b.people?`${b.people} 人`:"人數未填"}`,size:"sm",color:"#7A8581"},
+      {type:"separator",margin:"md",color:"#E5E0D6"},
+      {type:"text",text:`姓名｜${b.guestName||"未填"}
+電話｜${b.phone||"未填"}
+需求｜${b.purpose||"未填"}
+備註｜${b.notes||"沒有"}`,size:"sm",wrap:true,color:"#26332F",lineSpacing:"4px"}]},
+    footer:{type:"box",layout:"vertical",paddingAll:"14px",spacing:"sm",contents:[
+      {type:"button",style:"primary",color:"#173A35",action:{type:"postback",label:"確認預約",data:`booking_action=confirm&token=${encodeURIComponent(token)}`,displayText:`確認預約 ${id}`}},
+      {type:"button",style:"secondary",action:{type:"postback",label:"取消預約",data:`booking_action=cancel&token=${encodeURIComponent(token)}`,displayText:`取消預約 ${id}`}}
+    ]}}};
+}
 function verifyActionToken(token){
   const [body,sig,extra]=String(token||"").split(".");
   if(!body||!sig||extra) throw new Error("ACTION_TOKEN_INVALID");
@@ -321,7 +350,7 @@ export default async function handler(req, res) {
       }
 
       if (event.type === "postback") {
-        const ownerId=process.env.LINE_BOOKING_NOTIFY_TO || "";
+        const ownerId=String(process.env.LINE_BOOKING_NOTIFY_TO || "").trim();
         if(!ownerId || event.source?.userId !== ownerId){
           await replyLine(event.replyToken,"此操作僅限俐姐管理帳號使用。",token);
           continue;
@@ -331,14 +360,49 @@ export default async function handler(req, res) {
         if(action!=="confirm" && action!=="cancel") continue;
         try{
           const payload=verifyActionToken(q.get("token"));
-          await pushLine(payload.uid,customerStatusFlex(payload,action,q.get("token")),token);
+          if(!firestoreReady()) throw new Error("FIRESTORE_NOT_CONFIGURED");
+          const current=await getBooking(payload.id);
+          if(!current) throw new Error("BOOKING_NOT_FOUND");
+          if(current.status === "confirmed" && action === "confirm"){
+            await replyLine(event.replyToken,`這筆預約 ${payload.id} 已經確認過了。`,token); continue;
+          }
+          if(current.status === "cancelled" && action === "cancel"){
+            await replyLine(event.replyToken,`這筆預約 ${payload.id} 已經取消過了。`,token); continue;
+          }
+          const nextStatus=action==="confirm"?"confirmed":"cancelled";
+          const updated=await setBookingStatus(payload.id,nextStatus);
+          const statusPayload={id:payload.id,uid:updated.lineUserId||payload.uid,ci:updated.startDate,co:updated.endDate,n:updated.guestName};
+          let customerNotified=false, notifyError="";
+          if(statusPayload.uid){
+            try{
+              const calendarToken=makeActionToken({...statusPayload,exp:Date.now()+30*24*60*60*1000});
+              await pushLine(statusPayload.uid,customerStatusFlex(statusPayload,action,calendarToken),token);
+              customerNotified=true;
+            }catch(e){ notifyError=String(e?.message||e); console.warn("customer status push failed",e); }
+          }
           const adminText=action==="confirm"
-            ? `✅ 已確認預約 ${payload.id}\n${payload.ci} → ${payload.co}\n客人：${payload.n||"未填"}\n已通知客人。`
-            : `❌ 已取消預約 ${payload.id}\n${payload.ci} → ${payload.co}\n客人：${payload.n||"未填"}\n已通知客人。`;
+            ? [
+                `✅ 已確認預約 ${payload.id}`,
+                `${updated.startDate} → ${updated.endDate}`,
+                `客人：${updated.guestName||"未填"}`,
+                "官網日曆已鎖定。",
+                customerNotified ? "已通知客人。" : "⚠️ 客戶 LINE Push 失敗，但預約狀態已完成。"
+              ].join("\n")
+            : [
+                `❌ 已取消預約 ${payload.id}`,
+                `${updated.startDate} → ${updated.endDate}`,
+                `客人：${updated.guestName||"未填"}`,
+                "官網日曆日期已釋出。",
+                customerNotified ? "已通知客人。" : "⚠️ 客戶 LINE Push 失敗，但取消已完成。"
+              ].join("\n");
           await replyLine(event.replyToken,adminText,token);
+          if(notifyError) console.warn("booking action customer notify",{bookingId:payload.id,notifyError});
         }catch(e){
           console.error("booking action failed",e);
-          await replyLine(event.replyToken,"這個預約操作連結已失效，請以最新的預約通知卡操作。",token);
+          const msg=String(e?.message||e);
+          await replyLine(event.replyToken,msg.includes("FIRESTORE")
+            ? "預約資料庫尚未完成伺服器設定，請先設定 FIREBASE_SERVICE_ACCOUNT_JSON。"
+            : "這個預約操作無法完成，請傳『待確認預約』取得最新訂單卡片。",token);
         }
         continue;
       }
@@ -347,6 +411,55 @@ export default async function handler(req, res) {
 
       if (/^(管理者ID|我的LINEID|我的LINE ID)$/i.test(String(event.message.text||"").trim())) {
         await replyLine(event.replyToken, `你的 LINE userId：\n${event.source?.userId||"無法取得"}\n\n請把這個值放到 Vercel 的 LINE_BOOKING_NOTIFY_TO。`, token);
+        continue;
+      }
+
+      const adminTextInput=String(event.message.text||"").trim();
+      if (/^待確認預約$/.test(adminTextInput)) {
+        const ownerId=String(process.env.LINE_BOOKING_NOTIFY_TO||"").trim();
+        if(!ownerId || event.source?.userId!==ownerId){
+          await replyLine(event.replyToken,"此指令僅限俐姐管理帳號使用。",token); continue;
+        }
+        try{
+          const pending=await listPendingBookings(4);
+          if(!pending.length){ await replyLine(event.replyToken,"目前沒有待確認預約。",token); continue; }
+          const msgs=[{type:"text",text:`目前有 ${pending.length} 筆待確認預約。\n請直接在卡片下方按「確認預約」或「取消預約」。`},...pending.map(ownerBookingFlex)];
+          await replyLine(event.replyToken,msgs,token);
+        }catch(e){
+          console.error("pending bookings command failed",e);
+          await replyLine(event.replyToken,"目前無法讀取待確認預約，請確認 Firestore 伺服器憑證設定。",token);
+        }
+        continue;
+      }
+
+      if (/^管理者測試$/.test(adminTextInput)) {
+        const current=event.source?.userId||"";
+        const ownerId=String(process.env.LINE_BOOKING_NOTIFY_TO||"").trim();
+        const idMatch=Boolean(ownerId && current===ownerId);
+        let botOk=false, botInfo="", pushOk=false, pushError="";
+        try{
+          const r=await fetch("https://api.line.me/v2/bot/info",{headers:{Authorization:`Bearer ${token}`}});
+          botOk=r.ok;
+          const j=await r.json().catch(()=>({}));
+          botInfo=r.ok ? `${j.displayName||"未知官方帳號"} (${j.basicId||j.premiumId||"無ID"})` : `HTTP ${r.status}`;
+        }catch(e){ botInfo=String(e?.message||e); }
+        if(idMatch){
+          try{ await pushLine(current,"✅ 俐姐的家管理者 Push 測試成功。",token); pushOk=true; }
+          catch(e){ pushError=String(e?.message||e).slice(0,260); }
+        }
+        const db=await firestoreDiagnostic();
+        const lines=[
+          "【俐姐的家｜管理者測試】",
+          `管理者 ID：${idMatch?"✅ 符合":"❌ 不符合"}`,
+          `Messaging API Token：${botOk?"✅ 可用":"❌ 異常"}`,
+          `官方帳號：${botInfo}`,
+          `Push 測試：${idMatch?(pushOk?"✅ 成功":"❌ 失敗"):"未執行（ID 不符）"}`,
+          `Firestore：${db.ready?(db.readOk?"✅ 可讀取":"⚠️ 已設定但讀取失敗"):"❌ 尚未設定"}`,
+          db.projectId?`Firebase Project：${db.projectId}`:null,
+          pushError?`Push 錯誤：${pushError}`:null,
+          (!idMatch && ownerId)?`目前 userId：${current}\n設定的管理者：${ownerId}`:null
+        ].filter(Boolean);
+        await replyLine(event.replyToken,lines.join("\n"),token);
         continue;
       }
 
