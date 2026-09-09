@@ -22,11 +22,9 @@
 
     <div class="content">
       <section class="card" aria-labelledby="cal-title">
-        <div class="booking-quick-select" aria-label="快速選擇預約條件">
-          <label><span>入住日期</span><input id="lineCheckIn" type="date"></label>
-          <label><span>退房日期</span><input id="lineCheckOut" type="date"></label>
+        <div class="booking-quick-select people-only" aria-label="入住人數">
           <label><span>入住人數</span><select id="lineGuests"><option value="">請選擇</option><option value="1">1 人</option><option value="2">2 人</option><option value="3">3 人</option><option value="4">4 人</option><option value="5">5 人</option><option value="6">6 人</option><option value="7">7 人</option><option value="8">8 人</option><option value="9">9 人</option><option value="10">10 人</option><option value="11">11 人</option><option value="12">12 人</option></select></label>
-          <button id="lineApplySelection" type="button">套用到日曆</button>
+          <p class="quick-select-hint">日期請直接從下方日曆選擇；若由官網進入，已選日期與人數會自動帶入。</p>
         </div>
         <div class="toolbar">
           <button id="prev" class="nav" type="button" aria-label="上個月">←</button>

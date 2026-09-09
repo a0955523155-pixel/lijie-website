@@ -31,16 +31,17 @@ const OFFICIAL_LONG_WEEKENDS = {
   ],
 };
 function addOfficialFallback(out,startKey,endKey){
-  const startYear=Number(startKey.slice(0,4)), endYear=Number(endKey.slice(0,4));
+  const startYear=Number(startKey.slice(0,4))-1, endYear=Number(endKey.slice(0,4))+1;
   for(let year=startYear; year<=endYear; year++){
     for(const [start,end,label] of OFFICIAL_LONG_WEEKENDS[year]||[]){
-      let d=new Date(`${start}T00:00:00Z`), last=new Date(`${end}T00:00:00Z`);
-      // 住宿價格以「當晚」計價：連假的最後一天通常是退房／返程日，
-      // 最後一天晚上不再套連假價，避免週一假日夜仍被算成連假旺季。
-      while(d<last){
-        const k=dateKey(d);
+      const firstHoliday=new Date(`${start}T00:00:00Z`);
+      const lastHoliday=new Date(`${end}T00:00:00Z`);
+      // 民宿以「住宿夜」計價：隔天還放假，前一晚才屬於連假旺季。
+      // 因此連假 9/25~9/28，套價夜晚會是 9/24~9/27；9/28 晚回一般價。
+      for(let holidayDay=new Date(firstHoliday); holidayDay<=lastHoliday; holidayDay=new Date(holidayDay.getTime()+DAY_MS)){
+        const nightBefore=new Date(holidayDay.getTime()-DAY_MS);
+        const k=dateKey(nightBefore);
         if(k>=startKey&&k<=endKey&&!out.has(k)) out.set(k,{type:'holiday',label});
-        d=new Date(d.getTime()+DAY_MS);
       }
     }
   }
@@ -116,9 +117,13 @@ export async function autoSeasonMap(startKey,endKey,{government=true,kenting=tru
       // 一般週末不視為「連續假期」；至少三天才套連假價。
       if(cluster.length<3) continue;
       const label=holidayLabel(cluster);
-      // 連假「最後一天」本身仍是放假日，但住宿計價是當晚入住到隔日，
-      // 因此最後一天夜晚回到一般星期價格。
-      for(const item of cluster.slice(0,-1)){ const k=dateKey(item.date); if(k>=startKey&&k<=endKey) out.set(k,{type:'holiday',label}); }
+      // 民宿以住宿夜計價：只要「隔天仍是連假放假日」，今晚就套連假價。
+      // 也就是把整段連假日期各往前移一天；最後一個連假日晚上自然回一般價。
+      for(const item of cluster){
+        const nightBefore=new Date(item.date.getTime()-DAY_MS);
+        const k=dateKey(nightBefore);
+        if(k>=startKey&&k<=endKey) out.set(k,{type:'holiday',label});
+      }
     }
   }
   if(government) addOfficialFallback(out,startKey,endKey);
@@ -134,7 +139,7 @@ export async function autoSeasonMap(startKey,endKey,{government=true,kenting=tru
     if(pingtungAnnualOk && holidays.length){
       for(const cluster of clusterHolidayDates(holidays)){
         if(cluster.length<3 || cluster[0].date.getUTCMonth()!==3) continue;
-        for(const item of cluster){ const k=dateKey(item.date); if(k>=startKey&&k<=endKey) out.set(k,{type:'event',label:'台灣祭旺季'}); }
+        for(const item of cluster){ const nightBefore=new Date(item.date.getTime()-DAY_MS); const k=dateKey(nightBefore); if(k>=startKey&&k<=endKey) out.set(k,{type:'event',label:'台灣祭旺季'}); }
       }
     }
   }
