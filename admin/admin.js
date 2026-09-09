@@ -864,7 +864,8 @@ function bindEvents() {
   $("#refreshInventory")?.addEventListener("click",()=>loadInventoryManagement());
   $("#inventoryItemForm")?.addEventListener("submit",saveInventoryItem);
   $("#stockMovementForm")?.addEventListener("submit",saveStockMovement);
-  $("#generateFinanceReport")?.addEventListener("click",renderFinanceReport);
+  $("#reportStartDate")?.addEventListener("change",renderFinanceReport);
+  $("#reportEndDate")?.addEventListener("change",renderFinanceReport);
   $("#downloadFinanceCsv")?.addEventListener("click",downloadFinanceCsv);
   $("#printFinanceReport")?.addEventListener("click",()=>window.print());
   $("#downloadInventoryCsv")?.addEventListener("click",downloadInventoryCsv);
