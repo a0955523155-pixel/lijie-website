@@ -79,7 +79,9 @@ function ownerFlex(b, uid, id){
       {type:"text",text:`姓名｜${b.name}\n電話｜${b.phone||"未填"}\n人數｜${b.people?b.people+" 人":"未填"}\n需求｜${b.purpose||"未填"}\n備註｜${b.notes||"沒有"}`,size:"sm",wrap:true,color:"#26332F"}]},
     footer:{type:"box",layout:"vertical",paddingAll:"14px",spacing:"sm",contents:[
       {type:"button",style:"primary",color:"#173A35",action:{type:"postback",label:"確認預約",data:`booking_action=confirm&token=${encodeURIComponent(token)}`,displayText:`確認預約 ${id}`}},
-      {type:"button",style:"secondary",action:{type:"postback",label:"取消預約",data:`booking_action=cancel&token=${encodeURIComponent(token)}`,displayText:`取消預約 ${id}`}}]}}};
+      {type:"button",style:"secondary",action:{type:"postback",label:"取消預約",data:`booking_action=cancel&token=${encodeURIComponent(token)}`,displayText:`取消預約 ${id}`}},
+      {type:"button",style:"link",height:"sm",action:{type:"uri",label:"開啟後台日曆",uri:`https://www.5-1bbs.com/admin/?tab=calendar&booking=${encodeURIComponent(id)}&date=${encodeURIComponent(b.checkIn)}`}}
+    ]}}};
 }
 
 function messages(b){
@@ -133,21 +135,31 @@ function messages(b){
   return [text,flex];
 }
 
-async function push(to,msgs,token){
+async function push(to,msgs,token,meta={}){
+  const started=Date.now();
   const r=await fetch("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify({to,messages:msgs})});
-  if(!r.ok){ const t=await r.text(); const e=new Error(`LINE_PUSH_FAILED ${r.status} ${t}`); e.code="LINE_PUSH_FAILED"; throw e; }
+  const text=await r.text();
+  const diag={...meta,httpStatus:r.status,ok:r.ok,durationMs:Date.now()-started,response:text.slice(0,600),toPrefix:String(to||"").slice(0,10),messageTypes:(msgs||[]).map(m=>m?.type||typeof m)};
+  console.log(r.ok?"booking-push-success":"booking-push-error",diag);
+  if(!r.ok){ const e=new Error(`LINE_PUSH_FAILED ${r.status} ${text}`); e.code="LINE_PUSH_FAILED"; e.httpStatus=r.status; e.response=text; throw e; }
+  return diag;
 }
 export default async function handler(req,res){
   if(req.method!=="POST"){res.setHeader("Allow","POST");return res.status(405).json({ok:false,error:"Method Not Allowed"});}
   const token=String(process.env.LINE_CHANNEL_ACCESS_TOKEN||"").trim();
   try{
+    const requestId=String(req.headers["x-vercel-id"]||req.headers["x-request-id"]||crypto.randomUUID());
+    const diag=(stage,data={})=>console.log("booking-submit-diag",{requestId,stage,...data});
+    diag("START",{method:req.method,host:req.headers.host||"",hasCookie:Boolean(req.headers.cookie),hasToken:Boolean(token),hasNotifyTo:Boolean(String(process.env.LINE_BOOKING_NOTIFY_TO||"").trim()),firestoreReady:firestoreReady()});
     const body=typeof req.body==="string"?JSON.parse(req.body):(req.body||{});
     const explicit = clean(body.session,4000);
     const resolvedSession = resolveSession(req, explicit);
     const session = resolvedSession.payload;
     const booking=normalizeBooking(body.booking);
     const id=bookingId();
-    console.log("booking-secure-submit",{userId:String(session.uid).slice(0,8)+"…",sessionSource:resolvedSession.source,checkIn:booking.checkIn,checkOut:booking.checkOut,people:booking.people});
+    diag("AUTH_OK",{bookingId:id,userIdPrefix:String(session.uid).slice(0,10),sessionSource:resolvedSession.source});
+    diag("BOOKING_VALID",{bookingId:id,checkIn:booking.checkIn,checkOut:booking.checkOut,nights:booking.nights,people:booking.people,source:booking.source});
+    console.log("booking-secure-submit",{bookingId:id,userId:String(session.uid).slice(0,8)+"…",sessionSource:resolvedSession.source,checkIn:booking.checkIn,checkOut:booking.checkOut,people:booking.people});
 
     // 先把預約寫進 Firestore。之後 LINE Push 就算暫時失敗，訂單也不會遺失。
     if(!firestoreReady()){
@@ -170,6 +182,7 @@ export default async function handler(req,res){
       updatedAt:now
     });
     console.log("booking-firestore-saved",{bookingId:id});
+    diag("FIRESTORE_SAVED",{bookingId:id});
 
     const notifyTo=String(process.env.LINE_BOOKING_NOTIFY_TO||"").trim();
     const customerMessages=messages(booking);
@@ -178,21 +191,20 @@ export default async function handler(req,res){
     let customerError="";
     let ownerError="";
 
-    // 先確保管理者一定收到管理卡。就算 LINE Login 取得的 userId 與
-    // Messaging API 所屬 Provider 不一致，管理者仍可看到「確認／取消」按鈕。
+    // 管理卡與客戶卡「永遠分開 Push」。
+    // 管理者自己測試時 userId 可能與客戶相同；舊版把兩種卡合併成同一個 Push，
+    // 只要客戶 Flex 有任何格式問題，整包會被 LINE 拒絕，連管理卡也一起消失。
+    // V6.38 起先單獨送管理卡，確保確認／取消按鈕不被客戶訊息拖累。
+    diag("OWNER_PUSH_PRECHECK",{bookingId:id,notifyConfigured:Boolean(notifyTo),tokenConfigured:Boolean(token),sameAsCustomer:Boolean(notifyTo && notifyTo===session.uid)});
     if(notifyTo && token){
       try{
-        if(notifyTo===session.uid){
-          await push(notifyTo,[...customerMessages,ownerFlex(booking,session.uid,id)],token);
-          customerDelivered=true;
-          ownerDelivered=true;
-          console.log("booking-owner-self-test",{bookingId:id});
-        }else{
-          await push(notifyTo,[ownerFlex(booking,session.uid,id)],token);
-          ownerDelivered=true;
-        }
+        diag("OWNER_PUSH_START",{bookingId:id});
+        await push(notifyTo,[ownerFlex(booking,session.uid,id)],token,{requestId,stage:"OWNER",bookingId:id});
+        ownerDelivered=true;
+        diag("OWNER_PUSH_SUCCESS",{bookingId:id});
       }catch(e){
         ownerError=String(e?.message||e);
+        diag("OWNER_PUSH_ERROR",{bookingId:id,error:ownerError.slice(0,800),httpStatus:e?.httpStatus||null});
         console.warn("owner notify failed",e);
       }
     }else{
@@ -200,17 +212,21 @@ export default async function handler(req,res){
       if(!token) console.warn("LINE_CHANNEL_ACCESS_TOKEN not configured; LINE push skipped");
     }
 
-    if(!customerDelivered && token){
+    if(token){
       try{
-        await push(session.uid,customerMessages,token);
+        diag("CUSTOMER_PUSH_START",{bookingId:id,userIdPrefix:String(session.uid).slice(0,10)});
+        await push(session.uid,customerMessages,token,{requestId,stage:"CUSTOMER",bookingId:id});
         customerDelivered=true;
+        diag("CUSTOMER_PUSH_SUCCESS",{bookingId:id});
       }catch(e){
         customerError=String(e?.message||e);
+        diag("CUSTOMER_PUSH_ERROR",{bookingId:id,error:customerError.slice(0,800),httpStatus:e?.httpStatus||null});
         console.warn("customer push failed",e);
       }
     }
 
     console.log("booking-secure-delivery",{bookingId:id,customerDelivered,ownerDelivered,checkIn:booking.checkIn,checkOut:booking.checkOut});
+    diag("COMPLETE",{bookingId:id,customerDelivered,ownerDelivered,ownerError:ownerError.slice(0,300),customerError:customerError.slice(0,300)});
 
     // 只要 Firestore 已成功存檔，就回傳預約成功。
     // LINE 主動 Push 是通知層，不再決定預約是否成立為「待確認」。
@@ -223,8 +239,9 @@ export default async function handler(req,res){
       warning: (!customerDelivered || !ownerDelivered) ? "LINE_NOTIFICATION_PARTIAL" : null,
       sessionSource: resolvedSession.source,
       diagnostic: (!customerDelivered || !ownerDelivered)
-        ? "預約已安全存入 Firestore。若管理通知未收到，請在官方 LINE 傳『待確認預約』；若要檢查 Push，請傳『管理者測試』。"
-        : null
+        ? "預約已安全存入 Firestore；LINE 通知有部分失敗。請到 Vercel Logs 搜尋 booking-submit-diag 與此 bookingId。"
+        : null,
+      delivery:{ownerDelivered,customerDelivered,ownerError:ownerError?ownerError.slice(0,240):null,customerError:customerError?customerError.slice(0,240):null}
     });
   }catch(e){
     console.error("booking secure submit error",e);

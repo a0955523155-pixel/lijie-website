@@ -656,6 +656,20 @@ async function cancelSelectedBooking() {
   }
 }
 
+
+function applyAdminDeepLink() {
+  const params = new URLSearchParams(location.search);
+  if (params.get("tab") !== "calendar") return;
+  const calendarTab = document.querySelector('.tab[data-tab="calendar"]');
+  if (calendarTab) calendarTab.click();
+  const date = params.get("date");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date || "")) {
+    adminSelectedDate = date;
+    const d = localDateFromKey(date);
+    adminCalendarCursor = new Date(d.getFullYear(), d.getMonth(), 1);
+    renderAdminCalendar().catch((e)=>message("#bookingMessage",e.message,"error"));
+  }
+}
 function bindEvents() {
   $("#loginForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -747,6 +761,7 @@ async function init() {
   storage = getStorage(app);
   await setPersistence(auth, browserSessionPersistence);
   bindEvents();
+  applyAdminDeepLink();
   let handledUid = "";
   onAuthStateChanged(auth, async (user) => {
     if (!user) { handledUid = ""; return; }
