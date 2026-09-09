@@ -32,3 +32,9 @@
 @media(max-width:700px){.arrival-day{min-height:65px;padding:5px}.arrival-day-note{font-size:10px}.arrival-calendar{padding:10px}.arrival-calendar-grid,.arrival-weekdays{gap:3px}}
 
 .ops-request-alert{margin-top:10px;padding:10px 12px;border-radius:10px;background:#fff3d8;border:1px solid #ead29a;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px}.ops-request-alert strong{color:#7b5400}.ops-request-alert span{color:#5f5b50}
+
+/* V6.78 住宿區間顯示 */
+.arrival-day.is-stay-night{background:#eef8f4;border-color:#2f7f6f;box-shadow:inset 0 0 0 1px rgba(47,127,111,.16)}
+.arrival-day.is-stay-night .arrival-day-num{font-weight:800;color:#17483f}
+.arrival-day.is-departure{border-style:dashed}
+.arrival-day.is-departure .arrival-day-note::after{content:" · 退房";font-weight:700}

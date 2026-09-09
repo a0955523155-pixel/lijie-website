@@ -987,17 +987,25 @@ function filteredOrdersForDisplay(){
   return date?opsBookings.filter(b=>b.startDate===date):[];
 }
 function ymdLocal(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${day}`;}
+function bookingOccupiesNight(b,date){
+  return b.status!=="cancelled" && b.startDate && b.endDate && date>=b.startDate && date<b.endDate;
+}
 function bookingDaySummary(date){
-  const rows=opsBookings.filter(b=>b.startDate===date && b.status!=="cancelled");
-  if(!rows.length)return {count:0,text:"無入住",cls:""};
-  const confirmed=rows.filter(b=>b.status==="confirmed").length;
-  const pending=rows.filter(b=>b.status==="pending").length;
-  const depositReady=rows.filter(b=>b.status==="pending"&&paidFor(b.id)>=Number(b.depositRequired||3000)).length;
-  let text=`${rows.length} 筆入住`;
-  if(confirmed)text+=`｜${confirmed} 已確認`;
-  if(depositReady)text+=`｜${depositReady} 待確認`;
-  else if(pending)text+=`｜${pending} 待訂金`;
-  return {count:rows.length,text,cls:confirmed&&confirmed===rows.length?"done":"warn"};
+  const stayRows=opsBookings.filter(b=>bookingOccupiesNight(b,date));
+  const arrivals=opsBookings.filter(b=>b.status!=="cancelled"&&b.startDate===date);
+  const departures=opsBookings.filter(b=>b.status!=="cancelled"&&b.endDate===date);
+  if(!stayRows.length&&!arrivals.length&&!departures.length)return {count:0,text:"無住宿",cls:"",stay:false,departure:false};
+  const confirmed=stayRows.filter(b=>b.status==="confirmed").length;
+  const pending=stayRows.filter(b=>b.status==="pending").length;
+  const depositReady=stayRows.filter(b=>b.status==="pending"&&paidFor(b.id)>=Number(b.depositRequired||3000)).length;
+  let parts=[];
+  if(stayRows.length) parts.push(`${stayRows.length} 筆住宿`);
+  if(arrivals.length) parts.push(`${arrivals.length} 入住`);
+  if(departures.length) parts.push(`${departures.length} 退房`);
+  if(confirmed)parts.push(`${confirmed} 已確認`);
+  if(depositReady)parts.push(`${depositReady} 待確認`);
+  else if(pending)parts.push(`${pending} 待訂金`);
+  return {count:stayRows.length||arrivals.length||departures.length,text:parts.join("｜"),cls:confirmed&&confirmed===stayRows.length&&stayRows.length?"done":"warn",stay:stayRows.length>0,departure:departures.length>0};
 }
 function renderArrivalCalendar(){
   const grid=$("#arrivalCalendarGrid"),label=$("#arrivalMonthLabel"); if(!grid||!label)return;
@@ -1006,7 +1014,7 @@ function renderArrivalCalendar(){
   const cells=[]; for(let i=0;i<first.getDay();i++)cells.push('<button class="arrival-day is-empty" type="button" tabindex="-1"></button>');
   for(let d=1;d<=days;d++){
     const dt=new Date(y,m,d),date=ymdLocal(dt),sum=bookingDaySummary(date);
-    const cls=["arrival-day",sum.count?"has-orders":"",date===selected?"is-selected":"",date===today?"is-today":""].filter(Boolean).join(" ");
+    const cls=["arrival-day",sum.count?"has-orders":"",sum.stay?"is-stay-night":"",sum.departure?"is-departure":"",date===selected?"is-selected":"",date===today?"is-today":""].filter(Boolean).join(" ");
     cells.push(`<button class="${cls}" type="button" data-arrival-date="${date}"><span class="arrival-day-num">${d}</span><span class="arrival-day-note ${sum.cls}">${esc(sum.text)}</span></button>`);
   }
   grid.innerHTML=cells.join("");

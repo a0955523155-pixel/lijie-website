@@ -211,19 +211,10 @@ export async function quoteStay(ci,co){
     const dow=new Date(`${day}T00:00:00Z`).getUTCDay();
     if(season?.type==='event' && eventPrice>0) return {date:day,label:season.label,price:eventPrice,source:'auto-event'};
 
-    // 俐姐的家週日規則採「隔天週一是否放假」的明確判斷：
-    // 一般週日永遠 NT$10,000；只有該週日的下一天（週一）確實是政府放假日，
-    // 才允許 auto-holiday 覆蓋成政府連假價。這可避免週五～週日三天連假誤漲週日晚。
-    if(dow===0){
-      const monday=new Date(`${day}T00:00:00Z`); monday.setUTCDate(monday.getUTCDate()+1);
-      const mondayKey=monday.toISOString().slice(0,10);
-      if(season?.type==='holiday' && season.holidayDate===mondayKey && holidayPrice>0){
-        return {date:day,label:season.label,price:holidayPrice,source:'auto-holiday-monday-off'};
-      }
-      return {date:day,label:'週日',price:10000,source:'sunday-fixed-rule'};
-    }
-
-    if(season?.type==='holiday' && holidayPrice>0) return {date:day,label:season.label,price:holidayPrice,source:'auto-holiday'};
+    // 住宿夜價格規則：週日～週四為平日價；週五、週六為週末價。
+    // 連續假期採「隔天是否為連假放假日」判斷，因此會自然把整段連假往前一晚套價：
+    // 例如連假週五開始，週四晚即為連假價；若連假延續到週一，週日晚亦為連假價。
+    if(season?.type==='holiday' && holidayPrice>0) return {date:day,label:season.label,price:holidayPrice,source:'auto-holiday-night-before'};
     if(dow===5) return {date:day,label:'週五',price:weekend,source:'weekend-rule'};
     if(dow===6) return {date:day,label:'週六',price:weekend,source:'weekend-rule'};
     return {date:day,label:'平日',price:weekday,source:'weekday-rule'};
