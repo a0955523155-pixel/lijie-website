@@ -1,244 +1,220 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="robots" content="noindex, nofollow">
-  <meta name="referrer" content="no-referrer">
-  <meta name="theme-color" content="#102d29">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: https://firebasestorage.googleapis.com https://*.googleusercontent.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://www.gstatic.com; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebasestorage.googleapis.com wss://*.googleapis.com wss://*.firebaseio.com; frame-src 'self' https://*.firebaseapp.com https://*.web.app; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
-  <title>俐姐的家｜網站管理</title>
-  <link rel="stylesheet" href="/admin/admin.css">
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="noindex, nofollow" name="robots"/>
+<meta content="no-referrer" name="referrer"/>
+<meta content="#102d29" name="theme-color"/>
+<meta content="default-src 'self'; img-src 'self' data: blob: https://firebasestorage.googleapis.com https://*.googleusercontent.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://www.gstatic.com; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebasestorage.googleapis.com wss://*.googleapis.com wss://*.firebaseio.com; frame-src 'self' https://*.firebaseapp.com https://*.web.app; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" http-equiv="Content-Security-Policy"/>
+<title>俐姐的家｜網站管理</title>
+<link href="/admin/admin.css" rel="stylesheet"/>
 </head>
 <body>
-  <main class="shell">
-    <section id="configNotice" class="notice hidden" role="alert">
+<main class="shell">
+<section class="notice hidden" id="configNotice" role="alert">
       尚未連接 Firebase。請確認 js/config.js 的 Firebase Web 設定，以及 Firebase Authentication、Firestore 與 Storage 已啟用。
     </section>
+<section class="login-card" id="loginView">
+<div aria-hidden="true" class="brand-mark">俐</div>
+<p class="eyebrow">LIJIE'S HOME</p>
+<h1>網站管理後台</h1>
+<p class="muted">使用已授權的管理信箱登入。</p>
+<form id="loginForm">
+<label>管理信箱<input autocomplete="username" id="email" name="email" required="" type="email"/></label>
+<label>密碼<input autocomplete="current-password" id="password" minlength="10" name="password" required="" type="password"/></label>
+<button class="primary" type="submit">登入</button>
+</form>
+<p aria-live="polite" class="message" id="loginMessage"></p>
+</section>
+<section class="dashboard hidden" id="dashboardView">
+<header class="topbar">
+<div><p class="eyebrow">CONTENT STUDIO</p><h1>俐姐的家</h1><p class="muted" id="accountEmail"></p></div>
+<div class="top-actions"><a class="secondary" href="../" rel="noopener noreferrer" target="_blank">查看官網</a><button class="secondary" id="logoutButton" type="button">登出</button></div>
+</header>
+<nav aria-label="後台分類" class="tabs">
+<button class="tab active" data-tab="photos" type="button">照片管理</button>
+<button class="tab" data-tab="library" type="button">圖片素材庫</button>
 
-    <section id="loginView" class="login-card">
-      <div class="brand-mark" aria-hidden="true">俐</div>
-      <p class="eyebrow">LIJIE'S HOME</p>
-      <h1>網站管理後台</h1>
-      <p class="muted">使用已授權的管理信箱登入。</p>
-      <form id="loginForm">
-        <label>管理信箱<input id="email" name="email" type="email" autocomplete="username" required></label>
-        <label>密碼<input id="password" name="password" type="password" autocomplete="current-password" minlength="10" required></label>
-        <button class="primary" type="submit">登入</button>
-      </form>
-      <p id="loginMessage" class="message" aria-live="polite"></p>
-    </section>
+<button class="tab" data-tab="operations" type="button">營運管理</button>
+<button class="tab" data-tab="reports" type="button">報表中心</button>
+<button class="tab" data-tab="inventory" type="button">庫存管理</button>
 
-    <section id="dashboardView" class="dashboard hidden">
-      <header class="topbar">
-        <div><p class="eyebrow">CONTENT STUDIO</p><h1>俐姐的家</h1><p id="accountEmail" class="muted"></p></div>
-        <div class="top-actions"><a class="secondary" href="../" target="_blank" rel="noopener noreferrer">查看官網</a><button id="logoutButton" class="secondary" type="button">登出</button></div>
-      </header>
-
-      <nav class="tabs" aria-label="後台分類">
-        <button class="tab active" data-tab="photos" type="button">照片管理</button>
-        <button class="tab" data-tab="library" type="button">圖片素材庫</button>
-        <button class="tab" data-tab="calendar" type="button">預約日曆</button>
-        <button class="tab" data-tab="operations" type="button">營運管理</button>
-        <button class="tab" data-tab="inventory" type="button">庫存管理</button>
-        <button class="tab" data-tab="pricing" type="button">價格設定</button>
-        <button class="tab" data-tab="copy" type="button">文字與資訊</button>
-        <button class="tab" data-tab="publish" type="button">預覽與發布</button>
-      </nav>
-
-      <section id="photosPanel" class="panel">
-        <div class="panel-heading"><div><h2>照片管理</h2><p>點目前照片即可更換；可以從本機上傳，也可以直接從圖片素材庫挑選。拖曳封面照片可調整順序。</p></div><div class="panel-heading-actions"><button id="addHeroFromLibrary" class="secondary" type="button">＋ 從素材庫新增封面</button></div></div>
-        <div class="upload-row">
-          <label>照片位置<select id="uploadTarget"><option value="hero">首頁封面輪播</option><option value="facility-0">KTV 空間</option><option value="facility-1">休閒／麻將空間</option><option value="facility-2">泳池空間</option><option value="facility-3">戶外料理區</option><option value="room-0">房間 01／雙人房</option><option value="room-1">房間 02／雙人房</option><option value="room-2">房間 03／雙人房</option><option value="room-3">房間 04／雙人房</option><option value="room-4">房間 05／四人房</option><option value="usePhoto">中段主照片</option><option value="ctaPhoto">頁尾背景</option></select></label>
-          <label class="file-button">選擇照片<input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>
-          <button id="uploadButton" class="primary" type="button">上傳到草稿</button>
-        </div>
-        <section id="selectionPreview" class="selection-preview hidden" aria-live="polite">
-          <div class="selection-head">
-            <div><strong id="selectionCount">已選擇 0 張</strong><p>先看縮圖確認照片，選錯可直接移除，不會先上傳。</p></div>
-            <button id="clearSelection" class="secondary" type="button">清除全部</button>
-          </div>
-          <div id="selectionGrid" class="selection-grid"></div>
-        </section>
-        <div id="uploadProgress" class="message" aria-live="polite"></div>
-        <div id="photoGrid" class="photo-grid"></div>
-      </section>
-
-
-      <section id="libraryPanel" class="panel hidden">
-        <div class="panel-heading"><div><p class="eyebrow">MEDIA LIBRARY</p><h2>圖片素材庫</h2><p>先把常用照片上傳到這裡。之後更換封面、泳池、KTV 等圖片時，可以直接挑選，不必再從電腦找檔案。</p></div></div>
-        <div class="library-toolbar">
-          <label>分類<select id="libraryUploadCategory"><option value="其他">其他</option><option value="封面">封面</option><option value="房間">房間</option><option value="泳池">泳池</option><option value="KTV">KTV</option><option value="戶外">戶外</option><option value="餐廳">餐廳</option></select></label>
-          <label class="file-button">選擇照片<input id="libraryInput" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>
-          <button id="libraryUploadButton" class="primary" type="button">上傳到素材庫</button>
-          <label class="library-search">搜尋<input id="librarySearch" type="search" placeholder="搜尋檔名或分類"></label>
-        </div>
-        <p id="libraryMessage" class="message" aria-live="polite"></p>
-        <div id="libraryGrid" class="library-grid"></div>
-      </section>
-
-      <section id="calendarPanel" class="panel hidden">
-        <div class="panel-heading"><div><p class="eyebrow">BOOKING CONTROL</p><h2>預約日曆</h2><p>直接在自己的網站管理日期，不再依賴 Google 日曆。前台只會顯示日期狀態，客人姓名與電話不會公開。</p></div></div>
-        <div class="booking-admin-layout">
-          <div class="admin-calendar-card">
-            <div class="admin-calendar-toolbar"><button id="adminCalPrev" class="secondary" type="button">←</button><h3 id="adminCalMonth">—</h3><button id="adminCalNext" class="secondary" type="button">→</button></div>
-            <div class="admin-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
-            <div id="adminCalendar" class="admin-calendar-grid"></div>
-            <div class="admin-calendar-legend"><span><i class="status-dot available"></i>可詢問</span><span><i class="status-dot booked"></i>已預約</span><span><i class="status-dot blocked"></i>暫停開放</span></div>
-          </div>
-          <form id="bookingForm" class="booking-editor">
-            <div><p class="eyebrow">DATE SETTINGS</p><h3>設定日期狀態</h3><p class="muted">可設定單日或一段日期；例如連續 3 天已被預約，可一次鎖定。</p></div>
-            <div class="booking-date-row"><label>開始日期<input id="bookingStart" type="date" required></label><label>結束日期<input id="bookingEnd" type="date" required></label></div>
-            <label>狀態<select id="bookingStatus"><option value="booked">已預約</option><option value="blocked">暫停開放</option><option value="available">恢復可詢問</option></select></label>
-            <div id="bookingPrivateFields" class="booking-private-fields">
-              <label>客人姓名<input id="bookingGuest" type="text" maxlength="60" placeholder="僅後台可見"></label>
-              <label>聯絡電話<input id="bookingPhone" type="tel" maxlength="40" placeholder="僅後台可見"></label>
-              <label>Email<input id="bookingEmail" type="email" maxlength="120" placeholder="客戶確認信使用"></label>
-              <label>人數<input id="bookingPeople" type="number" min="1" max="50" placeholder="例如 10"></label>
-              <label>訂金／收款<input id="bookingDeposit" type="text" maxlength="40" placeholder="例如 已收 3,000"></label>
-              <label class="wide">備註<textarea id="bookingNotes" rows="3" maxlength="500" placeholder="活動內容、特殊需求、付款狀態等；僅後台可見"></textarea></label>
-            </div>
-            <div class="booking-editor-actions"><button class="primary" type="submit">儲存日期</button><button id="cancelSelectedBooking" class="danger" type="button">取消此預約並釋出日期</button><button id="clearBookingForm" class="secondary" type="button">清空資料</button></div>
-            <p id="bookingMessage" class="message" aria-live="polite"></p>
-          </form>
-          <section class="booking-finance" id="bookingFinance">
-            <div><p class="eyebrow">ACCOUNTING</p><h3>帳務與收款紀錄</h3><p class="muted">先從左側日曆點選已預約日期。預約確認、收款、匯款、退款與取消全部集中在網站後台管理。</p></div>
-            <div class="finance-summary">
-              <label>訂單總額<input id="financeTotal" type="number" min="0" step="100" placeholder="例如 20000"></label>
-              <label>固定訂金<input id="financeDepositRequired" type="number" value="3000" readonly></label>
-              <div class="finance-stat"><span>累計已收</span><strong id="financeReceived">NT$ 0</strong></div>
-              <div class="finance-stat"><span>尚未收款</span><strong id="financeBalance">NT$ 0</strong></div>
-            </div>
-            <div class="payment-entry">
-              <label>收款日期<input id="paymentDate" type="date"></label>
-              <label>金額<input id="paymentAmount" type="number" min="1" step="1" placeholder="例如 5000"></label>
-              <label>方式<select id="paymentMethod"><option value="bank_transfer">銀行轉帳</option><option value="cash">現金</option><option value="refund">退款</option><option value="other">其他</option></select></label>
-              <label>匯款末五碼／參考<input id="paymentReference" type="text" maxlength="40" placeholder="例如 12345"></label>
-              <label class="wide">備註<input id="paymentNote" type="text" maxlength="120" placeholder="訂金、尾款、退款原因等"></label>
-              <button id="addPaymentRecord" class="primary" type="button">＋ 新增收款紀錄</button>
-              <button id="saveFinanceSettings" class="secondary" type="button">儲存帳務設定</button>
-            </div>
-            <div id="paymentRecords" class="payment-records"><p class="muted">尚未載入預約。</p></div>
-            <p id="financeMessage" class="message" aria-live="polite"></p>
-          </section>
-        </div>
-      </section>
-
-      <section id="operationsPanel" class="panel hidden">
-        <div class="panel-heading"><div><p class="eyebrow">OPERATIONS</p><h2>訂單・帳務・支出</h2><p>訂單確認、收款、退款、支出與取消全部集中在網站後台；官方 LINE 僅提供客戶預約、查詢與取消須知。備品庫存獨立在「庫存管理」分頁。</p></div><button id="refreshOperations" class="secondary" type="button">重新整理</button></div><div class="ops-test-panel"><div><strong>🧪 測試模式</strong><p class="muted">用測試連結送出的訂單會標記 TEST、不鎖正式日期、不列入營運統計。可模擬 NT$3,000 訂金後直接在後台確認，完成後一鍵清除。</p></div><div class="ops-order-actions"><button id="openTestWebsite" class="secondary" type="button">開啟官網測試模式</button><button id="clearTestData" class="danger" type="button">清除全部測試資料</button></div><p id="testModeMessage" class="message"></p></div>
-        <div class="ops-metrics"><article><span>已確認訂單</span><strong id="metricConfirmed">0</strong></article><article><span>累計已收</span><strong id="metricReceived">NT$ 0</strong></article><article><span>尚未收款</span><strong id="metricBalance">NT$ 0</strong></article><article><span>支出合計</span><strong id="metricExpenses">NT$ 0</strong></article></div>
-        <div class="ops-section"><div class="ops-title"><div><h3>訂單進度</h3><p>預設依入住日只顯示該日訂單，不會一次列出全部。收款後會自動更新「待收訂金／部分付款／已結清」。</p></div></div>
-        <div class="ops-filter-bar arrival-filter-wrap">
-  <div class="arrival-calendar" id="arrivalCalendar">
-    <div class="arrival-calendar-head"><button id="arrivalPrevMonth" class="secondary" type="button" aria-label="上一個月">‹</button><strong id="arrivalMonthLabel"></strong><button id="arrivalNextMonth" class="secondary" type="button" aria-label="下一個月">›</button></div>
-    <div class="arrival-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
-    <div id="arrivalCalendarGrid" class="arrival-calendar-grid"></div>
-  </div>
-  <input id="orderArrivalFilter" type="hidden">
-  <div class="ops-order-actions"><button id="orderFilterToday" class="secondary" type="button">今天</button><button id="orderFilterNearest" class="secondary" type="button">最近入住</button><button id="orderShowAll" class="secondary" type="button">顯示全部</button></div>
-  <span id="orderFilterSummary" class="muted"></span>
+<button class="tab" data-tab="pricing" type="button">價格設定</button>
+<button class="tab" data-tab="copy" type="button">文字與資訊</button>
+<button class="tab" data-tab="publish" type="button">預覽與發布</button>
+</nav>
+<section class="panel" id="photosPanel">
+<div class="panel-heading"><div><h2>照片管理</h2><p>點目前照片即可更換；可以從本機上傳，也可以直接從圖片素材庫挑選。拖曳封面照片可調整順序。</p></div><div class="panel-heading-actions"><button class="secondary" id="addHeroFromLibrary" type="button">＋ 從素材庫新增封面</button></div></div>
+<div class="upload-row">
+<label>照片位置<select id="uploadTarget"><option value="hero">首頁封面輪播</option><option value="facility-0">KTV 空間</option><option value="facility-1">休閒／麻將空間</option><option value="facility-2">泳池空間</option><option value="facility-3">戶外料理區</option><option value="room-0">房間 01／雙人房</option><option value="room-1">房間 02／雙人房</option><option value="room-2">房間 03／雙人房</option><option value="room-3">房間 04／雙人房</option><option value="room-4">房間 05／四人房</option><option value="usePhoto">中段主照片</option><option value="ctaPhoto">頁尾背景</option></select></label>
+<label class="file-button">選擇照片<input accept="image/jpeg,image/png,image/webp" id="photoInput" multiple="" type="file"/></label>
+<button class="primary" id="uploadButton" type="button">上傳到草稿</button>
 </div>
-        <div id="operationsOrders" class="ops-orders"></div>
-        <div class="old-data-tools"><div><strong>舊資料整理</strong><p class="muted">如果目前這些都是舊版／測試留下的訂單，可一次清除「所有訂單與其綁定的收退款、支出及日期占用」。正式啟用後不要隨意使用。</p></div><button id="clearLegacyOrders" class="danger" type="button">清除所有舊訂單資料</button><p id="legacyDataMessage" class="message"></p></div></div>
-        <form id="cancellationForm" class="ops-card hidden" style="margin-bottom:18px">
-          <h3>客戶取消預約 SOP</h3>
-          <p class="muted">客戶提出取消時，先留下原因與訂金處理方式，再確認取消。日期會釋出，但原訂單、收款與取消紀錄都會保留。</p>
-          <input id="cancelBookingId" type="hidden">
-          <div class="ops-grid">
-            <label>取消提出者<select id="cancelRequestedBy"><option value="customer">客戶提出</option><option value="host">業者提出</option><option value="other">其他</option></select></label>
-            <label>訂金處理<select id="cancelDepositDisposition"><option value="not_received">尚未收訂金</option><option value="forfeit_full">訂金全額保留（沒收）</option><option value="refund_partial">部分退款</option><option value="refund_full">全額退款</option><option value="other">其他</option></select></label>
-          </div>
-          <label>取消原因（必填）<textarea id="cancelReason" rows="3" maxlength="500" required placeholder="例如：客戶臨時行程變更、同行者無法前往等"></textarea></label>
-          <div id="cancelRefundFields" class="ops-grid hidden">
-            <label>退款金額<input id="cancelRefundAmount" type="number" min="1" step="1" placeholder="部分退款請輸入金額"></label>
-            <label>退款方式<select id="cancelRefundMethod"><option>轉帳</option><option>現金</option><option>其他</option></select></label>
-          </div>
-          <label>訂金／退款處理備註<textarea id="cancelDepositNote" rows="2" maxlength="500" placeholder="例如：客戶臨時取消，已確認退款 3,000 元"></textarea></label>
-          <div class="ops-order-actions"><button id="confirmCancellation" class="danger" type="button">確認取消並釋出日期</button><button id="closeCancellation" class="secondary" type="button">暫不取消</button></div>
-          <p id="cancellationMessage" class="message"></p>
-        </form>
-        <div class="ops-two">
-          <form id="paymentForm" class="ops-card"><h3>新增收款／退款紀錄</h3><label>綁定訂單<select id="opsPaymentBooking" required></select></label><div class="ops-grid"><label>類型<select id="opsPaymentType"><option value="payment">收款</option><option value="refund">退款</option></select></label><label>金額<input id="opsPaymentAmount" type="number" min="1" step="1" required></label><label>方式<select id="opsPaymentMethod"><option>轉帳</option><option>現金</option></select></label><label>日期<input id="opsPaymentDate" type="date" required></label></div><label>匯款帳號末五碼／來源<input id="opsPaymentLast5" maxlength="30" placeholder="例如 12345"></label><label>備註<textarea id="opsPaymentNote" rows="2" maxlength="300"></textarea></label><button class="primary" type="submit">新增紀錄</button><p id="opsPaymentMessage" class="message"></p></form>
-          <form id="expenseForm" class="ops-card"><h3>新增支出</h3><label>綁定訂單（可不選）<select id="expenseBooking"></select></label><div class="ops-grid"><label>分類<select id="expenseCategory"><option>清潔</option><option>備品</option><option>維修</option><option>水電</option><option>平台／手續費</option><option>其他</option></select></label><label>金額<input id="expenseAmount" type="number" min="1" step="1" required></label><label>付款方式<select id="expenseMethod"><option>轉帳</option><option>現金</option><option>信用卡</option><option>其他</option></select></label><label>日期<input id="expenseDate" type="date" required></label></div><label>備註<textarea id="expenseNote" rows="2" maxlength="300"></textarea></label><button class="primary" type="submit">新增支出</button><p id="expenseMessage" class="message"></p></form>
-        </div>
+<section aria-live="polite" class="selection-preview hidden" id="selectionPreview">
+<div class="selection-head">
+<div><strong id="selectionCount">已選擇 0 張</strong><p>先看縮圖確認照片，選錯可直接移除，不會先上傳。</p></div>
+<button class="secondary" id="clearSelection" type="button">清除全部</button>
+</div>
+<div class="selection-grid" id="selectionGrid"></div>
+</section>
+<div aria-live="polite" class="message" id="uploadProgress"></div>
+<div class="photo-grid" id="photoGrid"></div>
+</section>
+<section class="panel hidden" id="libraryPanel">
+<div class="panel-heading"><div><p class="eyebrow">MEDIA LIBRARY</p><h2>圖片素材庫</h2><p>先把常用照片上傳到這裡。之後更換封面、泳池、KTV 等圖片時，可以直接挑選，不必再從電腦找檔案。</p></div></div>
+<div class="library-toolbar">
+<label>分類<select id="libraryUploadCategory"><option value="其他">其他</option><option value="封面">封面</option><option value="房間">房間</option><option value="泳池">泳池</option><option value="KTV">KTV</option><option value="戶外">戶外</option><option value="餐廳">餐廳</option></select></label>
+<label class="file-button">選擇照片<input accept="image/jpeg,image/png,image/webp" id="libraryInput" multiple="" type="file"/></label>
+<button class="primary" id="libraryUploadButton" type="button">上傳到素材庫</button>
+<label class="library-search">搜尋<input id="librarySearch" placeholder="搜尋檔名或分類" type="search"/></label>
+</div>
+<p aria-live="polite" class="message" id="libraryMessage"></p>
+<div class="library-grid" id="libraryGrid"></div>
+</section>
 
-        <div class="ops-two"><div class="ops-section"><div class="ops-title"><h3>最近收款／退款</h3></div><div id="paymentHistory" class="ops-history"></div></div><div class="ops-section"><div class="ops-title"><h3>最近支出</h3></div><div id="expenseHistory" class="ops-history"></div></div></div>
-      </section>
+<section class="panel hidden" id="operationsPanel">
+<div class="panel-heading"><div><p class="eyebrow">OPERATIONS</p><h2>營運管理</h2><p>訂單確認、收款、退款、支出與取消集中在這裡管理；官方 LINE 僅作為客戶預約、查詢、匯款回報與取消申請窗口。</p></div><button class="secondary" id="refreshOperations" type="button">重新整理</button></div>
+
+<div class="ops-section"><div class="ops-title"><div><h3>訂單進度</h3><p>預設依入住日只顯示該日訂單，不會一次列出全部。收款後會自動更新「待收訂金／部分付款／已結清」。</p></div></div>
+<div class="ops-filter-bar arrival-filter-wrap">
+<div class="arrival-calendar" id="arrivalCalendar">
+<div class="arrival-calendar-head"><button aria-label="上一個月" class="secondary" id="arrivalPrevMonth" type="button">‹</button><strong id="arrivalMonthLabel"></strong><button aria-label="下一個月" class="secondary" id="arrivalNextMonth" type="button">›</button></div>
+<div class="arrival-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+<div class="arrival-calendar-grid" id="arrivalCalendarGrid"></div>
+</div>
+<input id="orderArrivalFilter" type="hidden"/>
+<div class="ops-order-actions"><button class="secondary" id="orderFilterToday" type="button">今天</button><button class="secondary" id="orderFilterNearest" type="button">最近入住</button><button class="secondary" id="orderShowAll" type="button">顯示全部</button></div>
+<span class="muted" id="orderFilterSummary"></span>
+</div>
+<div class="ops-orders" id="operationsOrders"></div>
+<div class="old-data-tools"><div><strong>舊資料整理</strong><p class="muted">如果目前這些都是舊版／測試留下的訂單，可一次清除「所有訂單與其綁定的收退款、支出及日期占用」。正式啟用後不要隨意使用。</p></div><button class="danger" id="clearLegacyOrders" type="button">清除所有舊訂單資料</button><p class="message" id="legacyDataMessage"></p></div></div>
+<form class="ops-card hidden" id="cancellationForm" style="margin-bottom:18px">
+<h3>客戶取消預約 SOP</h3>
+<p class="muted">客戶提出取消時，先留下原因與訂金處理方式，再確認取消。日期會釋出，但原訂單、收款與取消紀錄都會保留。</p>
+<input id="cancelBookingId" type="hidden"/>
+<div class="ops-grid">
+<label>取消提出者<select id="cancelRequestedBy"><option value="customer">客戶提出</option><option value="host">業者提出</option><option value="other">其他</option></select></label>
+<label>訂金處理<select id="cancelDepositDisposition"><option value="not_received">尚未收訂金</option><option value="forfeit_full">訂金全額保留（沒收）</option><option value="refund_partial">部分退款</option><option value="refund_full">全額退款</option><option value="other">其他</option></select></label>
+</div>
+<label>取消原因（必填）<textarea id="cancelReason" maxlength="500" placeholder="例如：客戶臨時行程變更、同行者無法前往等" required="" rows="3"></textarea></label>
+<div class="ops-grid hidden" id="cancelRefundFields">
+<label>退款金額<input id="cancelRefundAmount" min="1" placeholder="部分退款請輸入金額" step="1" type="number"/></label>
+<label>退款方式<select id="cancelRefundMethod"><option>轉帳</option><option>現金</option><option>其他</option></select></label>
+</div>
+<label>訂金／退款處理備註<textarea id="cancelDepositNote" maxlength="500" placeholder="例如：客戶臨時取消，已確認退款 3,000 元" rows="2"></textarea></label>
+<div class="ops-order-actions"><button class="danger" id="confirmCancellation" type="button">確認取消並釋出日期</button><button class="secondary" id="closeCancellation" type="button">暫不取消</button></div>
+<p class="message" id="cancellationMessage"></p>
+</form>
+<div class="ops-two">
+<form class="ops-card" id="paymentForm"><h3>新增收款／退款紀錄</h3><label>綁定訂單<select id="opsPaymentBooking" required=""></select></label><div class="ops-grid"><label>類型<select id="opsPaymentType"><option value="payment">收款</option><option value="refund">退款</option></select></label><label>金額<input id="opsPaymentAmount" min="1" required="" step="1" type="number"/></label><label>方式<select id="opsPaymentMethod"><option>轉帳</option><option>現金</option></select></label><label>日期<input id="opsPaymentDate" required="" type="date"/></label></div><label>匯款帳號末五碼／來源<input id="opsPaymentLast5" maxlength="30" placeholder="例如 12345"/></label><label>備註<textarea id="opsPaymentNote" maxlength="300" rows="2"></textarea></label><button class="primary" type="submit">新增紀錄</button><p class="message" id="opsPaymentMessage"></p></form>
+<form class="ops-card" id="expenseForm"><h3>新增支出</h3><label>綁定訂單（可不選）<select id="expenseBooking"></select></label><div class="ops-grid"><label>分類<select id="expenseCategory"><option>清潔</option><option>備品</option><option>維修</option><option>水電</option><option>平台／手續費</option><option>其他</option></select></label><label>金額<input id="expenseAmount" min="1" required="" step="1" type="number"/></label><label>付款方式<select id="expenseMethod"><option>轉帳</option><option>現金</option><option>信用卡</option><option>其他</option></select></label><label>日期<input id="expenseDate" required="" type="date"/></label></div><label>備註<textarea id="expenseNote" maxlength="300" rows="2"></textarea></label><button class="primary" type="submit">新增支出</button><p class="message" id="expenseMessage"></p></form>
+</div>
+
+</section>
 
 
-      <section id="inventoryPanel" class="panel hidden">
-        <div class="panel-heading"><div><p class="eyebrow">INVENTORY</p><h2>庫存管理</h2><p>備品新增、進貨、領用與低庫存提醒集中在這裡；領用紀錄仍可綁定入住訂單。</p></div><button id="refreshInventory" class="secondary" type="button">重新整理</button></div>
-        <div class="ops-two">
-          <form id="inventoryItemForm" class="ops-card"><h3>新增備品</h3><div class="ops-grid"><label>品名<input id="inventoryName" maxlength="80" required placeholder="例如 礦泉水"></label><label>單位<input id="inventoryUnit" maxlength="20" required placeholder="瓶／包／組"></label><label>目前庫存<input id="inventoryQty" type="number" min="0" step="1" required></label><label>安全庫存<input id="inventoryMin" type="number" min="0" step="1" value="0"></label><label>單位成本<input id="inventoryCost" type="number" min="0" step="1" value="0"></label></div><button class="primary" type="submit">新增備品</button><p id="inventoryItemMessage" class="message"></p></form>
-          <form id="stockMovementForm" class="ops-card"><h3>備品進出庫</h3><label>備品<select id="stockItem" required></select></label><div class="ops-grid"><label>動作<select id="stockType"><option value="in">進貨</option><option value="out">領用／消耗</option></select></label><label>數量<input id="stockQty" type="number" min="1" step="1" required></label><label>日期<input id="stockDate" type="date" required></label></div><label>備註<input id="stockNote" maxlength="200" placeholder="例如 入住備品補充"></label><button class="primary" type="submit">儲存進出庫</button><p id="stockMessage" class="message"></p></form>
-        </div>
-        <div class="ops-section"><div class="ops-title"><h3>備品庫存</h3><p>低於安全庫存會標示提醒。</p></div><div id="inventoryList" class="inventory-list"></div></div>
-      </section>
+<section class="panel hidden" id="reportsPanel">
+<div class="panel-heading"><div><p class="eyebrow">REPORTS</p><h2>報表中心</h2><p>報表只讀取現有營運資料，不在這裡修改訂單、帳務或庫存，避免和營運管理重複。</p></div><button class="secondary" id="refreshReports" type="button">重新整理</button></div>
 
-      <section id="pricingPanel" class="panel hidden">
-        <div class="panel-heading"><div><p class="eyebrow">RATE CONTROL</p><h2>價格設定</h2><p>官網不公開固定價格；系統會依客人實際入住日期試算。特殊假日／連續假期請用下方「特殊日期價格」覆蓋基本價格。</p></div></div>
-        <form id="pricingForm" class="pricing-editor">
-          <div class="pricing-grid">
-            <label>平日每晚（週一～週四）<input id="weekdayPrice" type="number" min="0" step="100" required></label>
-            <label>週五／週六每晚<input id="weekendPrice" type="number" min="0" step="100" required></label>
-            <label>政府連假每晚<input id="holidayPrice" type="number" min="0" step="100" placeholder="例如 18000"></label>
-            <label>墾丁活動／跨年旺季每晚<input id="eventPrice" type="number" min="0" step="100" placeholder="例如 20000"></label>
-            <label>開放預約月數<input id="bookingWindowMonths" type="number" min="1" max="18" step="1" value="6"></label>
-          </div>
-          <div class="pricing-toggle pricing-toggle-stack">
-            <label><input id="pricingEnabled" type="checkbox" checked> 啟用日期自動試算</label>
-            <label><input id="autoGovernmentHolidays" type="checkbox" checked> 自動辨識台灣政府 3 天以上連續假期</label>
-            <label><input id="autoKentingEvents" type="checkbox" checked> 自動辨識墾丁旺季（台灣祭 4 月連假、跨年 12/31～1/1）</label>
-          </div>
-          <p class="muted">價格規則：週日～週四為平日價，週五／週六為週末價。連續假期會從「第一個放假日的前一晚」開始套連假價；例如週五開始放假，週四晚即為連假價；若週一也放假，週日晚亦為連假價。優先順序：手動特殊日期 ＞ 墾丁活動／跨年 ＞ 政府連假 ＞ 週五／週六 ＞ 平日。官網前台不顯示價格，超過開放月數的日期不可預約。</p>
-          <div class="special-rate-head"><div><h3>特殊日期價格</h3><p class="muted">例如春節、跨年、連假、活動檔期。特殊日期會優先於平日／週五週六價格。</p></div><button id="addSpecialRate" class="secondary" type="button">＋ 新增特殊日期</button></div>
-          <div id="specialRates" class="special-rates"></div>
-          <div class="pricing-actions"><button class="primary" type="submit">儲存價格設定</button></div>
-          <p id="pricingMessage" class="message" aria-live="polite"></p>
-        </form>
-      </section>
+<div class="report-block">
+  <div class="ops-title"><div><h3>訂單・帳務・支出報表</h3><p>依日期區間彙整訂單、收退款與支出，可預覽、列印或下載 CSV。</p></div></div>
+  <div class="report-toolbar">
+    <label>開始日期<input id="reportStartDate" type="date"></label>
+    <label>結束日期<input id="reportEndDate" type="date"></label>
+    <button class="secondary" id="generateFinanceReport" type="button">產生報表</button>
+    <button class="secondary" id="downloadFinanceCsv" type="button">下載 CSV</button>
+    <button class="secondary" id="printFinanceReport" type="button">列印報表</button>
+  </div>
+  <div class="report-summary" id="financeReportSummary"></div>
+  <div class="report-table-wrap"><h4>訂單</h4><div id="financeOrdersReport"></div></div>
+  <div class="report-table-wrap"><h4>收款／退款</h4><div id="financePaymentsReport"></div></div>
+  <div class="report-table-wrap"><h4>支出</h4><div id="financeExpensesReport"></div></div>
+</div>
 
-      <section id="copyPanel" class="panel hidden">
-        <div class="panel-heading"><div><h2>文字與資訊</h2><p>修改後先儲存為草稿，不會立刻影響官網。</p></div></div>
-        <form id="contentForm" class="form-grid">
-          <fieldset><legend>首頁主視覺</legend>
-            <label>小標<input data-path="hero.eyebrow" type="text" maxlength="80"></label>
-            <label>主標第一行<input data-path="hero.titleLine1" type="text" maxlength="40"></label>
-            <label>主標第二行<input data-path="hero.titleLine2" type="text" maxlength="40"></label>
-            <label class="wide">介紹文字<textarea data-path="hero.description" maxlength="300" rows="4"></textarea></label>
-          </fieldset>
-          <fieldset><legend>費用與使用資訊</legend>
-            <label>建議人數<input data-path="details.capacity" type="text" maxlength="30"></label>
-            <label>使用方式<input data-path="details.schedule" type="text" maxlength="30"></label>
-            <label>服務時段<input data-path="details.hours" type="text" maxlength="30"></label>
-            <label>場地使用費<input data-path="details.price" type="text" maxlength="30"></label>
-            <label>押金<input data-path="details.deposit" type="text" maxlength="30"></label>
-            <label>付款方式<input data-path="details.payment" type="text" maxlength="30"></label>
-            <label>停車<input data-path="details.parking" type="text" maxlength="30"></label>
-          </fieldset>
-          <fieldset><legend>房間介紹輪播（全館 5 間｜最多 12 人）</legend>
-            <label>房間 01 編號<input data-path="rooms.0.number" type="text" maxlength="10"></label><label>房間 01 別名<input data-path="rooms.0.alias" type="text" maxlength="40"></label><label>房型<input data-path="rooms.0.name" type="text" maxlength="40" readonly></label><label>小標<input data-path="rooms.0.kicker" type="text" maxlength="50"></label><label class="wide">房間 01 介紹<textarea data-path="rooms.0.description" maxlength="220" rows="3"></textarea></label>
-            <label>房間 02 編號<input data-path="rooms.1.number" type="text" maxlength="10"></label><label>房間 02 別名<input data-path="rooms.1.alias" type="text" maxlength="40"></label><label>房型<input data-path="rooms.1.name" type="text" maxlength="40" readonly></label><label>小標<input data-path="rooms.1.kicker" type="text" maxlength="50"></label><label class="wide">房間 02 介紹<textarea data-path="rooms.1.description" maxlength="220" rows="3"></textarea></label>
-            <label>房間 03 編號<input data-path="rooms.2.number" type="text" maxlength="10"></label><label>房間 03 別名<input data-path="rooms.2.alias" type="text" maxlength="40"></label><label>房型<input data-path="rooms.2.name" type="text" maxlength="40" readonly></label><label>小標<input data-path="rooms.2.kicker" type="text" maxlength="50"></label><label class="wide">房間 03 介紹<textarea data-path="rooms.2.description" maxlength="220" rows="3"></textarea></label>
-            <label>房間 04 編號<input data-path="rooms.3.number" type="text" maxlength="10"></label><label>房間 04 別名<input data-path="rooms.3.alias" type="text" maxlength="40"></label><label>房型<input data-path="rooms.3.name" type="text" maxlength="40" readonly></label><label>小標<input data-path="rooms.3.kicker" type="text" maxlength="50"></label><label class="wide">房間 04 介紹<textarea data-path="rooms.3.description" maxlength="220" rows="3"></textarea></label>
-            <label>房間 05 編號<input data-path="rooms.4.number" type="text" maxlength="10"></label><label>房間 05 別名<input data-path="rooms.4.alias" type="text" maxlength="40"></label><label>房型<input data-path="rooms.4.name" type="text" maxlength="40" readonly></label><label>小標<input data-path="rooms.4.kicker" type="text" maxlength="50"></label><label class="wide">房間 05 介紹<textarea data-path="rooms.4.description" maxlength="220" rows="3"></textarea></label>
-          </fieldset>
-          <fieldset><legend>聯絡方式</legend>
-            <label>電話<input data-path="contact.phone" type="tel" maxlength="30"></label>
-            <label>LINE 網址<input data-path="contact.lineUrl" type="url" maxlength="300"></label>
-            <label class="wide">Google 地圖網址<input data-path="contact.mapUrl" type="url" maxlength="500"></label>
-          </fieldset>
-          <button class="primary" type="submit">儲存草稿</button><p id="saveMessage" class="message" aria-live="polite"></p>
-        </form>
-      </section>
+<div class="report-block">
+  <div class="ops-title"><div><h3>庫存管理庫存表</h3><p>顯示目前備品庫存、安全庫存、單位成本與庫存估值；此處僅供查看與輸出。</p></div></div>
+  <div class="report-toolbar">
+    <button class="secondary" id="downloadInventoryCsv" type="button">下載 CSV</button>
+    <button class="secondary" id="printInventoryReport" type="button">列印庫存表</button>
+  </div>
+  <div class="report-summary" id="inventoryReportSummary"></div>
+  <div class="report-table-wrap"><div id="inventoryReportTable"></div></div>
+</div>
+</section>
 
-      <section id="publishPanel" class="panel hidden">
-        <div class="publish-card"><p class="eyebrow">READY TO PUBLISH</p><h2>確認後再更新官網</h2><p>「儲存草稿」只會保存在後台；按下發布後，訪客才會看到新內容。</p><div class="publish-actions"><button id="previewButton" class="secondary" type="button">預覽草稿</button><button id="restoreButton" class="secondary" type="button">恢復已發布版本</button><button id="publishButton" class="primary" type="button">正式發布</button></div><p id="publishMessage" class="message" aria-live="polite"></p><div class="revision-block"><h3>最近發布版本</h3><div id="revisionList" class="revision-list">正在載入…</div></div></div>
-      </section>
-    </section>
-  </main>
-  <dialog id="libraryPickerDialog" class="picker-dialog"><div class="dialog-head"><div><p class="eyebrow">CHOOSE FROM LIBRARY</p><h2 id="libraryPickerTitle">從素材庫選擇</h2></div><button id="closeLibraryPicker" class="secondary" type="button">關閉</button></div><div class="picker-body"><label class="picker-search">搜尋素材<input id="pickerSearch" type="search" placeholder="搜尋檔名或分類"></label><p id="pickerHint" class="muted"></p><div id="pickerGrid" class="library-grid picker-grid"></div></div></dialog>
-  <dialog id="previewDialog"><div class="dialog-head"><h2>草稿預覽</h2><button id="closePreview" class="secondary" type="button">關閉</button></div><iframe id="previewFrame" title="網站草稿預覽"></iframe></dialog>
-  <script type="module" src="/admin/admin.js"></script>
+
+<section class="panel hidden" id="inventoryPanel">
+<div class="panel-heading"><div><p class="eyebrow">INVENTORY</p><h2>庫存管理</h2><p>備品新增、進貨、領用與低庫存提醒集中在這裡。此區只管理庫存，不綁定訂單、不處理帳務。</p></div><button class="secondary" id="refreshInventory" type="button">重新整理</button></div>
+<div class="ops-two">
+<form id="inventoryItemForm" class="ops-card"><h3>新增備品</h3><div class="ops-grid"><label>品名<input id="inventoryName" maxlength="80" required placeholder="例如 礦泉水"></label><label>單位<input id="inventoryUnit" maxlength="20" required placeholder="瓶／包／組"></label><label>目前庫存<input id="inventoryQty" type="number" min="0" step="1" required></label><label>安全庫存<input id="inventoryMin" type="number" min="0" step="1" value="0"></label><label>單位成本<input id="inventoryCost" type="number" min="0" step="1" value="0"></label></div><button class="primary" type="submit">新增備品</button><p id="inventoryItemMessage" class="message"></p></form>
+<form id="stockMovementForm" class="ops-card"><h3>備品進出庫</h3><label>備品<select id="stockItem" required></select></label><div class="ops-grid"><label>動作<select id="stockType"><option value="in">進貨</option><option value="out">領用／消耗</option></select></label><label>數量<input id="stockQty" type="number" min="1" step="1" required></label><label>日期<input id="stockDate" type="date" required></label></div><label>備註<input id="stockNote" maxlength="200" placeholder="例如 入住備品補充"></label><button class="primary" type="submit">儲存進出庫</button><p id="stockMessage" class="message"></p></form>
+</div>
+<div class="ops-section"><div class="ops-title"><div><h3>備品庫存表</h3><p>顯示目前庫存與安全庫存；低於安全庫存會標示提醒。</p></div></div><div id="inventoryList" class="inventory-list"></div></div>
+</section>
+<section class="panel hidden" id="pricingPanel">
+<div class="panel-heading"><div><p class="eyebrow">RATE CONTROL</p><h2>價格設定</h2><p>官網不公開固定價格；系統會依客人實際入住日期試算。特殊假日／連續假期請用下方「特殊日期價格」覆蓋基本價格。</p></div></div>
+<form class="pricing-editor" id="pricingForm">
+<div class="pricing-grid">
+<label>平日每晚（週一～週四）<input id="weekdayPrice" min="0" required="" step="100" type="number"/></label>
+<label>週五／週六每晚<input id="weekendPrice" min="0" required="" step="100" type="number"/></label>
+<label>政府連假每晚<input id="holidayPrice" min="0" placeholder="例如 18000" step="100" type="number"/></label>
+<label>墾丁活動／跨年旺季每晚<input id="eventPrice" min="0" placeholder="例如 20000" step="100" type="number"/></label>
+<label>開放預約月數<input id="bookingWindowMonths" max="18" min="1" step="1" type="number" value="6"/></label>
+</div>
+<div class="pricing-toggle pricing-toggle-stack">
+<label><input checked="" id="pricingEnabled" type="checkbox"/> 啟用日期自動試算</label>
+<label><input checked="" id="autoGovernmentHolidays" type="checkbox"/> 自動辨識台灣政府 3 天以上連續假期</label>
+<label><input checked="" id="autoKentingEvents" type="checkbox"/> 自動辨識墾丁旺季（台灣祭 4 月連假、跨年 12/31～1/1）</label>
+</div>
+<p class="muted">價格規則：週日～週四為平日價，週五／週六為週末價。連續假期會從「第一個放假日的前一晚」開始套連假價；例如週五開始放假，週四晚即為連假價；若週一也放假，週日晚亦為連假價。優先順序：手動特殊日期 ＞ 墾丁活動／跨年 ＞ 政府連假 ＞ 週五／週六 ＞ 平日。官網前台不顯示價格，超過開放月數的日期不可預約。</p>
+<div class="special-rate-head"><div><h3>特殊日期價格</h3><p class="muted">例如春節、跨年、連假、活動檔期。特殊日期會優先於平日／週五週六價格。</p></div><button class="secondary" id="addSpecialRate" type="button">＋ 新增特殊日期</button></div>
+<div class="special-rates" id="specialRates"></div>
+<div class="pricing-actions"><button class="primary" type="submit">儲存價格設定</button></div>
+<p aria-live="polite" class="message" id="pricingMessage"></p>
+</form>
+</section>
+<section class="panel hidden" id="copyPanel">
+<div class="panel-heading"><div><h2>文字與資訊</h2><p>修改後先儲存為草稿，不會立刻影響官網。</p></div></div>
+<form class="form-grid" id="contentForm">
+<fieldset><legend>首頁主視覺</legend>
+<label>小標<input data-path="hero.eyebrow" maxlength="80" type="text"/></label>
+<label>主標第一行<input data-path="hero.titleLine1" maxlength="40" type="text"/></label>
+<label>主標第二行<input data-path="hero.titleLine2" maxlength="40" type="text"/></label>
+<label class="wide">介紹文字<textarea data-path="hero.description" maxlength="300" rows="4"></textarea></label>
+</fieldset>
+<fieldset><legend>費用與使用資訊</legend>
+<label>建議人數<input data-path="details.capacity" maxlength="30" type="text"/></label>
+<label>使用方式<input data-path="details.schedule" maxlength="30" type="text"/></label>
+<label>服務時段<input data-path="details.hours" maxlength="30" type="text"/></label>
+<label>場地使用費<input data-path="details.price" maxlength="30" type="text"/></label>
+<label>押金<input data-path="details.deposit" maxlength="30" type="text"/></label>
+<label>付款方式<input data-path="details.payment" maxlength="30" type="text"/></label>
+<label>停車<input data-path="details.parking" maxlength="30" type="text"/></label>
+</fieldset>
+<fieldset><legend>房間介紹輪播（全館 5 間｜最多 12 人）</legend>
+<label>房間 01 編號<input data-path="rooms.0.number" maxlength="10" type="text"/></label><label>房間 01 別名<input data-path="rooms.0.alias" maxlength="40" type="text"/></label><label>房型<input data-path="rooms.0.name" maxlength="40" readonly="" type="text"/></label><label>小標<input data-path="rooms.0.kicker" maxlength="50" type="text"/></label><label class="wide">房間 01 介紹<textarea data-path="rooms.0.description" maxlength="220" rows="3"></textarea></label>
+<label>房間 02 編號<input data-path="rooms.1.number" maxlength="10" type="text"/></label><label>房間 02 別名<input data-path="rooms.1.alias" maxlength="40" type="text"/></label><label>房型<input data-path="rooms.1.name" maxlength="40" readonly="" type="text"/></label><label>小標<input data-path="rooms.1.kicker" maxlength="50" type="text"/></label><label class="wide">房間 02 介紹<textarea data-path="rooms.1.description" maxlength="220" rows="3"></textarea></label>
+<label>房間 03 編號<input data-path="rooms.2.number" maxlength="10" type="text"/></label><label>房間 03 別名<input data-path="rooms.2.alias" maxlength="40" type="text"/></label><label>房型<input data-path="rooms.2.name" maxlength="40" readonly="" type="text"/></label><label>小標<input data-path="rooms.2.kicker" maxlength="50" type="text"/></label><label class="wide">房間 03 介紹<textarea data-path="rooms.2.description" maxlength="220" rows="3"></textarea></label>
+<label>房間 04 編號<input data-path="rooms.3.number" maxlength="10" type="text"/></label><label>房間 04 別名<input data-path="rooms.3.alias" maxlength="40" type="text"/></label><label>房型<input data-path="rooms.3.name" maxlength="40" readonly="" type="text"/></label><label>小標<input data-path="rooms.3.kicker" maxlength="50" type="text"/></label><label class="wide">房間 04 介紹<textarea data-path="rooms.3.description" maxlength="220" rows="3"></textarea></label>
+<label>房間 05 編號<input data-path="rooms.4.number" maxlength="10" type="text"/></label><label>房間 05 別名<input data-path="rooms.4.alias" maxlength="40" type="text"/></label><label>房型<input data-path="rooms.4.name" maxlength="40" readonly="" type="text"/></label><label>小標<input data-path="rooms.4.kicker" maxlength="50" type="text"/></label><label class="wide">房間 05 介紹<textarea data-path="rooms.4.description" maxlength="220" rows="3"></textarea></label>
+</fieldset>
+<fieldset><legend>聯絡方式</legend>
+<label>電話<input data-path="contact.phone" maxlength="30" type="tel"/></label>
+<label>LINE 網址<input data-path="contact.lineUrl" maxlength="300" type="url"/></label>
+<label class="wide">Google 地圖網址<input data-path="contact.mapUrl" maxlength="500" type="url"/></label>
+</fieldset>
+<button class="primary" type="submit">儲存草稿</button><p aria-live="polite" class="message" id="saveMessage"></p>
+</form>
+</section>
+<section class="panel hidden" id="publishPanel">
+<div class="publish-card"><p class="eyebrow">READY TO PUBLISH</p><h2>確認後再更新官網</h2><p>「儲存草稿」只會保存在後台；按下發布後，訪客才會看到新內容。</p><div class="publish-actions"><button class="secondary" id="previewButton" type="button">預覽草稿</button><button class="secondary" id="restoreButton" type="button">恢復已發布版本</button><button class="primary" id="publishButton" type="button">正式發布</button></div><p aria-live="polite" class="message" id="publishMessage"></p><div class="revision-block"><h3>最近發布版本</h3><div class="revision-list" id="revisionList">正在載入…</div></div></div>
+</section>
+</section>
+</main>
+<dialog class="picker-dialog" id="libraryPickerDialog"><div class="dialog-head"><div><p class="eyebrow">CHOOSE FROM LIBRARY</p><h2 id="libraryPickerTitle">從素材庫選擇</h2></div><button class="secondary" id="closeLibraryPicker" type="button">關閉</button></div><div class="picker-body"><label class="picker-search">搜尋素材<input id="pickerSearch" placeholder="搜尋檔名或分類" type="search"/></label><p class="muted" id="pickerHint"></p><div class="library-grid picker-grid" id="pickerGrid"></div></div></dialog>
+<dialog id="previewDialog"><div class="dialog-head"><h2>草稿預覽</h2><button class="secondary" id="closePreview" type="button">關閉</button></div><iframe id="previewFrame" title="網站草稿預覽"></iframe></dialog>
+<script src="/admin/admin.js" type="module"></script>
 </body>
 </html>

@@ -772,10 +772,6 @@ function applyAdminDeepLink() {
     document.querySelector('.tab[data-tab="operations"]')?.click();
     return;
   }
-  if(requested==="inventory"){ document.querySelector('.tab[data-tab="inventory"]')?.click(); return; }
-  if (requested !== "calendar") return;
-  const calendarTab = document.querySelector('.tab[data-tab="calendar"]');
-  if (calendarTab) calendarTab.click();
   const date = params.get("date");
   if (/^\d{4}-\d{2}-\d{2}$/.test(date || "")) {
     adminSelectedDate = date;
@@ -836,9 +832,10 @@ function bindEvents() {
   $("#logoutButton").addEventListener("click", async () => { await signOut(auth); location.reload(); });
   document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab === button));
-    ["photos", "library", "calendar", "operations", "inventory", "pricing", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
-    if (button.dataset.tab === "calendar") renderAdminCalendar().catch((e)=>message("#bookingMessage",e.message,"error"));
-    if (button.dataset.tab === "operations" || button.dataset.tab === "inventory") loadOperations().catch((e)=>console.error(e));
+    ["photos", "library", "operations", "reports", "inventory", "pricing", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
+    if (button.dataset.tab === "operations") loadOperations().catch((e)=>console.error(e));
+    if (button.dataset.tab === "reports") loadReports().catch((e)=>console.error(e));
+    if (button.dataset.tab === "inventory") loadInventoryManagement().catch((e)=>console.error(e));
     if (button.dataset.tab === "pricing") loadPricing();
     if (button.dataset.tab === "library") loadLibrary();
   }));
@@ -869,8 +866,15 @@ function bindEvents() {
   $("#addSpecialRate").addEventListener("click",()=>{pricingSpecialRanges.push(newSpecialRate());renderSpecialRates();});
   $("#clearBookingForm").addEventListener("click",clearBookingEditor);
   $("#refreshOperations")?.addEventListener("click",()=>loadOperations());
-  $("#openTestWebsite")?.addEventListener("click",()=>window.open(`../index.html?test=1&t=${Date.now()}`,"_blank","noopener"));
-  $("#clearTestData")?.addEventListener("click",clearAllTestData);
+  $("#refreshReports")?.addEventListener("click",()=>loadReports());
+  $("#refreshInventory")?.addEventListener("click",()=>loadInventoryManagement());
+  $("#inventoryItemForm")?.addEventListener("submit",saveInventoryItem);
+  $("#stockMovementForm")?.addEventListener("submit",saveStockMovement);
+  $("#generateFinanceReport")?.addEventListener("click",renderFinanceReport);
+  $("#downloadFinanceCsv")?.addEventListener("click",downloadFinanceCsv);
+  $("#printFinanceReport")?.addEventListener("click",()=>window.print());
+  $("#downloadInventoryCsv")?.addEventListener("click",downloadInventoryCsv);
+  $("#printInventoryReport")?.addEventListener("click",()=>window.print());
   $("#clearLegacyOrders")?.addEventListener("click",clearLegacyOrderData);
   
   $("#orderFilterToday")?.addEventListener("click",()=>{orderArrivalMode="date";const d=new Date();$("#orderArrivalFilter").value=d.toLocaleDateString("en-CA");arrivalCalendarMonth=new Date(d.getFullYear(),d.getMonth(),1);renderOperations();});
@@ -878,11 +882,8 @@ function bindEvents() {
   $("#orderShowAll")?.addEventListener("click",()=>{orderArrivalMode="all";renderOperations();});
   $("#arrivalPrevMonth")?.addEventListener("click",()=>{arrivalCalendarMonth=new Date(arrivalCalendarMonth.getFullYear(),arrivalCalendarMonth.getMonth()-1,1);renderArrivalCalendar();});
   $("#arrivalNextMonth")?.addEventListener("click",()=>{arrivalCalendarMonth=new Date(arrivalCalendarMonth.getFullYear(),arrivalCalendarMonth.getMonth()+1,1);renderArrivalCalendar();});
-  $("#refreshInventory")?.addEventListener("click",()=>loadOperations());
   $("#paymentForm")?.addEventListener("submit",savePaymentRecord);
   $("#expenseForm")?.addEventListener("submit",saveExpenseRecord);
-  $("#inventoryItemForm")?.addEventListener("submit",saveInventoryItem);
-  $("#stockMovementForm")?.addEventListener("submit",saveStockMovement);
   $("#contentForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -967,13 +968,43 @@ function fillInventorySelect(){if($("#stockItem"))$("#stockItem").innerHTML=['<o
 async function readCollection(name){const snap=await getDocs(collection(db,name));return snap.docs.map(d=>({id:d.id,...d.data()}));}
 async function loadOperations(){
   if(!db)return; setOperationsDefaultDates();
-  [opsBookings,opsPayments,opsExpenses,opsInventory]=await Promise.all([readCollection("bookings"),readCollection("paymentTransactions"),readCollection("expenseTransactions"),readCollection("inventoryItems")]);
+  [opsBookings,opsPayments,opsExpenses]=await Promise.all([readCollection("bookings"),readCollection("paymentTransactions"),readCollection("expenseTransactions")]);
   opsBookings.sort((a,b)=>String(a.startDate||"9999-99-99").localeCompare(String(b.startDate||"9999-99-99"))); opsPayments.sort((a,b)=>String(b.date||b.createdAt||"").localeCompare(String(a.date||a.createdAt||""))); opsExpenses.sort((a,b)=>String(b.date||b.createdAt||"").localeCompare(String(a.date||a.createdAt||""))); opsInventory.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"zh-Hant"));
   fillBookingSelects();fillInventorySelect();
   if($("#orderArrivalFilter")&&!$("#orderArrivalFilter").value&&orderArrivalMode==="date") setNearestArrivalFilter();
   renderOperations();
   const params=new URLSearchParams(location.search),bid=params.get("booking");if(bid&&$("#opsPaymentBooking"))$("#opsPaymentBooking").value=bid;
 }
+function renderInventory(){
+  const list=$("#inventoryList"); if(!list)return;
+  list.innerHTML=opsInventory.length?opsInventory.map(i=>{
+    const qty=Number(i.quantity)||0,min=Number(i.minQuantity)||0,isLow=qty<=min;
+    return `<div class="inventory-row ${isLow?"low":""}"><strong>${esc(i.name||"未命名備品")}</strong><span>庫存 ${qty} ${esc(i.unit||"")}</span><span>安全庫存 ${min} ${esc(i.unit||"")}</span><small>${isLow?"⚠ 低庫存":"庫存正常"}</small></div>`;
+  }).join(""):"<p class='muted'>尚未建立備品。</p>";
+}
+async function loadInventoryManagement(){
+  if(!db)return;
+  opsInventory=await readCollection("inventoryItems");
+  opsInventory.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"zh-Hant"));
+  fillInventorySelect(); renderInventory(); setOperationsDefaultDates();
+}
+async function saveInventoryItem(e){
+  e.preventDefault(); const name=$("#inventoryName").value.trim(),qty=Number($("#inventoryQty").value);
+  if(!name||qty<0)return message("#inventoryItemMessage","請填寫備品名稱與庫存。","error");
+  await setDoc(doc(db,"inventoryItems",crypto.randomUUID()),{name,unit:$("#inventoryUnit").value.trim(),quantity:qty,minQuantity:Number($("#inventoryMin").value)||0,unitCost:Number($("#inventoryCost").value)||0,createdBy:auth.currentUser.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
+  e.target.reset(); message("#inventoryItemMessage","備品已建立。","success"); await loadInventoryManagement();
+}
+async function saveStockMovement(e){
+  e.preventDefault(); const itemId=$("#stockItem").value,qty=Number($("#stockQty").value),type=$("#stockType").value;
+  if(!itemId||!(qty>0))return message("#stockMessage","請選備品並填寫數量。","error");
+  const refDoc=doc(db,"inventoryItems",itemId),snap=await getDoc(refDoc); if(!snap.exists())return message("#stockMessage","找不到備品。","error");
+  const item=snap.data(),before=Number(item.quantity)||0,after=type==="in"?before+qty:before-qty; if(after<0)return message("#stockMessage","庫存不足，不能扣成負數。","error");
+  const batch=writeBatch(db);
+  batch.set(refDoc,{quantity:after,updatedAt:serverTimestamp()},{merge:true});
+  batch.set(doc(db,"inventoryTransactions",crypto.randomUUID()),{itemId,itemName:item.name,type,quantity:qty,beforeQuantity:before,afterQuantity:after,date:$("#stockDate").value,note:$("#stockNote").value.trim(),createdBy:auth.currentUser.uid,createdAt:serverTimestamp()});
+  await batch.commit(); e.target.reset(); setOperationsDefaultDates(); message("#stockMessage","庫存已更新，進出庫紀錄已保存。","success"); await loadInventoryManagement();
+}
+
 function paidFor(id){return opsPayments.filter(x=>x.bookingId===id).reduce((s,x)=>s+(x.type==="refund"?-1:1)*(Number(x.amount)||0),0);}
 function setNearestArrivalFilter(){
   const input=$("#orderArrivalFilter"); if(!input)return;
@@ -1028,29 +1059,11 @@ function syncPaymentBookingOptions(){
   sel.innerHTML='<option value="">請選擇</option>'+rows.map(b=>`<option value="${esc(b.id)}">${esc(b.startDate||"—")}｜${esc(b.guestName||"未填")}｜${esc(b.id)}</option>`).join("");
   if(rows.some(b=>b.id===current))sel.value=current; else if(rows.length===1)sel.value=rows[0].id;
 }
-function renderInventory(){
-  const list=$("#inventoryList");
-  if(!list)return;
-  list.innerHTML=opsInventory.length?opsInventory.map(i=>{
-    const qty=Number(i.quantity)||0, min=Number(i.minQuantity)||0;
-    const isLow=qty<=min;
-    return `<div class="inventory-row ${isLow?"low":""}"><strong>${esc(i.name||"未命名備品")}</strong><span>庫存 ${qty} ${esc(i.unit||"")}</span><span>安全庫存 ${min} ${esc(i.unit||"")}</span><small>${isLow?"⚠ 低庫存":"庫存正常"}</small></div>`;
-  }).join(""):"<p class='muted'>尚未建立備品。</p>";
-}
-function serviceRequestNotice(b){
-  if(b.cancellationRequestStatus==="pending")return `<div class="ops-request-alert"><strong>取消預約申請待處理</strong><span>${esc(b.cancellationRequestReason||"未填原因")}</span></div>`;
-  if(b.refundRequestStatus==="pending")return `<div class="ops-request-alert"><strong>退款申請待處理</strong><span>${esc(b.refundRequestReason||"未填原因")}</span></div>`;
-  return "";
-}
 function renderOperations(){
   const formalBookings=opsBookings.filter(b=>!b.isTest),formalIds=new Set(formalBookings.map(b=>b.id));
   const confirmed=formalBookings.filter(b=>b.status==="confirmed");const received=opsPayments.filter(x=>!x.isTest&&(!x.bookingId||formalIds.has(x.bookingId))).reduce((s,x)=>s+(x.type==="refund"?-1:1)*(Number(x.amount)||0),0);const balance=confirmed.reduce((s,b)=>s+Math.max(0,(Number(b.totalAmount??b.quotedTotal)||0)-paidFor(b.id)),0);const expenses=opsExpenses.filter(x=>!x.isTest&&(!x.bookingId||formalIds.has(x.bookingId))).reduce((s,x)=>s+(Number(x.amount)||0),0);
-  $("#metricConfirmed").textContent=String(confirmed.length);$("#metricReceived").textContent=twd(received);$("#metricBalance").textContent=twd(balance);$("#metricExpenses").textContent=twd(expenses);
-  const displayOrders=filteredOrdersForDisplay(); const orders=$("#operationsOrders"); const filterDate=$("#orderArrivalFilter")?.value||""; if($("#orderFilterSummary"))$("#orderFilterSummary").textContent=orderArrivalMode==="all"?`顯示全部 ${opsBookings.length} 筆`:`入住日 ${filterDate||"—"}・${displayOrders.length} 筆`; orders.innerHTML=displayOrders.length?displayOrders.map(b=>{const paid=paidFor(b.id),total=Number(b.totalAmount??b.quotedTotal)||0,bal=Math.max(0,total-paid),fs=financeStatusFor(b,paid),cls=fs==="已結清"?"done":fs==="已取消"?"cancel":"warn";return `<article class="ops-order ${b.isTest?"test-order":""}"><div class="ops-order-head"><div><strong>${esc(b.guestName||"未填")}｜${esc(b.id)}${b.isTest?'<span class="test-badge">TEST</span>':''}</strong><div class="ops-order-meta"><span>${esc(b.startDate||"—")} → ${esc(b.endDate||"—")}</span><span>${Number(b.people)||"—"} 人</span><span>${esc(b.phone||"")}</span><span>${esc(b.email||"")}</span></div>${serviceRequestNotice(b)}${b.paymentReportStatus==="pending"?`<div class="ops-request-alert payment-report-alert"><strong>客戶已回報訂金｜待核帳</strong><span>付款人：${esc(b.paymentReportPayerName||"未填")}｜末五碼：${esc(b.paymentReportLast5||"—")}｜回報金額：${twd(b.paymentReportAmount||b.depositRequired||3000)}</span></div>`:""}</div><span class="status-pill ${cls}">${esc(b.status==="confirmed"?fs:b.status==="cancelled"?"已取消":"等待後台確認")}</span></div><div class="ops-order-money"><span>訂單總額<br><strong>${twd(total)}</strong></span><span>訂金<br><strong>${Number(b.depositRequired)>0?twd(b.depositRequired):"未設定"}</strong></span><span>已收<br><strong>${twd(paid)}</strong></span><span>未收<br><strong>${twd(bal)}</strong></span></div><div class="ops-order-actions"><button class="secondary" type="button" data-total="${esc(b.id)}">調整總額</button>${b.isTest&&paid<3000?`<button class="secondary" type="button" data-test-deposit="${esc(b.id)}">模擬訂金 3,000 入帳</button>`:""}${b.paymentReportStatus==="pending"&&paid<Number(b.depositRequired||3000)?`<button class="primary" type="button" data-verify-deposit="${esc(b.id)}">確認訂金入帳</button>`:""}${b.status==="pending"&&paid>=Number(b.depositRequired||3000)?`<button class="primary" type="button" data-confirm-booking="${esc(b.id)}">確認預約</button>`:""}${b.status!=="cancelled"?`<button class="danger" type="button" data-cancel="${esc(b.id)}">後台取消預約</button>`:""}</div></article>`}).join(""):`<p class='muted'>${orderArrivalMode==="all"?"目前沒有訂單。":"這個入住日目前沒有訂單。"}</p>`;
-  orders.querySelectorAll("[data-total]").forEach(btn=>btn.addEventListener("click",()=>editOrderTotal(btn.dataset.total)));orders.querySelectorAll("[data-test-deposit]").forEach(btn=>btn.addEventListener("click",()=>simulateTestDeposit(btn.dataset.testDeposit)));orders.querySelectorAll("[data-verify-deposit]").forEach(btn=>btn.addEventListener("click",()=>verifyReportedDeposit(btn.dataset.verifyDeposit)));orders.querySelectorAll("[data-confirm-booking]").forEach(btn=>btn.addEventListener("click",()=>confirmBookingInAdmin(btn.dataset.confirmBooking)));orders.querySelectorAll("[data-cancel]").forEach(btn=>btn.addEventListener("click",()=>cancelOrderById(btn.dataset.cancel)));
-  $("#paymentHistory").innerHTML=opsPayments.slice(0,20).map(x=>`<div class="history-row"><strong>${x.type==="refund"?"退款":"收款"} ${twd(x.amount)}</strong><span>${esc(x.bookingId||"未綁定")}</span><span>${esc(x.method||"")} ${esc(x.last5||"")}</span><small>${esc(x.date||"")}</small></div>`).join("")||"<p class='muted'>尚無紀錄。</p>";
-  $("#expenseHistory").innerHTML=opsExpenses.slice(0,20).map(x=>`<div class="history-row"><strong>${esc(x.category||"支出")} ${twd(x.amount)}</strong><span>${esc(x.bookingId||"未綁定")}</span><span>${esc(x.method||"")}</span><small>${esc(x.date||"")}</small></div>`).join("")||"<p class='muted'>尚無紀錄。</p>";
-  renderInventory();
+  const displayOrders=filteredOrdersForDisplay(); const orders=$("#operationsOrders"); const filterDate=$("#orderArrivalFilter")?.value||""; if($("#orderFilterSummary"))$("#orderFilterSummary").textContent=orderArrivalMode==="all"?`顯示全部 ${opsBookings.length} 筆`:`入住日 ${filterDate||"—"}・${displayOrders.length} 筆`; orders.innerHTML=displayOrders.length?displayOrders.map(b=>{const paid=paidFor(b.id),total=Number(b.totalAmount??b.quotedTotal)||0,bal=Math.max(0,total-paid),fs=financeStatusFor(b,paid),cls=fs==="已結清"?"done":fs==="已取消"?"cancel":"warn";return `<article class="ops-order ${b.isTest?"test-order":""}"><div class="ops-order-head"><div><strong>${esc(b.guestName||"未填")}｜${esc(b.id)}${b.isTest?'<span class="test-badge">TEST</span>':''}</strong><div class="ops-order-meta"><span>${esc(b.startDate||"—")} → ${esc(b.endDate||"—")}</span><span>${Number(b.people)||"—"} 人</span><span>${esc(b.phone||"")}</span><span>${esc(b.email||"")}</span></div>${serviceRequestNotice(b)}${b.paymentReportStatus==="pending"?`<div class="ops-request-alert payment-report-alert"><strong>客戶已回報訂金｜待核帳</strong><span>付款人：${esc(b.paymentReportPayerName||"未填")}｜末五碼：${esc(b.paymentReportLast5||"—")}｜回報金額：${twd(b.paymentReportAmount||b.depositRequired||3000)}</span></div>`:""}</div><span class="status-pill ${cls}">${esc(b.status==="confirmed"?fs:b.status==="cancelled"?"已取消":"等待後台確認")}</span></div><div class="ops-order-money"><span>訂單總額<br><strong>${twd(total)}</strong></span><span>訂金<br><strong>${Number(b.depositRequired)>0?twd(b.depositRequired):"未設定"}</strong></span><span>已收<br><strong>${twd(paid)}</strong></span><span>未收<br><strong>${twd(bal)}</strong></span></div><div class="ops-order-actions"><button class="secondary" type="button" data-total="${esc(b.id)}">調整總額</button>${b.paymentReportStatus==="pending"&&paid<Number(b.depositRequired||3000)?`<button class="primary" type="button" data-verify-deposit="${esc(b.id)}">確認訂金入帳</button>`:""}${b.status==="pending"&&paid>=Number(b.depositRequired||3000)?`<button class="primary" type="button" data-confirm-booking="${esc(b.id)}">確認預約</button>`:""}${b.status!=="cancelled"?`<button class="danger" type="button" data-cancel="${esc(b.id)}">後台取消預約</button>`:""}</div></article>`}).join(""):`<p class='muted'>${orderArrivalMode==="all"?"目前沒有訂單。":"這個入住日目前沒有訂單。"}</p>`;
+  orders.querySelectorAll("[data-total]").forEach(btn=>btn.addEventListener("click",()=>editOrderTotal(btn.dataset.total)));orders.querySelectorAll("[data-verify-deposit]").forEach(btn=>btn.addEventListener("click",()=>verifyReportedDeposit(btn.dataset.verifyDeposit)));orders.querySelectorAll("[data-confirm-booking]").forEach(btn=>btn.addEventListener("click",()=>confirmBookingInAdmin(btn.dataset.confirmBooking)));orders.querySelectorAll("[data-cancel]").forEach(btn=>btn.addEventListener("click",()=>cancelOrderById(btn.dataset.cancel)));
   renderArrivalCalendar();
   syncPaymentBookingOptions();
 }
@@ -1059,8 +1072,6 @@ async function savePaymentRecord(e){e.preventDefault();const bookingId=$("#opsPa
 
 async function editOrderDeposit(id){const b=opsBookings.find(x=>x.id===id),current=Number(b?.depositRequired)||0;const raw=prompt(`輸入訂單 ${id} 的訂金金額（訂金收足後，官方 LINE 才能按確認成立）`,current?String(current):"");if(raw===null)return;const dep=Number(raw);if(!(dep>0)||!Number.isFinite(dep))return alert("請輸入大於 0 的訂金金額。");const total=Number(b?.totalAmount??b?.quotedTotal)||0;if(total>0&&dep>total)return alert("訂金不可大於訂單總額。");const paid=paidFor(id);await setDoc(doc(db,"bookings",id),{depositRequired:dep,financeStatus:financeStatusFor({...b,depositRequired:dep},paid),updatedAt:serverTimestamp()},{merge:true});await loadOperations();}
 async function saveExpenseRecord(e){e.preventDefault();const amount=Number($("#expenseAmount").value);if(!(amount>0))return message("#expenseMessage","請填寫支出金額。","error");const bookingId=$("#expenseBooking").value||null,booking=opsBookings.find(b=>b.id===bookingId);await setDoc(doc(db,"expenseTransactions",crypto.randomUUID()),{bookingId,category:$("#expenseCategory").value,amount,method:$("#expenseMethod").value,date:$("#expenseDate").value,note:$("#expenseNote").value.trim(),isTest:Boolean(booking?.isTest),createdBy:auth.currentUser.uid,createdAt:serverTimestamp()});e.target.reset();setOperationsDefaultDates();message("#expenseMessage","支出已新增。","success");await loadOperations();}
-async function saveInventoryItem(e){e.preventDefault();const name=$("#inventoryName").value.trim(),qty=Number($("#inventoryQty").value);if(!name||qty<0)return message("#inventoryItemMessage","請填寫備品名稱與庫存。","error");await setDoc(doc(db,"inventoryItems",crypto.randomUUID()),{name,unit:$("#inventoryUnit").value.trim(),quantity:qty,minQuantity:Number($("#inventoryMin").value)||0,unitCost:Number($("#inventoryCost").value)||0,createdBy:auth.currentUser.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});e.target.reset();message("#inventoryItemMessage","備品已建立。","success");await loadOperations();}
-async function saveStockMovement(e){e.preventDefault();const itemId=$("#stockItem").value,qty=Number($("#stockQty").value),type=$("#stockType").value;if(!itemId||!(qty>0))return message("#stockMessage","請選備品並填寫數量。","error");const refDoc=doc(db,"inventoryItems",itemId),snap=await getDoc(refDoc);if(!snap.exists())return message("#stockMessage","找不到備品。","error");const item=snap.data(),before=Number(item.quantity)||0,after=type==="in"?before+qty:before-qty;if(after<0)return message("#stockMessage","庫存不足，不能扣成負數。","error");const batch=writeBatch(db);batch.set(refDoc,{quantity:after,updatedAt:serverTimestamp()},{merge:true});batch.set(doc(db,"inventoryTransactions",crypto.randomUUID()),{itemId,itemName:item.name,type,quantity:qty,beforeQuantity:before,afterQuantity:after,date:$("#stockDate").value,note:$("#stockNote").value.trim(),createdBy:auth.currentUser.uid,createdAt:serverTimestamp()});await batch.commit();e.target.reset();setOperationsDefaultDates();message("#stockMessage","庫存已更新，進出庫紀錄已保存。","success");await loadOperations();}
 async function editOrderTotal(id){const b=opsBookings.find(x=>x.id===id),current=Number(b?.totalAmount??b?.quotedTotal)||0;const raw=prompt(`輸入訂單 ${id} 的總額`,String(current));if(raw===null)return;const total=Number(raw);if(total<0||!Number.isFinite(total))return alert("請輸入正確金額。");const paid=paidFor(id);await setDoc(doc(db,"bookings",id),{totalAmount:total,balanceAmount:Math.max(0,total-paid),financeStatus:financeStatusFor({...b,totalAmount:total},paid),updatedAt:serverTimestamp()},{merge:true});await loadOperations();}
 function updateCancellationRefundFields(){
   const disposition=$("#cancelDepositDisposition")?.value||"";
@@ -1125,3 +1136,48 @@ async function cancelOrderById(id){openCancellationSop(id);}
 $("#cancelDepositDisposition")?.addEventListener("change",updateCancellationRefundFields);
 $("#confirmCancellation")?.addEventListener("click",confirmCancellationSop);
 $("#closeCancellation")?.addEventListener("click",closeCancellationSop);
+
+// V6.80 報表中心：只讀取資料，不提供修改功能。
+let reportInventory=[];
+function reportDateValue(v){ return String(v||"").slice(0,10); }
+function reportInRange(v,start,end){ const d=reportDateValue(v); if(!d)return false; return (!start||d>=start)&&(!end||d<=end); }
+function csvCell(v){ const x=String(v??"").replace(/"/g,'""'); return `"${x}"`; }
+function saveCsv(name,rows){ const bom="\ufeff"; const data=bom+rows.map(r=>r.map(csvCell).join(",")).join("\r\n"); const blob=new Blob([data],{type:"text/csv;charset=utf-8"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); URL.revokeObjectURL(a.href); a.remove(); }
+function reportTable(headers,rows){ if(!rows.length)return `<p class="muted">此區間沒有資料。</p>`; return `<table class="report-table"><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(v=>`<td>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table>`; }
+function setReportDefaultDates(){ const end=new Date(),start=new Date(end.getFullYear(),end.getMonth(),1),fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; if($("#reportStartDate")&&!$("#reportStartDate").value)$("#reportStartDate").value=fmt(start); if($("#reportEndDate")&&!$("#reportEndDate").value)$("#reportEndDate").value=fmt(end); }
+async function loadReports(){ setReportDefaultDates(); const [b,p,e,i]=await Promise.all([readCollection("bookings"),readCollection("paymentTransactions"),readCollection("expenseTransactions"),readCollection("inventoryItems")]); opsBookings=b;opsPayments=p;opsExpenses=e;reportInventory=i.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"zh-Hant")); renderFinanceReport();renderInventoryReport(); }
+function reportPaidFor(id,payments){ return payments.filter(x=>x.bookingId===id).reduce((sum,x)=>sum+(x.type==="refund"?-Number(x.amount||0):Number(x.amount||0)),0); }
+function renderFinanceReport(){
+  const start=$("#reportStartDate")?.value||"",end=$("#reportEndDate")?.value||"";
+  const bookings=opsBookings.filter(b=>reportInRange(b.startDate,start,end));
+  const payments=opsPayments.filter(x=>reportInRange(x.date,start,end));
+  const expenses=opsExpenses.filter(x=>reportInRange(x.date,start,end));
+  const bookingTotal=bookings.reduce((s,b)=>s+Number((b.totalAmount??b.quotedTotal) || 0),0);
+  const paymentsIn=payments.filter(x=>x.type!=="refund").reduce((s,x)=>s+Number(x.amount||0),0);
+  const refunds=payments.filter(x=>x.type==="refund").reduce((s,x)=>s+Number(x.amount||0),0);
+  const expenseTotal=expenses.reduce((s,x)=>s+Number(x.amount||0),0);
+  const net=paymentsIn-refunds-expenseTotal;
+  if($("#financeReportSummary"))$("#financeReportSummary").innerHTML=[["訂單數",`${bookings.length} 筆`],["訂單總額",twd(bookingTotal)],["收款",twd(paymentsIn)],["退款",twd(refunds)],["支出",twd(expenseTotal)],["淨現金流",twd(net)]].map(([a,b])=>`<div class="report-stat"><span>${a}</span><strong>${b}</strong></div>`).join("");
+  const orderRows=bookings.sort((a,b)=>String(a.startDate||"").localeCompare(String(b.startDate||""))).map(b=>{const paid=reportPaidFor(b.id,opsPayments);const total=Number((b.totalAmount??b.quotedTotal)||0);return [b.id,b.guestName||"",b.startDate||"",b.endDate||"",`${Number(b.people)||0} 人`,b.status==="confirmed"?"已確認":b.status==="cancelled"?"已取消":"待確認",twd(total),twd(paid),twd(Math.max(0,total-paid)),b.cancellationReason||b.cancelReason||b.cancellationDepositNote||b.cancelDepositNote||""]});
+  if($("#financeOrdersReport"))$("#financeOrdersReport").innerHTML=reportTable(["訂單編號","客戶","入住","退房","人數","狀態","訂單總額","淨已收","未收","備註"],orderRows);
+  const paymentRows=payments.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).map(x=>[x.date||"",x.type==="refund"?"退款":"收款",x.bookingId||"",twd(x.amount),x.method||"",x.last5||"",x.note||""]);
+  if($("#financePaymentsReport"))$("#financePaymentsReport").innerHTML=reportTable(["日期","類型","訂單編號","金額","方式","末五碼／來源","備註"],paymentRows);
+  const expenseRows=expenses.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).map(x=>[x.date||"",x.category||"",x.bookingId||"",twd(x.amount),x.method||"",x.note||""]);
+  if($("#financeExpensesReport"))$("#financeExpensesReport").innerHTML=reportTable(["日期","分類","訂單編號","金額","付款方式","備註"],expenseRows);
+}
+function renderInventoryReport(){
+  const rows=reportInventory.map(i=>{const qty=Number(i.quantity)||0,min=Number(i.minQuantity)||0,cost=Number(i.unitCost)||0;return [i.name||"",`${qty} ${i.unit||""}`,`${min} ${i.unit||""}`,twd(cost),twd(qty*cost),qty<=min?"低庫存":"正常"]});
+  const totalValue=reportInventory.reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.unitCost)||0),0),low=reportInventory.filter(i=>(Number(i.quantity)||0)<=(Number(i.minQuantity)||0)).length;
+  if($("#inventoryReportSummary"))$("#inventoryReportSummary").innerHTML=`<div class="report-stat"><span>備品種類</span><strong>${reportInventory.length} 項</strong></div><div class="report-stat"><span>低庫存</span><strong>${low} 項</strong></div><div class="report-stat"><span>庫存估值</span><strong>${twd(totalValue)}</strong></div>`;
+  if($("#inventoryReportTable"))$("#inventoryReportTable").innerHTML=reportTable(["品名","目前庫存","安全庫存","單位成本","庫存估值","狀態"],rows);
+}
+function downloadFinanceCsv(){
+  const start=$("#reportStartDate")?.value||"",end=$("#reportEndDate")?.value||"";
+  const bookings=opsBookings.filter(b=>reportInRange(b.startDate,start,end)),payments=opsPayments.filter(x=>reportInRange(x.date,start,end)),expenses=opsExpenses.filter(x=>reportInRange(x.date,start,end));
+  const rows=[[`俐姐的家 訂單・帳務・支出報表 ${start||""}~${end||""}`],[],["訂單"],["訂單編號","客戶","入住","退房","人數","狀態","訂單總額","淨已收","未收","備註"]];
+  bookings.forEach(b=>{const paid=reportPaidFor(b.id,opsPayments),total=Number((b.totalAmount??b.quotedTotal)||0);rows.push([b.id,b.guestName||"",b.startDate||"",b.endDate||"",Number(b.people)||0,b.status||"",total,paid,Math.max(0,total-paid),b.cancellationReason||b.cancelReason||b.cancellationDepositNote||b.cancelDepositNote||""])});
+  rows.push([],["收款／退款"],["日期","類型","訂單編號","金額","方式","末五碼／來源","備註"]); payments.forEach(x=>rows.push([x.date||"",x.type==="refund"?"退款":"收款",x.bookingId||"",Number(x.amount)||0,x.method||"",x.last5||"",x.note||""]));
+  rows.push([],["支出"],["日期","分類","訂單編號","金額","付款方式","備註"]); expenses.forEach(x=>rows.push([x.date||"",x.category||"",x.bookingId||"",Number(x.amount)||0,x.method||"",x.note||""]));
+  saveCsv(`lijie-finance-${start||"all"}-${end||"all"}.csv`,rows);
+}
+function downloadInventoryCsv(){ const rows=[["俐姐的家 庫存管理庫存表"],["品名","目前庫存","單位","安全庫存","單位成本","庫存估值","狀態"]];reportInventory.forEach(i=>{const q=Number(i.quantity)||0,m=Number(i.minQuantity)||0,c=Number(i.unitCost)||0;rows.push([i.name||"",q,i.unit||"",m,c,q*c,q<=m?"低庫存":"正常"])});saveCsv("lijie-inventory.csv",rows); }

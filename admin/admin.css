@@ -38,3 +38,10 @@
 .arrival-day.is-stay-night .arrival-day-num{font-weight:800;color:#17483f}
 .arrival-day.is-departure{border-style:dashed}
 .arrival-day.is-departure .arrival-day-note::after{content:" · 退房";font-weight:700}
+
+/* V6.80 報表中心 */
+.report-block{border:1px solid var(--line,#ddd7cd);border-radius:18px;padding:22px;margin:0 0 22px;background:#fff}
+.report-toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:16px 0 18px}.report-toolbar label{min-width:160px}.report-toolbar input{width:100%}
+.report-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 18px}.report-stat{border:1px solid var(--line,#ddd7cd);border-radius:14px;padding:14px;background:#faf9f6}.report-stat span{display:block;color:#6f7774;font-size:13px;margin-bottom:6px}.report-stat strong{font-size:20px;color:#153f38}
+.report-table-wrap{margin-top:20px;overflow:auto}.report-table-wrap h4{margin:0 0 10px}.report-table{width:100%;border-collapse:collapse;min-width:760px}.report-table th,.report-table td{padding:10px 12px;border-bottom:1px solid #e7e2d9;text-align:left;vertical-align:top;font-size:14px}.report-table th{white-space:nowrap;background:#f7f5ef;color:#153f38}.report-low{color:#b13b32;font-weight:700}
+@media print{body *{visibility:hidden!important}#reportsPanel,#reportsPanel *{visibility:visible!important}#reportsPanel{position:absolute;left:0;top:0;width:100%;padding:0!important}.tabs,.topbar,.report-toolbar,.panel-heading button{display:none!important}.report-block{border:0;page-break-inside:avoid}}
