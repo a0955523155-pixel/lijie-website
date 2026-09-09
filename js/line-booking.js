@@ -294,11 +294,24 @@ function refreshForm(){
     els.status.textContent="請先選擇完整日期並填寫姓名。";
   }
   const msg=buildMessage();
-  if(msg){els.summary.innerHTML=`<div class="row"><span>入住</span><strong>${keyOf(startDate)}</strong></div><div class="row"><span>退房</span><strong>${keyOf(endDate)}</strong></div><div class="row"><span>住宿</span><strong>${nightsCount()} 晚</strong></div><div class="row"><span>姓名</span><strong>${escapeHtml(els.name.value.trim()||"—")}</strong></div>`;els.summary.classList.remove("hidden")}else els.summary.classList.add("hidden");
+  if(msg){els.summary.innerHTML=`<div class="row"><span>入住</span><strong>${keyOf(startDate)}</strong></div><div class="row"><span>退房</span><strong>${keyOf(endDate)}</strong></div><div class="row"><span>住宿</span><strong>${nightsCount()} 晚</strong></div><div class="row"><span>姓名</span><strong>${escapeHtml(els.name.value.trim()||"—")}</strong></div><div class="row"><span>Email</span><strong>${escapeHtml(els.email.value.trim()||"—")}</strong></div>`;els.summary.classList.remove("hidden")}else els.summary.classList.add("hidden");
 }
 function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 
 async function copyMessage(){const msg=buildMessage();if(!msg){els.status.textContent="請先選擇日期。";return}try{await navigator.clipboard.writeText(msg);els.status.textContent="已複製預約內容，可貼到官方 LINE。"}catch{els.status.textContent="瀏覽器無法自動複製，請長按選取內容。"}}
+
+
+function emailIssue(raw){
+  const email=String(raw||"").trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "請輸入正確的 Email，例如 name@gmail.com。";
+  const domain=email.split("@").pop();
+  const typoMap={
+    "gmail.con":"gmail.com","gmal.com":"gmail.com","gmial.com":"gmail.com","gmail.co":"gmail.com","gmail.om":"gmail.com",
+    "hotmail.con":"hotmail.com","outlook.con":"outlook.com","yahoo.con":"yahoo.com"
+  };
+  if(typoMap[domain]) return `Email 網域看起來有誤：${domain}。你是不是要輸入 ${typoMap[domain]}？`;
+  return "";
+}
 
 function bookingPayload(){
   return {
@@ -334,6 +347,12 @@ async function submitBookingToOfficialLine(){
 
 async function sendMessage(){
   const msg=buildMessage(); if(!msg)return;
+  const emailError=emailIssue(els.email.value);
+  if(emailError){
+    els.status.textContent=emailError;
+    try{ els.email.focus(); }catch{}
+    return;
+  }
   els.send.disabled=true;
   els.status.textContent="正在把預約申請送回官方 LINE…";
   try {
@@ -361,6 +380,12 @@ async function sendMessage(){
       els.status.textContent="目前預約連線已更新，請重新整理此頁或重新從官網／官方 LINE 進入，已填資料會保留。";
     } else if (reason.includes("BOOKING_OUTSIDE_WINDOW")) {
       els.status.textContent=`目前只開放未來 ${pricingSettings.bookingWindowMonths||6} 個月內預約，請重新選擇日期。`;
+    } else if (reason.includes("EMAIL_DOMAIN_TYPO")) {
+      els.status.textContent="Email 網域看起來有拼字錯誤，請確認是否為 gmail.com、hotmail.com、outlook.com 等正確網域。";
+      try{ els.email.focus(); }catch{}
+    } else if (reason.includes("EMAIL_REQUIRED")) {
+      els.status.textContent="請輸入可正常收信的 Email。";
+      try{ els.email.focus(); }catch{}
     } else {
       els.status.textContent=`送出未完成（${reason}）。已填日期與資料仍會保留，請重新整理後再送一次。`;
     }

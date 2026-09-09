@@ -59,7 +59,11 @@ function normalizeBooking(input={}){
   const peopleRaw=Number.parseInt(String(input.people??""),10);
   const people=Number.isFinite(peopleRaw)?Math.min(Math.max(peopleRaw,1),12):null;
   const name=clean(input.name,60); if(!name) throw new Error("NAME_REQUIRED");
-  const email=clean(input.email,120).toLowerCase(); if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("EMAIL_REQUIRED");
+  const email=clean(input.email,120).toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("EMAIL_REQUIRED");
+  const emailDomain=email.split("@").pop();
+  const commonDomainTypos=new Set(["gmail.con","gmal.com","gmial.com","gmail.co","gmail.om","hotmail.con","outlook.con","yahoo.con"]);
+  if(commonDomainTypos.has(emailDomain)) throw new Error("EMAIL_DOMAIN_TYPO");
   return {checkIn:a.s,checkOut:b.s,nights,name,phone:clean(input.phone,40),email,people,purpose:clean(input.purpose,120),notes:clean(input.notes,500),source:clean(input.source,40)||"official-line-secure-link"};
 }
 
