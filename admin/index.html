@@ -112,6 +112,17 @@
 <form class="ops-card" id="expenseForm"><h3>新增支出</h3><label>綁定訂單（可不選）<select id="expenseBooking"></select></label><div class="ops-grid"><label>分類<select id="expenseCategory"><option>清潔</option><option>備品</option><option>維修</option><option>水電</option><option>平台／手續費</option><option>其他</option></select></label><label>金額<input id="expenseAmount" min="1" required="" step="1" type="number"/></label><label>付款方式<select id="expenseMethod"><option>轉帳</option><option>現金</option><option>信用卡</option><option>其他</option></select></label><label>日期<input id="expenseDate" required="" type="date"/></label></div><label>備註<textarea id="expenseNote" maxlength="300" rows="2"></textarea></label><button class="primary" type="submit">新增支出</button><p class="message" id="expenseMessage"></p></form>
 </div>
 
+<div class="ops-two ops-recent-wrap">
+  <section class="ops-card">
+    <div class="ops-title"><div><h3>近期收款／退款紀錄</h3><p>新增、取消退款或核對訂金後，會立即同步顯示最近紀錄。</p></div></div>
+    <div class="ops-history" id="recentPaymentHistory"></div>
+  </section>
+  <section class="ops-card">
+    <div class="ops-title"><div><h3>近期支出紀錄</h3><p>顯示最近支出，方便新增後立即核對。</p></div></div>
+    <div class="ops-history" id="recentExpenseHistory"></div>
+  </section>
+</div>
+
 </section>
 
 
