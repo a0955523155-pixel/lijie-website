@@ -688,18 +688,21 @@ async function loadPricing(){
   try{
     const snap=await getDoc(doc(db,"settings","pricing")); const d=snap.exists()?snap.data():{};
     $("#weekdayPrice").value=Number(d.weekdayPrice)||0; $("#fridayPrice").value=Number(d.fridayPrice)||0; $("#saturdayPrice").value=Number(d.saturdayPrice)||0;
-    $("#pricingEnabled").checked=d.enabled!==false; pricingSpecialRanges=Array.isArray(d.specialRanges)?d.specialRanges.map(newSpecialRate):[]; renderSpecialRates();
+    $("#holidayPrice").value=Number(d.holidayPrice)||0; $("#eventPrice").value=Number(d.eventPrice)||0; $("#bookingWindowMonths").value=Math.max(1,Math.min(Number(d.bookingWindowMonths)||6,18));
+    $("#pricingEnabled").checked=d.enabled!==false; $("#autoGovernmentHolidays").checked=d.autoGovernmentHolidays!==false; $("#autoKentingEvents").checked=d.autoKentingEvents!==false;
+    pricingSpecialRanges=Array.isArray(d.specialRanges)?d.specialRanges.map(newSpecialRate):[]; renderSpecialRates();
   }catch(e){ message("#pricingMessage",e?.message||"讀取價格設定失敗。","error"); }
 }
 async function savePricing(event){
   event.preventDefault();
   const weekdayPrice=Number($("#weekdayPrice").value), fridayPrice=Number($("#fridayPrice").value), saturdayPrice=Number($("#saturdayPrice").value);
+  const holidayPrice=Number($("#holidayPrice").value)||0, eventPrice=Number($("#eventPrice").value)||0, bookingWindowMonths=Math.max(1,Math.min(Number($("#bookingWindowMonths").value)||6,18));
   if(!(weekdayPrice>0&&fridayPrice>0&&saturdayPrice>0)) return message("#pricingMessage","平日、週五、週六價格都必須大於 0。","error");
   for(const r of pricingSpecialRanges){ if(!r.label||!r.startDate||!r.endDate||!(Number(r.nightlyPrice)>0)||r.endDate<r.startDate) return message("#pricingMessage","請完整填寫特殊日期名稱、日期區間與價格。","error"); }
   message("#pricingMessage","正在儲存…");
   try{
-    await setDoc(doc(db,"settings","pricing"),{enabled:$("#pricingEnabled").checked,weekdayPrice,fridayPrice,saturdayPrice,specialRanges:pricingSpecialRanges,updatedAt:serverTimestamp()});
-    message("#pricingMessage","價格設定已儲存。新預約會依實際入住日期自動試算。","success");
+    await setDoc(doc(db,"settings","pricing"),{enabled:$("#pricingEnabled").checked,weekdayPrice,fridayPrice,saturdayPrice,holidayPrice,eventPrice,bookingWindowMonths,autoGovernmentHolidays:$("#autoGovernmentHolidays").checked,autoKentingEvents:$("#autoKentingEvents").checked,specialRanges:pricingSpecialRanges,updatedAt:serverTimestamp()});
+    message("#pricingMessage",`價格設定已儲存。前台開放未來 ${bookingWindowMonths} 個月，並會顯示每日價格。`,"success");
   }catch(e){ message("#pricingMessage",e?.message||"價格設定儲存失敗。","error"); }
 }
 

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { COOKIE_NAME, parseCookies, verifyPayload as verifyCookieSession } from "./line-auth-lib.js";
 import { BOOKING_RULES } from "../js/booking-rules.js";
-import { putBooking, firestoreReady, quoteStay } from "./firestore-admin.js";
+import { putBooking, firestoreReady, quoteStay, getPublicPricingSettings } from "./firestore-admin.js";
 
 function clean(value, max = 500) {
   return String(value ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, max);
@@ -162,6 +162,13 @@ export default async function handler(req,res){
     const resolvedSession = resolveSession(req, explicit);
     const session = resolvedSession.payload;
     const booking=normalizeBooking(body.booking);
+    const pricingSettings=await getPublicPricingSettings();
+    const todayKey=new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Taipei"});
+    if(booking.checkIn < todayKey || booking.checkOut > pricingSettings.maxBookableDate){
+      const e=new Error("BOOKING_OUTSIDE_WINDOW"); e.code="BOOKING_OUTSIDE_WINDOW"; throw e;
+    }
+    const quote=await quoteStay(booking.checkIn,booking.checkOut);
+    if(quote){ booking.quotedTotal=quote.total; booking.quoteBreakdown=quote.details; booking.pricingUpdatedAt=quote.pricingUpdatedAt||null; }
     const id=bookingId();
     diag("AUTH_OK",{bookingId:id,userIdPrefix:String(session.uid).slice(0,10),sessionSource:resolvedSession.source});
     diag("BOOKING_VALID",{bookingId:id,checkIn:booking.checkIn,checkOut:booking.checkOut,nights:booking.nights,people:booking.people,source:booking.source});

@@ -16,6 +16,9 @@ const today = new Date(); today.setHours(0,0,0,0);
 let params = null;
 let cursor = new Date(today.getFullYear(), today.getMonth(), 1);
 let startDate = null, endDate = null, monthStates = new Map();
+let currentQuote = null;
+let pricingSettings = {bookingWindowMonths:6,maxBookableDate:null};
+const pricingMonthCache = new Map();
 let bookingSession = null;
 let lineIdentityReady = false;
 const DRAFT_KEY = "lijie-line-booking-draft-v1";
@@ -31,6 +34,9 @@ const keyOf = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0"
 const parseKey = (k) => { const [y,m,d]=k.split("-").map(Number); return new Date(y,m-1,d); };
 const fmt = new Intl.DateTimeFormat("zh-TW", {month:"short", day:"numeric", weekday:"short"});
 const monthFmt = new Intl.DateTimeFormat("zh-TW", {year:"numeric", month:"long"});
+const moneyFmt = new Intl.NumberFormat("zh-TW");
+const maxBookableDate=()=>pricingSettings.maxBookableDate?parseKey(pricingSettings.maxBookableDate):(()=>{const d=new Date(today);d.setMonth(d.getMonth()+6);return d})();
+const isBeyondWindow=(d)=>d>maxBookableDate();
 
 function readBookingSession(){
   const p = new URLSearchParams(location.search);
@@ -94,27 +100,48 @@ async function loadStates(first,last){
   } catch(e){ console.warn(e); return new Map(); }
 }
 
+
+async function loadPricing(first){
+  const mk=`${first.getFullYear()}-${String(first.getMonth()+1).padStart(2,"0")}`;
+  if(pricingMonthCache.has(mk)) return pricingMonthCache.get(mk);
+  try{
+    const r=await fetch(`/api/public-pricing-calendar?month=${encodeURIComponent(mk)}`,{cache:"no-store"});
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data=await r.json(); if(data.settings) pricingSettings={...pricingSettings,...data.settings};
+    const map=new Map((data.quote?.details||[]).map(x=>[x.date,x])); pricingMonthCache.set(mk,map); return map;
+  }catch(e){console.warn("pricing unavailable",e); const map=new Map(); pricingMonthCache.set(mk,map); return map;}
+}
+async function quoteRange(a,b){
+  try{
+    const r=await fetch(`/api/public-pricing-calendar?start=${encodeURIComponent(keyOf(a))}&end=${encodeURIComponent(keyOf(b))}`,{cache:"no-store"});
+    if(!r.ok) throw new Error(`HTTP ${r.status}`); const data=await r.json(); if(data.settings) pricingSettings={...pricingSettings,...data.settings}; return data.quote||null;
+  }catch(e){console.warn("range quote unavailable",e); return null;}
+}
 function isInRange(d){ if(!startDate) return false; const end=endDate||startDate; return d>=startDate&&d<=end; }
 function stateOf(d){ return stateCache.get(keyOf(d)) || monthStates.get(keyOf(d)) || "available"; }
 
-function drawCalendar(){
+function drawCalendar(prices=new Map()){
   const first=new Date(cursor.getFullYear(),cursor.getMonth(),1);
   els.month.textContent=monthFmt.format(first); els.cal.replaceChildren();
   const start=new Date(first); start.setDate(1-first.getDay());
   for(let i=0;i<42;i++){
-    const d=new Date(start); d.setDate(start.getDate()+i); const state=stateOf(d); const outside=d.getMonth()!==cursor.getMonth(); const past=d<today;
-    const b=document.createElement("button"); b.type="button"; b.className=`day ${outside?"outside":""} ${past?"past":""} ${state} ${isInRange(d)?"range":""}`;
+    const d=new Date(start); d.setDate(start.getDate()+i); const state=stateOf(d); const rate=prices.get(keyOf(d)); const outside=d.getMonth()!==cursor.getMonth(); const past=d<today; const beyond=isBeyondWindow(d);
+    const b=document.createElement("button"); b.type="button"; b.className=`day ${outside?"outside":""} ${past?"past":""} ${beyond?"future-locked":""} ${state} ${isInRange(d)?"range":""}`;
     if ((startDate&&keyOf(d)===keyOf(startDate))||(endDate&&keyOf(d)===keyOf(endDate))) b.classList.add("selected");
-    b.innerHTML=`<span>${d.getDate()}</span><small>${state==="available"?"可詢問":state==="booked"?"已預約":"暫停"}</small>`;
-    b.disabled=past||state!=="available"; if(!b.disabled)b.addEventListener("click",()=>pickDate(d)); els.cal.append(b);
+    const rateText=(!outside&&!past&&!beyond&&state==="available"&&rate?.price)?`<em>${moneyFmt.format(rate.price)}</em>`:"";
+    const tag=(!outside&&!past&&!beyond&&state==="available"&&rate?.label&&!['平日','週五','週六'].includes(rate.label))?`<i>${rate.label.replace('連假','')}</i>`:"";
+    const status=beyond?"尚未開放":state==="available"?"可詢問":state==="booked"?"已預約":"暫停";
+    b.innerHTML=`<span>${d.getDate()}</span>${rateText}${tag}<small>${status}</small>`;
+    b.disabled=past||beyond||state!=="available"; if(!b.disabled)b.addEventListener("click",()=>pickDate(d)); els.cal.append(b);
   }
 }
-
 async function render(){
   const first=new Date(cursor.getFullYear(),cursor.getMonth(),1), last=new Date(cursor.getFullYear(),cursor.getMonth()+1,0);
-  drawCalendar(); // 先立即畫出，避免 LINE MINI App 點擊後等待網路才有反應
-  monthStates=await loadStates(first,last);
   drawCalendar();
+  const [states,prices]=await Promise.all([loadStates(first,last),loadPricing(first)]); monthStates=states;
+  drawCalendar(prices);
+  els.prev.disabled=cursor.getFullYear()===today.getFullYear()&&cursor.getMonth()===today.getMonth();
+  const nm=new Date(cursor.getFullYear(),cursor.getMonth()+1,1), max=maxBookableDate(); els.next.disabled=nm>new Date(max.getFullYear(),max.getMonth(),1);
 }
 
 async function rangeIsAvailable(a,b){
@@ -131,8 +158,9 @@ async function rangeIsAvailable(a,b){
 
 async function pickDate(d){
   hideError();
+  if(isBeyondWindow(d)){showError(`目前僅開放未來 ${pricingSettings.bookingWindowMonths||6} 個月。`);return;}
   if(!startDate||endDate){
-    startDate=new Date(d); endDate=null;
+    startDate=new Date(d); endDate=null; currentQuote=null;
     updateSelection(); drawCalendar();
     return;
   }
@@ -150,12 +178,12 @@ async function pickDate(d){
 
   const lastNight=new Date(candidateEnd); lastNight.setDate(lastNight.getDate()-1);
   els.note.textContent = "正在確認住宿期間是否可預約…";
-  const ok=await rangeIsAvailable(startDate,lastNight);
+  const [ok,quote]=await Promise.all([rangeIsAvailable(startDate,lastNight),quoteRange(startDate,candidateEnd)]);
   if(!ok){
-    endDate=null;
+    endDate=null; currentQuote=null;
     showError("住宿期間有已預約或暫停開放的日期，請重新選擇退房日期。");
-  }
-  updateSelection(); drawCalendar();
+  } else { currentQuote=quote; }
+  updateSelection(); await render();
 }
 
 function hideError(){els.error.classList.add("hidden")}
@@ -163,7 +191,8 @@ function showError(msg){els.error.textContent=msg;els.error.classList.remove("hi
 function nightsCount(){if(!startDate||!endDate)return 0;return Math.round((endDate-startDate)/86400000)}
 function updateSelection(){
   els.start.textContent=startDate?fmt.format(startDate):"請選擇";els.end.textContent=endDate?fmt.format(endDate):"請選擇";
-  els.note.textContent=startDate&&!endDate?"已選開始日期，請再點結束日期。":startDate&&endDate?`入住 ${nightsCount()} 晚；送出前仍會以官方 LINE 最終確認。`:"先點入住日期，再點退房日期。已預約或暫停開放的日期無法選取。";
+  const price=currentQuote?.total?`｜預估 NT$ ${moneyFmt.format(currentQuote.total)}`:"";
+  els.note.textContent=startDate&&!endDate?"已選開始日期，請再點結束日期。":startDate&&endDate?`入住 ${nightsCount()} 晚${price}；最終金額以俐姐確認為準。`:`先點入住日期，再點退房日期。日曆顯示每晚價格，開放未來 ${pricingSettings.bookingWindowMonths||6} 個月。`;
   refreshForm();
 }
 
@@ -258,7 +287,7 @@ function refreshForm(){
     els.status.textContent="請先選擇完整日期並填寫姓名。";
   }
   const msg=buildMessage();
-  if(msg){els.summary.innerHTML=`<div class="row"><span>入住</span><strong>${keyOf(startDate)}</strong></div><div class="row"><span>退房</span><strong>${keyOf(endDate)}</strong></div><div class="row"><span>住宿</span><strong>${nightsCount()} 晚</strong></div><div class="row"><span>姓名</span><strong>${escapeHtml(els.name.value.trim()||"—")}</strong></div>`;els.summary.classList.remove("hidden")}else els.summary.classList.add("hidden");
+  if(msg){els.summary.innerHTML=`<div class="row"><span>入住</span><strong>${keyOf(startDate)}</strong></div><div class="row"><span>退房</span><strong>${keyOf(endDate)}</strong></div><div class="row"><span>住宿</span><strong>${nightsCount()} 晚</strong></div>${currentQuote?.total?`<div class="row"><span>預估總價</span><strong>NT$ ${moneyFmt.format(currentQuote.total)}</strong></div>`:""}<div class="row"><span>姓名</span><strong>${escapeHtml(els.name.value.trim()||"—")}</strong></div>`;els.summary.classList.remove("hidden")}else els.summary.classList.add("hidden");
 }
 function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 
@@ -322,6 +351,8 @@ async function sendMessage(){
       els.status.textContent="預約尚未寫入資料庫，請稍後再試；若持續出現，請聯絡俐姐。";
     } else if (reason.includes("BOOKING_SESSION_INVALID")) {
       els.status.textContent="目前預約連線已更新，請重新整理此頁或重新從官網／官方 LINE 進入，已填資料會保留。";
+    } else if (reason.includes("BOOKING_OUTSIDE_WINDOW")) {
+      els.status.textContent=`目前只開放未來 ${pricingSettings.bookingWindowMonths||6} 個月內預約，請重新選擇日期。`;
     } else {
       els.status.textContent=`送出未完成（${reason}）。已填日期與資料仍會保留，請重新整理後再送一次。`;
     }
@@ -330,8 +361,8 @@ async function sendMessage(){
   }
 }
 
-els.prev.addEventListener("click",()=>{cursor=new Date(cursor.getFullYear(),cursor.getMonth()-1,1);render()});
-els.next.addEventListener("click",()=>{cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,1);render()});
+els.prev.addEventListener("click",()=>{if(els.prev.disabled)return;cursor=new Date(cursor.getFullYear(),cursor.getMonth()-1,1);render()});
+els.next.addEventListener("click",()=>{if(els.next.disabled)return;cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,1);render()});
 [els.name,els.phone,els.people,els.purpose,els.notes].forEach(e=>e.addEventListener("input",()=>{refreshForm();saveDraft();}));
 els.copy.addEventListener("click", copyMessage);
 let submitInFlight = false;

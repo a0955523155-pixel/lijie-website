@@ -1,3 +1,4 @@
+import { autoSeasonMap, bookingWindowMaxDate } from "./holiday-market.js";
 import crypto from "node:crypto";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -173,16 +174,34 @@ export async function quoteStay(ci,co){
   const weekday=Number(cfg.weekdayPrice||0), friday=Number(cfg.fridayPrice||0), saturday=Number(cfg.saturdayPrice||0);
   if(!(weekday>0) || !(friday>0) || !(saturday>0)) return null;
   const specials=Array.isArray(cfg.specialRanges)?cfg.specialRanges:[];
-  const details=pricingNights(ci,co).map(day=>{
+  const nights=pricingNights(ci,co);
+  const last=nights[nights.length-1]||ci;
+  let auto=new Map();
+  try{
+    auto=await autoSeasonMap(ci,last,{government:cfg.autoGovernmentHolidays!==false,kenting:cfg.autoKentingEvents!==false});
+  }catch(e){ console.warn('quoteStay auto season failed',String(e?.message||e)); }
+  const holidayPrice=Number(cfg.holidayPrice||0);
+  const eventPrice=Number(cfg.eventPrice||0);
+  const details=nights.map(day=>{
     const special=specials.find(x=>x && inRange(day,String(x.startDate||''),String(x.endDate||'')) && Number(x.nightlyPrice)>0);
-    if(special) return {date:day,label:String(special.label||'特殊假期'),price:Number(special.nightlyPrice)};
+    if(special) return {date:day,label:String(special.label||'特殊假期'),price:Number(special.nightlyPrice),source:'manual-special'};
+    const season=auto.get(day);
+    if(season?.type==='event' && eventPrice>0) return {date:day,label:season.label,price:eventPrice,source:'auto-event'};
+    if(season?.type==='holiday' && holidayPrice>0) return {date:day,label:season.label,price:holidayPrice,source:'auto-holiday'};
     const dow=new Date(`${day}T00:00:00Z`).getUTCDay();
-    if(dow===5) return {date:day,label:'週五',price:friday};
-    if(dow===6) return {date:day,label:'週六',price:saturday};
-    return {date:day,label:'平日',price:weekday};
+    if(dow===5) return {date:day,label:'週五',price:friday,source:'weekday-rule'};
+    if(dow===6) return {date:day,label:'週六',price:saturday,source:'weekday-rule'};
+    return {date:day,label:'平日',price:weekday,source:'weekday-rule'};
   });
   const total=details.reduce((sum,x)=>sum+Number(x.price||0),0);
-  return {currency:'TWD',total,details,pricingUpdatedAt:cfg.updatedAt||null};
+  return {currency:'TWD',total,details,pricingUpdatedAt:cfg.updatedAt||null,bookingWindowMonths:Math.max(1,Math.min(Number(cfg.bookingWindowMonths)||6,18)),maxBookableDate:bookingWindowMaxDate(cfg.bookingWindowMonths||6)};
+}
+
+export async function getPublicPricingSettings(){
+  const cfg=await getPricingConfig();
+  if(!cfg) return {enabled:false,bookingWindowMonths:6,maxBookableDate:bookingWindowMaxDate(6)};
+  const months=Math.max(1,Math.min(Number(cfg.bookingWindowMonths)||6,18));
+  return {enabled:cfg.enabled!==false,bookingWindowMonths:months,maxBookableDate:bookingWindowMaxDate(months),autoGovernmentHolidays:cfg.autoGovernmentHolidays!==false,autoKentingEvents:cfg.autoKentingEvents!==false};
 }
 
 export async function firestoreDiagnostic(){
