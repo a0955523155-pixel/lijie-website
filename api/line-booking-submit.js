@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { COOKIE_NAME, parseCookies, verifyPayload as verifyCookieSession } from "./line-auth-lib.js";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 import { putBooking, firestoreReady, quoteStay, getPublicPricingSettings } from "./firestore-admin.js";
+import { gmailReady, sendMail, receivedEmailText } from "./gmail-mailer.js";
 
 function clean(value, max = 500) {
   return String(value ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, max);
@@ -58,7 +59,8 @@ function normalizeBooking(input={}){
   const peopleRaw=Number.parseInt(String(input.people??""),10);
   const people=Number.isFinite(peopleRaw)?Math.min(Math.max(peopleRaw,1),12):null;
   const name=clean(input.name,60); if(!name) throw new Error("NAME_REQUIRED");
-  return {checkIn:a.s,checkOut:b.s,nights,name,phone:clean(input.phone,40),people,purpose:clean(input.purpose,120),notes:clean(input.notes,500),source:clean(input.source,40)||"official-line-secure-link"};
+  const email=clean(input.email,120).toLowerCase(); if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("EMAIL_REQUIRED");
+  return {checkIn:a.s,checkOut:b.s,nights,name,phone:clean(input.phone,40),email,people,purpose:clean(input.purpose,120),notes:clean(input.notes,500),source:clean(input.source,40)||"official-line-secure-link"};
 }
 
 function actionSecret(){ return process.env.BOOKING_SESSION_SECRET || process.env.LINE_CHANNEL_SECRET || ""; }
@@ -77,10 +79,9 @@ function ownerFlex(b, uid, id){
     body:{type:"box",layout:"vertical",paddingAll:"18px",spacing:"sm",contents:[
       {type:"text",text:`${b.checkIn} → ${b.checkOut}（${b.nights} 晚）`,weight:"bold",size:"lg",color:"#173A35",wrap:true},
       ...(b.quotedTotal?[{type:"text",text:`系統試算｜NT$ ${Number(b.quotedTotal).toLocaleString("zh-TW")}`,weight:"bold",size:"md",color:"#8A6C2E",margin:"sm"}]:[]),
-      {type:"text",text:`姓名｜${b.name}\n電話｜${b.phone||"未填"}\n人數｜${b.people?b.people+" 人":"未填"}\n需求｜${b.purpose||"未填"}\n備註｜${b.notes||"沒有"}`,size:"sm",wrap:true,color:"#26332F"}]},
+      {type:"text",text:`姓名｜${b.name}\n電話｜${b.phone||"未填"}\nEmail｜${b.email||"未填"}\n人數｜${b.people?b.people+" 人":"未填"}\n需求｜${b.purpose||"未填"}\n備註｜${b.notes||"沒有"}`,size:"sm",wrap:true,color:"#26332F"}]},
     footer:{type:"box",layout:"vertical",paddingAll:"14px",spacing:"sm",contents:[
       {type:"button",style:"primary",color:"#173A35",action:{type:"postback",label:"確認預約",data:`booking_action=confirm&token=${encodeURIComponent(token)}`,displayText:`確認預約 ${id}`}},
-      {type:"button",style:"secondary",action:{type:"postback",label:"取消預約",data:`booking_action=cancel&token=${encodeURIComponent(token)}`,displayText:`取消預約 ${id}`}},
       {type:"button",style:"link",height:"sm",action:{type:"uri",label:"開啟後台日曆",uri:`https://www.5-1bbs.com/admin/?tab=calendar&booking=${encodeURIComponent(id)}&date=${encodeURIComponent(b.checkIn)}`}}
     ]}}};
 }
@@ -184,6 +185,7 @@ export default async function handler(req,res){
       endDate:booking.checkOut,
       guestName:booking.name,
       phone:booking.phone,
+      email:booking.email||"",
       people:booking.people,
       purpose:booking.purpose,
       notes:booking.notes,
@@ -192,6 +194,10 @@ export default async function handler(req,res){
       lineUserId:String(session.uid),
       source:booking.source,
       quotedTotal:booking.quotedTotal||null,
+      totalAmount:booking.quotedTotal||0,
+      paidAmount:0,
+      balanceAmount:booking.quotedTotal||0,
+      financeStatus:"待確認",
       quoteBreakdown:booking.quoteBreakdown||[],
       pricingUpdatedAt:booking.pricingUpdatedAt||null,
       createdAt:now,
@@ -199,6 +205,10 @@ export default async function handler(req,res){
     });
     console.log("booking-firestore-saved",{bookingId:id});
     diag("FIRESTORE_SAVED",{bookingId:id});
+    if(booking.email && gmailReady()){
+      try{ await sendMail({to:booking.email,subject:"俐姐的家｜已收到您的預約需求",text:receivedEmailText({id,guestName:booking.name,startDate:booking.checkIn,endDate:booking.checkOut,people:booking.people})}); }
+      catch(e){ console.warn("booking received email failed",e); }
+    }
 
     const notifyTo=String(process.env.LINE_BOOKING_NOTIFY_TO||"").trim();
     const customerMessages=messages(booking);

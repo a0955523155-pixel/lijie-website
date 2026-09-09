@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 import { lineConfig } from "../js/line-config.js";
 import { getBooking, listPendingBookings, setBookingStatus, firestoreDiagnostic, firestoreReady } from "./firestore-admin.js";
+import { gmailReady, sendMail, confirmedEmailText } from "./gmail-mailer.js";
 
 function createBookingSession(userId, secret, ttlMs = 2 * 60 * 60 * 1000) {
   const payload = Buffer.from(JSON.stringify({ uid: userId, exp: Date.now() + ttlMs })).toString("base64url");
@@ -46,11 +47,11 @@ function ownerBookingFlex(b){
       {type:"separator",margin:"md",color:"#E5E0D6"},
       {type:"text",text:`姓名｜${b.guestName||"未填"}
 電話｜${b.phone||"未填"}
+Email｜${b.email||"未填"}
 需求｜${b.purpose||"未填"}
 備註｜${b.notes||"沒有"}`,size:"sm",wrap:true,color:"#26332F",lineSpacing:"4px"}]},
     footer:{type:"box",layout:"vertical",paddingAll:"14px",spacing:"sm",contents:[
-      {type:"button",style:"primary",color:"#173A35",action:{type:"postback",label:"確認預約",data:`booking_action=confirm&token=${encodeURIComponent(token)}`,displayText:`確認預約 ${id}`}},
-      {type:"button",style:"secondary",action:{type:"postback",label:"取消預約",data:`booking_action=cancel&token=${encodeURIComponent(token)}`,displayText:`取消預約 ${id}`}}
+      {type:"button",style:"primary",color:"#173A35",action:{type:"postback",label:"確認預約",data:`booking_action=confirm&token=${encodeURIComponent(token)}`,displayText:`確認預約 ${id}`}}
     ]}}};
 }
 function verifyActionToken(token){
@@ -276,6 +277,25 @@ function keywordReply(text = "") {
   const t = text.replace(/\s+/g, "").toLowerCase();
   if (!t) return null;
 
+  // 取消類關鍵字必須優先於「預約」，避免「取消預約」被誤判成新預約。
+  if (/取消訂單|取消預約|取消訂房|我要取消|想取消|退訂|取消住宿/.test(t)) {
+    return {
+      text: [
+        "【取消預約申請】",
+        "可以的，請直接在這個聊天室回覆以下資料：",
+        "",
+        "1. 預約姓名",
+        "2. 入住日期",
+        "3. 聯絡電話末 3 碼",
+        "4. 取消原因",
+        "",
+        "收到後會由俐姐核對訂單，再確認取消與訂金處理方式。",
+        "⚠️ 傳送此訊息不代表訂單已自動取消；請以官方 LINE 最後確認結果為準。",
+        "如已支付訂金，是否保留、退款或部分退款，會依該筆訂單約定與實際情況確認。"
+      ].join("\n")
+    };
+  }
+
   if (/預約|空房|日曆|日期|訂房/.test(t)) {
     return {
       text: [
@@ -385,7 +405,7 @@ export default async function handler(req, res) {
         }
         const q=new URLSearchParams(event.postback?.data||"");
         const action=q.get("booking_action");
-        if(action!=="confirm" && action!=="cancel") continue;
+        if(action!=="confirm") continue;
         try{
           const payload=verifyActionToken(q.get("token"));
           if(!firestoreReady()) throw new Error("FIRESTORE_NOT_CONFIGURED");
@@ -394,12 +414,9 @@ export default async function handler(req, res) {
           if(current.status === "confirmed" && action === "confirm"){
             await replyLine(event.replyToken,`這筆預約 ${payload.id} 已經確認過了。`,token); continue;
           }
-          if(current.status === "cancelled" && action === "cancel"){
-            await replyLine(event.replyToken,`這筆預約 ${payload.id} 已經取消過了。`,token); continue;
-          }
-          const nextStatus=action==="confirm"?"confirmed":"cancelled";
+          const nextStatus="confirmed";
           const updated=await setBookingStatus(payload.id,nextStatus);
-          const statusPayload={id:payload.id,uid:updated.lineUserId||payload.uid,ci:updated.startDate,co:updated.endDate,n:updated.guestName,total:updated.quotedTotal||null};
+          const statusPayload={id:payload.id,uid:updated.lineUserId||"",ci:updated.startDate,co:updated.endDate,n:updated.guestName,total:updated.quotedTotal||null};
           let customerNotified=false, notifyError="";
           if(statusPayload.uid){
             try{
@@ -408,21 +425,20 @@ export default async function handler(req, res) {
               customerNotified=true;
             }catch(e){ notifyError=String(e?.message||e); console.warn("customer status push failed",e); }
           }
-          const adminText=action==="confirm"
-            ? [
-                `✅ 已確認預約 ${payload.id}`,
-                `${updated.startDate} → ${updated.endDate}`,
-                `客人：${updated.guestName||"未填"}`,
-                "官網日曆已鎖定。",
-                customerNotified ? "已通知客人。" : "⚠️ 客戶 LINE Push 失敗，但預約狀態已完成。"
-              ].join("\n")
-            : [
-                `❌ 已取消預約 ${payload.id}`,
-                `${updated.startDate} → ${updated.endDate}`,
-                `客人：${updated.guestName||"未填"}`,
-                "官網日曆日期已釋出。",
-                customerNotified ? "已通知客人。" : "⚠️ 客戶 LINE Push 失敗，但取消已完成。"
-              ].join("\n");
+          let emailNotified=false;
+          if(updated.email && gmailReady()){
+            try{ await sendMail({to:updated.email,subject:"俐姐的家｜您的預約已確認",text:confirmedEmailText(updated)}); emailNotified=true; }
+            catch(e){ console.warn("confirmed email failed",e); }
+          }
+          const adminText=[
+            `✅ 已確認預約 ${payload.id}`,
+            `${updated.startDate} → ${updated.endDate}`,
+            `客人：${updated.guestName||"未填"}`,
+            "官網日曆已鎖定。",
+            updated.lineUserId ? (customerNotified ? "已通知客戶 LINE。" : "⚠️ 客戶 LINE Push 失敗，但預約已確認。") : "此筆為官網預約。",
+            updated.email ? (emailNotified ? "已寄出確認 Email。" : "⚠️ 確認 Email 尚未寄出，請檢查 Gmail 設定。") : "客戶未填 Email。",
+            "其餘取消、收款、支出與庫存請到後台操作。"
+          ].join("\n");
           await replyLine(event.replyToken,adminText,token);
           if(notifyError) console.warn("booking action customer notify",{bookingId:payload.id,notifyError});
         }catch(e){
@@ -453,7 +469,7 @@ export default async function handler(req, res) {
         try{
           const pending=await listPendingBookings(4);
           if(!pending.length){ await replyLine(event.replyToken,"目前沒有待確認預約。",token); continue; }
-          const msgs=[{type:"text",text:`目前有 ${pending.length} 筆待確認預約。\n請直接在卡片下方按「確認預約」或「取消預約」。`},...pending.map(ownerBookingFlex)];
+          const msgs=[{type:"text",text:`目前有 ${pending.length} 筆待確認預約。\n請直接在卡片下方按「確認預約」。取消、修改與帳務請到網站後台操作。`},...pending.map(ownerBookingFlex)];
           await replyLine(event.replyToken,msgs,token);
         }catch(e){
           console.error("pending bookings command failed",e);

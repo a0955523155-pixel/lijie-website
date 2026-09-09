@@ -17,6 +17,8 @@ let selectedFiles = [];
 let previewUrls = [];
 let adminCalendarCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let adminSelectedDate = "";
+let adminSelectedBookingId = "";
+let adminPaymentRecords = [];
 let adminMonthStates = new Map();
 let libraryAssets = [];
 let libraryPickerTarget = null;
@@ -498,6 +500,8 @@ async function ensureAdmin(user) {
   $("#dashboardView").classList.remove("hidden");
   await loadDraft();
   clearBookingEditor();
+  setOperationsDefaultDates();
+  if(document.querySelector('.tab[data-tab="operations"]')?.classList.contains("active")) await loadOperations();
 }
 
 async function uploadPhotos() {
@@ -579,12 +583,14 @@ async function renderAdminCalendar() {
       adminSelectedDate = key;
       $("#bookingStart").value = key; $("#bookingEnd").value = key;
       $("#bookingStatus").value = status;
-      ["#bookingGuest","#bookingPhone","#bookingPeople","#bookingDeposit","#bookingNotes"].forEach(sel => $(sel).value = "");
+      adminSelectedBookingId = data?.bookingId || ""; adminPaymentRecords = []; renderPaymentRecords();
+      ["#bookingGuest","#bookingPhone","#bookingEmail","#bookingPeople","#bookingDeposit","#bookingNotes"].forEach(sel => $(sel).value = "");
       if (data?.bookingId) {
         const booking = await getDoc(doc(db,"bookings",data.bookingId));
         if (booking.exists()) {
           const b = booking.data();
-          $("#bookingGuest").value = b.guestName || ""; $("#bookingPhone").value = b.phone || "";
+          $("#bookingGuest").value = b.guestName || ""; $("#bookingPhone").value = b.phone || ""; $("#bookingEmail").value = b.email || "";
+          adminSelectedBookingId = data.bookingId; loadFinanceBooking(b);
           $("#bookingPeople").value = b.people || ""; $("#bookingDeposit").value = b.deposit || ""; $("#bookingNotes").value = b.notes || "";
           if (b.startDate) $("#bookingStart").value = b.startDate; if (b.endDate) $("#bookingEnd").value = b.endDate;
         }
@@ -600,7 +606,7 @@ function toggleBookingPrivateFields() {
 function clearBookingEditor() {
   const key = adminSelectedDate || dateKey(new Date());
   $("#bookingStart").value = key; $("#bookingEnd").value = key; $("#bookingStatus").value = "booked";
-  ["#bookingGuest","#bookingPhone","#bookingPeople","#bookingDeposit","#bookingNotes"].forEach(sel => $(sel).value = "");
+  ["#bookingGuest","#bookingPhone","#bookingEmail","#bookingPeople","#bookingDeposit","#bookingNotes"].forEach(sel => $(sel).value = "");
   toggleBookingPrivateFields();
 }
 async function saveBookingDates(event) {
@@ -614,7 +620,7 @@ async function saveBookingDates(event) {
     const batch=writeBatch(db); let bookingId="";
     if (status === "booked") {
       bookingId=crypto.randomUUID();
-      batch.set(doc(db,"bookings",bookingId),{startDate,endDate,guestName:$("#bookingGuest").value.trim(),phone:$("#bookingPhone").value.trim(),people:Number($("#bookingPeople").value)||null,deposit:$("#bookingDeposit").value.trim(),notes:$("#bookingNotes").value.trim(),createdBy:auth.currentUser.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
+      batch.set(doc(db,"bookings",bookingId),{startDate,endDate,guestName:$("#bookingGuest").value.trim(),phone:$("#bookingPhone").value.trim(),email:$("#bookingEmail").value.trim(),people:Number($("#bookingPeople").value)||null,deposit:$("#bookingDeposit").value.trim(),notes:$("#bookingNotes").value.trim(),createdBy:auth.currentUser.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
     }
     for (const key of dates) {
       const refDoc=doc(db,"availability",key);
@@ -667,6 +673,57 @@ async function cancelSelectedBooking() {
 
 
 
+
+function money(value){ return `NT$ ${Math.round(Number(value)||0).toLocaleString("zh-TW")}`; }
+function paymentSignedAmount(r){ const n=Math.abs(Number(r.amount)||0); return r.method==="refund" ? -n : n; }
+function financeReceived(){ return adminPaymentRecords.reduce((sum,r)=>sum+paymentSignedAmount(r),0); }
+function refreshFinanceSummary(){
+  const total=Number($("#financeTotal")?.value)||0, received=financeReceived();
+  if($("#financeReceived")) $("#financeReceived").textContent=money(received);
+  if($("#financeBalance")) $("#financeBalance").textContent=money(Math.max(0,total-received));
+}
+function loadFinanceBooking(b={}){
+  adminPaymentRecords=Array.isArray(b.paymentRecords)?b.paymentRecords:[];
+  $("#financeTotal").value=Number(b.totalAmount ?? b.quotedTotal)||0;
+  $("#financeDepositRequired").value=Number(b.depositRequired)||0;
+  $("#paymentDate").value=dateKey(new Date());
+  renderPaymentRecords(); refreshFinanceSummary();
+}
+function renderPaymentRecords(){
+  const root=$("#paymentRecords"); if(!root) return; root.innerHTML="";
+  if(!adminSelectedBookingId){ root.innerHTML='<p class="muted">請先從日曆點選一筆已預約資料。</p>'; refreshFinanceSummary(); return; }
+  if(!adminPaymentRecords.length){ root.innerHTML='<p class="muted">目前沒有收款紀錄。</p>'; refreshFinanceSummary(); return; }
+  const labels={bank_transfer:"銀行轉帳",cash:"現金",refund:"退款",other:"其他"};
+  adminPaymentRecords.slice().sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))).forEach(r=>{
+    const row=document.createElement("div"); row.className="payment-row";
+    row.innerHTML=`<span>${r.date||"—"}</span><strong class="${r.method==="refund"?"refund":""}">${r.method==="refund"?"−":""}${money(Math.abs(Number(r.amount)||0))}</strong><span>${labels[r.method]||r.method||"其他"}</span><span class="payment-note">${escapeHtmlAdmin([r.reference?`末五碼/參考 ${r.reference}`:"",r.note||""].filter(Boolean).join("｜")||"—")}</span><button class="secondary" type="button" data-payment-remove="${r.id}">刪除</button>`;
+    root.append(row);
+  });
+  root.querySelectorAll("[data-payment-remove]").forEach(btn=>btn.addEventListener("click",async()=>{
+    if(!confirm("確定刪除這筆收款紀錄？")) return;
+    adminPaymentRecords=adminPaymentRecords.filter(r=>r.id!==btn.dataset.paymentRemove); await saveFinance(true); renderPaymentRecords();
+  }));
+  refreshFinanceSummary();
+}
+function escapeHtmlAdmin(v){ return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+async function saveFinance(silent=false){
+  if(!adminSelectedBookingId) return message("#financeMessage","請先選擇一筆已預約資料。","error");
+  const totalAmount=Number($("#financeTotal").value)||0, depositRequired=Number($("#financeDepositRequired").value)||0;
+  const amountReceived=financeReceived(), balanceDue=Math.max(0,totalAmount-amountReceived);
+  const accountingStatus=totalAmount>0 && balanceDue<=0 ? "paid" : amountReceived>0 ? "partial" : "unpaid";
+  try{
+    await setDoc(doc(db,"bookings",adminSelectedBookingId),{totalAmount,depositRequired,paymentRecords:adminPaymentRecords,amountReceived,balanceDue,accountingStatus,updatedAt:serverTimestamp()},{merge:true});
+    if(!silent) message("#financeMessage","帳務資料已儲存。","success"); refreshFinanceSummary();
+  }catch(e){ message("#financeMessage",e.message||"帳務儲存失敗。","error"); }
+}
+async function addPaymentRecord(){
+  if(!adminSelectedBookingId) return message("#financeMessage","請先從日曆選擇一筆預約。","error");
+  const amount=Number($("#paymentAmount").value)||0; if(amount<=0) return message("#financeMessage","請輸入收款金額。","error");
+  const method=$("#paymentMethod").value;
+  adminPaymentRecords.push({id:crypto.randomUUID(),date:$("#paymentDate").value||dateKey(new Date()),amount,method,reference:$("#paymentReference").value.trim(),note:$("#paymentNote").value.trim(),recordedAt:new Date().toISOString(),recordedBy:auth.currentUser?.uid||""});
+  await saveFinance(true); $("#paymentAmount").value=""; $("#paymentReference").value=""; $("#paymentNote").value=""; renderPaymentRecords(); message("#financeMessage",method==="refund"?"退款紀錄已新增。":"收款紀錄已新增。","success");
+}
+
 function newSpecialRate(data={}) {
   return { id:data.id || crypto.randomUUID(), label:data.label || "連續假期", startDate:data.startDate || "", endDate:data.endDate || "", nightlyPrice:Number(data.nightlyPrice)||0 };
 }
@@ -708,7 +765,9 @@ async function savePricing(event){
 
 function applyAdminDeepLink() {
   const params = new URLSearchParams(location.search);
-  if (params.get("tab") !== "calendar") return;
+  const requested=params.get("tab");
+  if(requested==="operations"){ document.querySelector('.tab[data-tab="operations"]')?.click(); return; }
+  if (requested !== "calendar") return;
   const calendarTab = document.querySelector('.tab[data-tab="calendar"]');
   if (calendarTab) calendarTab.click();
   const date = params.get("date");
@@ -729,8 +788,9 @@ function bindEvents() {
   $("#logoutButton").addEventListener("click", async () => { await signOut(auth); location.reload(); });
   document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab === button));
-    ["photos", "library", "calendar", "pricing", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
+    ["photos", "library", "calendar", "operations", "pricing", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
     if (button.dataset.tab === "calendar") renderAdminCalendar().catch((e)=>message("#bookingMessage",e.message,"error"));
+    if (button.dataset.tab === "operations") loadOperations().catch((e)=>console.error(e));
     if (button.dataset.tab === "pricing") loadPricing();
     if (button.dataset.tab === "library") loadLibrary();
   }));
@@ -753,10 +813,18 @@ function bindEvents() {
   $("#adminCalNext").addEventListener("click",()=>{adminCalendarCursor=new Date(adminCalendarCursor.getFullYear(),adminCalendarCursor.getMonth()+1,1);renderAdminCalendar();});
   $("#bookingStatus").addEventListener("change",toggleBookingPrivateFields);
   $("#bookingForm").addEventListener("submit",saveBookingDates);
+  $("#addPaymentRecord")?.addEventListener("click",addPaymentRecord);
+  $("#saveFinanceSettings")?.addEventListener("click",()=>saveFinance(false));
+  $("#financeTotal")?.addEventListener("input",refreshFinanceSummary);
   $("#cancelSelectedBooking").addEventListener("click", cancelSelectedBooking);
   $("#pricingForm").addEventListener("submit",savePricing);
   $("#addSpecialRate").addEventListener("click",()=>{pricingSpecialRanges.push(newSpecialRate());renderSpecialRates();});
   $("#clearBookingForm").addEventListener("click",clearBookingEditor);
+  $("#refreshOperations")?.addEventListener("click",()=>loadOperations());
+  $("#paymentForm")?.addEventListener("submit",savePaymentRecord);
+  $("#expenseForm")?.addEventListener("submit",saveExpenseRecord);
+  $("#inventoryItemForm")?.addEventListener("submit",saveInventoryItem);
+  $("#stockMovementForm")?.addEventListener("submit",saveStockMovement);
   $("#contentForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -826,3 +894,61 @@ async function init() {
 }
 
 init();
+
+// V6.55 營運管理：所有帳務、支出與庫存都可綁定 bookings/{bookingId}。
+let opsBookings=[], opsPayments=[], opsExpenses=[], opsInventory=[];
+const twd=n=>`NT$ ${Math.round(Number(n)||0).toLocaleString("zh-TW")}`;
+const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
+function setOperationsDefaultDates(){const today=new Date().toLocaleDateString("en-CA");["#paymentDate","#expenseDate","#stockDate"].forEach(x=>{if($(x)&&!$(x).value)$(x).value=today;});}
+function financeStatusFor(b,paid){const total=Number(b.totalAmount??b.quotedTotal??0)||0;if(b.status==="cancelled")return"已取消";if(b.status!=="confirmed")return"待確認";if(total>0&&paid>=total)return"已結清";if(paid>0)return"部分付款／待尾款";return"待收訂金";}
+function bookingLabel(b){return `${b.id}｜${b.startDate||"—"}｜${b.guestName||"未填"}`;}
+function fillBookingSelects(){const options=['<option value="">不綁定訂單</option>',...opsBookings.map(b=>`<option value="${esc(b.id)}">${esc(bookingLabel(b))}</option>`)].join("");["#expenseBooking","#stockBooking"].forEach(sel=>{if($(sel))$(sel).innerHTML=options;});if($("#paymentBooking"))$("#paymentBooking").innerHTML=['<option value="">請選訂單</option>',...opsBookings.map(b=>`<option value="${esc(b.id)}">${esc(bookingLabel(b))}</option>`)].join("");}
+function fillInventorySelect(){if($("#stockItem"))$("#stockItem").innerHTML=['<option value="">請選備品</option>',...opsInventory.map(i=>`<option value="${esc(i.id)}">${esc(i.name)}（${Number(i.quantity)||0} ${esc(i.unit||"")}）</option>`)].join("");}
+async function readCollection(name){const snap=await getDocs(collection(db,name));return snap.docs.map(d=>({id:d.id,...d.data()}));}
+async function loadOperations(){
+  if(!db)return; setOperationsDefaultDates();
+  [opsBookings,opsPayments,opsExpenses,opsInventory]=await Promise.all([readCollection("bookings"),readCollection("paymentTransactions"),readCollection("expenseTransactions"),readCollection("inventoryItems")]);
+  opsBookings.sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||""))); opsPayments.sort((a,b)=>String(b.date||b.createdAt||"").localeCompare(String(a.date||a.createdAt||""))); opsExpenses.sort((a,b)=>String(b.date||b.createdAt||"").localeCompare(String(a.date||a.createdAt||""))); opsInventory.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"zh-Hant"));
+  fillBookingSelects();fillInventorySelect();renderOperations();
+  const params=new URLSearchParams(location.search),bid=params.get("booking");if(bid&&$("#paymentBooking"))$("#paymentBooking").value=bid;
+}
+function paidFor(id){return opsPayments.filter(x=>x.bookingId===id).reduce((s,x)=>s+(x.type==="refund"?-1:1)*(Number(x.amount)||0),0);}
+function renderOperations(){
+  const confirmed=opsBookings.filter(b=>b.status==="confirmed");const received=opsPayments.reduce((s,x)=>s+(x.type==="refund"?-1:1)*(Number(x.amount)||0),0);const balance=confirmed.reduce((s,b)=>s+Math.max(0,(Number(b.totalAmount??b.quotedTotal)||0)-paidFor(b.id)),0);const expenses=opsExpenses.reduce((s,x)=>s+(Number(x.amount)||0),0);
+  $("#metricConfirmed").textContent=String(confirmed.length);$("#metricReceived").textContent=twd(received);$("#metricBalance").textContent=twd(balance);$("#metricExpenses").textContent=twd(expenses);
+  const orders=$("#operationsOrders");orders.innerHTML=opsBookings.length?opsBookings.map(b=>{const paid=paidFor(b.id),total=Number(b.totalAmount??b.quotedTotal)||0,bal=Math.max(0,total-paid),fs=financeStatusFor(b,paid),cls=fs==="已結清"?"done":fs==="已取消"?"cancel":"warn";return `<article class="ops-order"><div class="ops-order-head"><div><strong>${esc(b.guestName||"未填")}｜${esc(b.id)}</strong><div class="ops-order-meta"><span>${esc(b.startDate||"—")} → ${esc(b.endDate||"—")}</span><span>${Number(b.people)||"—"} 人</span><span>${esc(b.phone||"")}</span><span>${esc(b.email||"")}</span></div></div><span class="status-pill ${cls}">${esc(b.status==="confirmed"?fs:b.status==="cancelled"?"已取消":"等待 LINE 確認")}</span></div><div class="ops-order-money"><span>訂單總額<br><strong>${twd(total)}</strong></span><span>已收<br><strong>${twd(paid)}</strong></span><span>未收<br><strong>${twd(bal)}</strong></span></div><div class="ops-order-actions"><button class="secondary" type="button" data-total="${esc(b.id)}">調整總額</button>${b.status!=="cancelled"?`<button class="danger" type="button" data-cancel="${esc(b.id)}">後台取消預約</button>`:""}</div></article>`}).join(""):"<p class='muted'>目前沒有訂單。</p>";
+  orders.querySelectorAll("[data-total]").forEach(btn=>btn.addEventListener("click",()=>editOrderTotal(btn.dataset.total)));orders.querySelectorAll("[data-cancel]").forEach(btn=>btn.addEventListener("click",()=>cancelOrderById(btn.dataset.cancel)));
+  $("#paymentHistory").innerHTML=opsPayments.slice(0,20).map(x=>`<div class="history-row"><strong>${x.type==="refund"?"退款":"收款"} ${twd(x.amount)}</strong><span>${esc(x.bookingId||"未綁定")}</span><span>${esc(x.method||"")} ${esc(x.last5||"")}</span><small>${esc(x.date||"")}</small></div>`).join("")||"<p class='muted'>尚無紀錄。</p>";
+  $("#expenseHistory").innerHTML=opsExpenses.slice(0,20).map(x=>`<div class="history-row"><strong>${esc(x.category||"支出")} ${twd(x.amount)}</strong><span>${esc(x.bookingId||"未綁定")}</span><span>${esc(x.method||"")}</span><small>${esc(x.date||"")}</small></div>`).join("")||"<p class='muted'>尚無紀錄。</p>";
+  $("#inventoryList").innerHTML=opsInventory.map(i=>{const q=Number(i.quantity)||0,min=Number(i.minQuantity)||0;return`<div class="inventory-row ${q<=min?"low":""}"><strong>${esc(i.name)}</strong><span>庫存 ${q} ${esc(i.unit||"")}</span><span>安全庫存 ${min}</span><small>${q<=min?"⚠️ 需要補貨":`成本 ${twd(i.unitCost||0)}`}</small></div>`}).join("")||"<p class='muted'>尚未建立備品。</p>";
+}
+async function syncBookingFinance(id){if(!id)return;const b=opsBookings.find(x=>x.id===id);if(!b)return;const paid=paidFor(id),total=Number(b.totalAmount??b.quotedTotal)||0;await setDoc(doc(db,"bookings",id),{paidAmount:paid,balanceAmount:Math.max(0,total-paid),financeStatus:financeStatusFor(b,paid),updatedAt:serverTimestamp()},{merge:true});}
+async function savePaymentRecord(e){e.preventDefault();const bookingId=$("#paymentBooking").value,amount=Number($("#paymentAmount").value),type=$("#paymentType").value;if(!bookingId||!(amount>0))return message("#paymentMessage","請選訂單並填寫金額。","error");message("#paymentMessage","正在儲存…");const id=crypto.randomUUID();await setDoc(doc(db,"paymentTransactions",id),{bookingId,type,amount,method:$("#paymentMethod").value,date:$("#paymentDate").value,last5:$("#paymentLast5").value.trim(),note:$("#paymentNote").value.trim(),createdBy:auth.currentUser.uid,createdAt:serverTimestamp()});await loadOperations();await syncBookingFinance(bookingId);await loadOperations();e.target.reset();setOperationsDefaultDates();message("#paymentMessage","收款／退款紀錄已新增，訂單進度已自動更新。","success");}
+async function saveExpenseRecord(e){e.preventDefault();const amount=Number($("#expenseAmount").value);if(!(amount>0))return message("#expenseMessage","請填寫支出金額。","error");await setDoc(doc(db,"expenseTransactions",crypto.randomUUID()),{bookingId:$("#expenseBooking").value||null,category:$("#expenseCategory").value,amount,method:$("#expenseMethod").value,date:$("#expenseDate").value,note:$("#expenseNote").value.trim(),createdBy:auth.currentUser.uid,createdAt:serverTimestamp()});e.target.reset();setOperationsDefaultDates();message("#expenseMessage","支出已新增。","success");await loadOperations();}
+async function saveInventoryItem(e){e.preventDefault();const name=$("#inventoryName").value.trim(),qty=Number($("#inventoryQty").value);if(!name||qty<0)return message("#inventoryItemMessage","請填寫備品名稱與庫存。","error");await setDoc(doc(db,"inventoryItems",crypto.randomUUID()),{name,unit:$("#inventoryUnit").value.trim(),quantity:qty,minQuantity:Number($("#inventoryMin").value)||0,unitCost:Number($("#inventoryCost").value)||0,createdBy:auth.currentUser.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});e.target.reset();message("#inventoryItemMessage","備品已建立。","success");await loadOperations();}
+async function saveStockMovement(e){e.preventDefault();const itemId=$("#stockItem").value,qty=Number($("#stockQty").value),type=$("#stockType").value;if(!itemId||!(qty>0))return message("#stockMessage","請選備品並填寫數量。","error");const refDoc=doc(db,"inventoryItems",itemId),snap=await getDoc(refDoc);if(!snap.exists())return message("#stockMessage","找不到備品。","error");const item=snap.data(),before=Number(item.quantity)||0,after=type==="in"?before+qty:before-qty;if(after<0)return message("#stockMessage","庫存不足，不能扣成負數。","error");const batch=writeBatch(db);batch.set(refDoc,{quantity:after,updatedAt:serverTimestamp()},{merge:true});batch.set(doc(db,"inventoryTransactions",crypto.randomUUID()),{itemId,itemName:item.name,type,quantity:qty,beforeQuantity:before,afterQuantity:after,bookingId:$("#stockBooking").value||null,date:$("#stockDate").value,note:$("#stockNote").value.trim(),createdBy:auth.currentUser.uid,createdAt:serverTimestamp()});await batch.commit();e.target.reset();setOperationsDefaultDates();message("#stockMessage","庫存已更新，進出庫紀錄已保存。","success");await loadOperations();}
+async function editOrderTotal(id){const b=opsBookings.find(x=>x.id===id),current=Number(b?.totalAmount??b?.quotedTotal)||0;const raw=prompt(`輸入訂單 ${id} 的總額`,String(current));if(raw===null)return;const total=Number(raw);if(total<0||!Number.isFinite(total))return alert("請輸入正確金額。");const paid=paidFor(id);await setDoc(doc(db,"bookings",id),{totalAmount:total,balanceAmount:Math.max(0,total-paid),financeStatus:financeStatusFor({...b,totalAmount:total},paid),updatedAt:serverTimestamp()},{merge:true});await loadOperations();}
+function openCancellationSop(id){
+  const b=opsBookings.find(x=>x.id===id); if(!b)return;
+  $("#cancelBookingId").value=id; $("#cancelRequestedBy").value="customer"; $("#cancelReason").value=""; $("#cancelDepositNote").value="";
+  const paid=paidFor(id); $("#cancelDepositDisposition").value=paid>0?"forfeit_full":"not_received";
+  $("#cancellationForm").classList.remove("hidden");
+  message("#cancellationMessage",`正在處理 ${id}｜${b.guestName||"未填"}｜目前淨收 ${twd(paid)}。請確認取消原因與訂金處理。`);
+  $("#cancellationForm").scrollIntoView({behavior:"smooth",block:"center"});
+}
+function closeCancellationSop(){ $("#cancellationForm").classList.add("hidden"); $("#cancelBookingId").value=""; }
+async function confirmCancellationSop(){
+  const id=$("#cancelBookingId").value, b=opsBookings.find(x=>x.id===id); if(!b)return;
+  const reason=$("#cancelReason").value.trim(), requestedBy=$("#cancelRequestedBy").value, depositDisposition=$("#cancelDepositDisposition").value, depositNote=$("#cancelDepositNote").value.trim();
+  if(!reason)return message("#cancellationMessage","請先填寫客戶取消原因。","error");
+  const labels={not_received:"尚未收訂金",forfeit_full:"訂金全額保留（沒收）",refund_partial:"部分退款",refund_full:"全額退款",other:"其他"};
+  if(!confirm(`確認取消 ${id}（${b.guestName||"未填"}）？\n原因：${reason}\n訂金處理：${labels[depositDisposition]||depositDisposition}\n\n確認後會釋出日期，但取消與帳務歷史會保留。`))return;
+  message("#cancellationMessage","正在取消並釋出日期…");
+  const q=query(collection(db,"availability"),where("bookingId","==",id)),snap=await getDocs(q),batch=writeBatch(db); snap.docs.forEach(d=>batch.delete(d.ref));
+  batch.set(doc(db,"bookings",id),{status:"cancelled",financeStatus:"已取消",cancellationRequestedBy:requestedBy,cancellationReason:reason,depositDisposition,depositDispositionLabel:labels[depositDisposition]||depositDisposition,cancellationDepositNote:depositNote,cancelledBy:auth.currentUser.uid,cancelledAt:serverTimestamp(),updatedAt:serverTimestamp()},{merge:true});
+  await batch.commit(); closeCancellationSop(); await loadOperations();
+}
+async function cancelOrderById(id){openCancellationSop(id);}
+
+$("#confirmCancellation")?.addEventListener("click",confirmCancellationSop);
+$("#closeCancellation")?.addEventListener("click",closeCancellationSop);

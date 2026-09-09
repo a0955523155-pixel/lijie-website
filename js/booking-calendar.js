@@ -24,6 +24,10 @@ if (grid) {
   const selectedCheckIn = document.querySelector("#selectedCheckIn");
   const selectedCheckOut = document.querySelector("#selectedCheckOut");
   const selectedGuests = document.querySelector("#selectedGuests");
+  const selectedNights = document.querySelector("#selectedNights");
+  const websiteBookingDetail = document.querySelector("#websiteBookingDetail");
+  const websiteBookingPriceLines = document.querySelector("#websiteBookingPriceLines");
+  const websiteBookingTotal = document.querySelector("#websiteBookingTotal");
   const calendarCard = document.querySelector(".calendar-card");
   const bookingPageBaseUrl = "https://www.5-1bbs.com/line-booking.html";
   const formatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long" });
@@ -162,6 +166,35 @@ if (grid) {
     if(checkOutInput){checkOutInput.min=startDate?keyOf(new Date(startDate.getFullYear(),startDate.getMonth(),startDate.getDate()+1)):min;checkOutInput.max=max;}
   }
 
+  function renderWebsiteQuote(){
+    const form=document.querySelector("#websiteBookingForm");
+    if(!endDate){
+      websiteBookingDetail?.classList.add("hidden-v656");
+      form?.classList.add("hidden-v656");
+      if(selectedNights)selectedNights.textContent="—";
+      return;
+    }
+    const nights=nightsBetween(startDate,endDate);
+    if(selectedNights)selectedNights.textContent=`${nights} 晚`;
+    websiteBookingDetail?.classList.remove("hidden-v656");
+    form?.classList.remove("hidden-v656");
+    if(websiteBookingPriceLines){
+      websiteBookingPriceLines.replaceChildren();
+      const details=Array.isArray(selectedQuote?.details)?selectedQuote.details:[];
+      if(details.length){
+        for(const d of details){
+          const row=document.createElement("div"); row.className="booking-price-line";
+          const left=document.createElement("span"); left.textContent=`${d.date}｜${d.label||"住宿"}`;
+          const right=document.createElement("strong"); right.textContent=`NT$ ${money.format(Number(d.price)||0)}`;
+          row.append(left,right); websiteBookingPriceLines.append(row);
+        }
+      }else{
+        const row=document.createElement("div"); row.className="booking-price-line"; row.innerHTML="<span>價格正在確認</span><strong>請稍候</strong>"; websiteBookingPriceLines.append(row);
+      }
+    }
+    if(websiteBookingTotal)websiteBookingTotal.textContent=selectedQuote?.total!=null?`NT$ ${money.format(Number(selectedQuote.total)||0)}`:"價格確認中";
+  }
+
   function updateSelectionUI() {
     syncInputs(); saveWebsiteDraft();
     if (!startDate) { selectedCard?.classList.add("hidden"); return; }
@@ -169,7 +202,8 @@ if (grid) {
     if(selectedCheckIn) selectedCheckIn.textContent=startDate?keyOf(startDate):"—";
     if(selectedCheckOut) selectedCheckOut.textContent=endDate?keyOf(endDate):"—";
     if(selectedGuests) selectedGuests.textContent=guests?`${guests} 人`:"請選擇";
-    if (selectedLine) { selectedLine.href = endDate ? miniAppBookingUrl() : "#"; selectedLine.textContent = endDate ? "帶入官方 LINE 日曆完成預約 →" : "再選擇退房日期"; selectedLine.removeAttribute("target"); }
+    renderWebsiteQuote();
+    if (selectedLine) { selectedLine.href = endDate ? miniAppBookingUrl() : "#"; selectedLine.textContent = endDate ? "官方 LINE 預約日曆" : "再選擇退房日期"; selectedLine.removeAttribute("target"); }
   }
 
   async function selectDate(d) {
@@ -257,6 +291,25 @@ if (grid) {
   guestsSelect?.addEventListener("change",()=>{guests=guestsSelect.value;updateSelectionUI();});
   checkInInput?.addEventListener("change",()=>{const k=checkInInput.value;if(/^\d{4}-\d{2}-\d{2}$/.test(k)){const d=localDateFromKey(k);cursor=new Date(d.getFullYear(),d.getMonth(),1);render();}});
   checkOutInput?.addEventListener("change",()=>{if(checkInInput?.value) applyQuickSelection();});
+  const websiteBookingForm=document.querySelector("#websiteBookingForm");
+  websiteBookingForm?.addEventListener("submit",async(e)=>{
+    e.preventDefault();
+    const msg=document.querySelector("#websiteBookingMessage"), btn=document.querySelector("#websiteBookingSubmit");
+    const setMsg=(t,c="")=>{if(msg){msg.textContent=t;msg.className=`booking-submit-message ${c}`.trim();}};
+    if(!startDate||!endDate){setMsg("請先選好入住與退房日期。","error");return;}
+    const name=document.querySelector("#websiteGuestName")?.value.trim()||"", phone=document.querySelector("#websiteGuestPhone")?.value.trim()||"", email=document.querySelector("#websiteGuestEmail")?.value.trim()||"";
+    if(!guests){setMsg("請先選擇入住人數。","error");return;}
+    if(!name||!email){setMsg("請填寫姓名與 Email。","error");return;}
+    if(!selectedQuote||selectedQuote.total==null){setMsg("價格明細尚未完成，請稍候或重新選擇日期。","error");return;}
+    btn.disabled=true; setMsg("正在送出預約需求…");
+    try{
+      const r=await fetch("/api/website-booking-submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({checkIn:keyOf(startDate),checkOut:keyOf(endDate),people:Number(guests||guestsSelect?.value)||1,name,phone,email,website:document.querySelector("#websiteTrap")?.value||""})});
+      const data=await r.json().catch(()=>({})); if(!r.ok||!data.ok) throw new Error(data.error||`HTTP ${r.status}`);
+      setMsg(`已送出，預約編號 ${data.bookingId}。請查看 Email，等待俐姐於官方 LINE 確認。`,"success");
+      btn.textContent="已送出預約需求";
+    }catch(err){setMsg("送出失敗，請稍後再試或改用官方 LINE。","error");btn.disabled=false;}
+  });
+
   selectedLine?.addEventListener("click", (e) => { if (!endDate) e.preventDefault(); });
   dateSheetCopy?.addEventListener("click", async () => { try { await navigator.clipboard.writeText(selectedMessage); dateSheetCopy.textContent = "已複製，可貼到 LINE ✓"; setTimeout(() => dateSheetCopy.textContent = "複製預約內容", 1800); } catch { dateSheetCopy.textContent = selectedMessage; } });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDateSheet(); });

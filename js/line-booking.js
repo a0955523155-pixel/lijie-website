@@ -7,7 +7,7 @@ const $ = (s) => document.querySelector(s);
 const els = {
   cal: $("#calendar"), month: $("#monthLabel"), prev: $("#prev"), next: $("#next"),
   start: $("#startText"), end: $("#endText"), note: $("#selectionNote"), error: $("#dateError"),
-  name: $("#guestName"), phone: $("#phone"), people: $("#people"), purpose: $("#purpose"), notes: $("#notes"),
+  name: $("#guestName"), phone: $("#phone"), email: $("#email"), people: $("#people"), purpose: $("#purpose"), notes: $("#notes"),
   send: $("#sendBtn"), copy: $("#copyBtn"), status: $("#sendStatus"), summary: $("#summary"), mode: $("#lineModeText"),
   checkInTime: $("#checkInTime"), checkOutTime: $("#checkOutTime"), stayRulesList: $("#stayRulesList"),
   quickStart: $("#lineCheckIn"), quickEnd: $("#lineCheckOut"), quickGuests: $("#lineGuests"), quickApply: $("#lineApplySelection")
@@ -211,13 +211,14 @@ function renderStayRules(){
 
 function buildMessage(){
   if(!startDate||!endDate) return "";
-  const name=els.name.value.trim(),phone=els.phone.value.trim(),people=els.people.value.trim(),purpose=els.purpose.value.trim(),notes=els.notes.value.trim();
+  const name=els.name.value.trim(),phone=els.phone.value.trim(),email=els.email.value.trim(),people=els.people.value.trim(),purpose=els.purpose.value.trim(),notes=els.notes.value.trim();
   return [
     "【俐姐的家｜預約申請】",
     `入住：${keyOf(startDate)}`
     ,`退房：${keyOf(endDate)}（${nightsCount()} 晚）`,
     `姓名：${name||"未填"}`,
     `電話：${phone||"未填"}`,
+    `Email：${email||"未填"}`,
     `人數：${people?people+" 人":"未填"}`,
     `需求：${purpose||"未填"}`,
     `備註：${notes||"無"}`,
@@ -238,6 +239,7 @@ function saveDraft(){
       checkOut: endDate ? keyOf(endDate) : "",
       name: els.name.value.trim(),
       phone: els.phone.value.trim(),
+      email: els.email.value.trim(),
       people: els.people.value.trim(),
       purpose: els.purpose.value.trim(),
       notes: els.notes.value.trim(),
@@ -262,10 +264,11 @@ function loadDraft(){
     if (startDate) cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
     if (!els.name.value) els.name.value = draft.name || "";
     if (!els.phone.value) els.phone.value = draft.phone || "";
+    if (!els.email.value) els.email.value = draft.email || "";
     if (!els.people.value) els.people.value = draft.people || "";
     if (!els.purpose.value) els.purpose.value = draft.purpose || "";
     if (!els.notes.value) els.notes.value = draft.notes || "";
-    return !!(startDate || draft.name || draft.phone);
+    return !!(startDate || draft.name || draft.phone || draft.email);
   } catch (e) { console.warn("booking draft load failed", e); return false; }
 }
 
@@ -306,6 +309,7 @@ function bookingPayload(){
     checkOut: endDate ? keyOf(endDate) : "",
     name: els.name.value.trim(),
     phone: els.phone.value.trim(),
+    email: els.email.value.trim(),
     people: els.people.value.trim(),
     purpose: els.purpose.value.trim(),
     notes: els.notes.value.trim(),
@@ -394,7 +398,7 @@ if(els.quickEnd) els.quickEnd.addEventListener("change",()=>{if(els.quickStart?.
 
 els.prev.addEventListener("click",()=>{if(els.prev.disabled)return;cursor=new Date(cursor.getFullYear(),cursor.getMonth()-1,1);render()});
 els.next.addEventListener("click",()=>{if(els.next.disabled)return;cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,1);render()});
-[els.name,els.phone,els.people,els.purpose,els.notes].forEach(e=>e.addEventListener("input",()=>{if(e===els.people&&els.quickGuests)els.quickGuests.value=els.people.value;refreshForm();saveDraft();}));
+[els.name,els.phone,els.email,els.people,els.purpose,els.notes].forEach(e=>e.addEventListener("input",()=>{if(e===els.people&&els.quickGuests)els.quickGuests.value=els.people.value;refreshForm();saveDraft();}));
 els.copy.addEventListener("click", copyMessage);
 let submitInFlight = false;
 async function triggerSend(e){

@@ -56,11 +56,12 @@ service cloud.firestore {
     match /bookings/{bookingId} {
       allow read: if isAdmin();
       allow create: if isAdmin()
-        && request.resource.data.keys().hasOnly(['startDate','endDate','guestName','phone','people','deposit','notes','createdBy','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['startDate','endDate','guestName','phone','email','people','deposit','notes','totalAmount','depositRequired','paymentRecords','amountReceived','balanceDue','accountingStatus','createdBy','createdAt','updatedAt'])
         && request.resource.data.startDate is string
         && request.resource.data.endDate is string
         && request.resource.data.guestName is string
         && request.resource.data.phone is string
+        && request.resource.data.email is string
         && (request.resource.data.people == null || request.resource.data.people is int)
         && request.resource.data.deposit is string
         && request.resource.data.notes is string
@@ -79,6 +80,12 @@ service cloud.firestore {
       allow read, create, update: if isAdmin();
       allow delete: if false;
     }
+
+    // 營運管理：收款／退款、支出、備品與進出庫僅管理員可存取。
+    match /paymentTransactions/{id} { allow read, create, update: if isAdmin(); allow delete: if false; }
+    match /expenseTransactions/{id} { allow read, create, update: if isAdmin(); allow delete: if false; }
+    match /inventoryItems/{id} { allow read, create, update: if isAdmin(); allow delete: if false; }
+    match /inventoryTransactions/{id} { allow read, create, update: if isAdmin(); allow delete: if false; }
 
     match /imageLibrary/{assetId} {
       allow read: if isAdmin();
