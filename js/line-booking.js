@@ -387,6 +387,7 @@ function applyPresetDates(){
   params = new URLSearchParams(location.search);
   const presetStart = params.get("start");
   const presetEnd = params.get("end");
+  const presetGuests = params.get("guests");
   if (presetStart && /^\d{4}-\d{2}-\d{2}$/.test(presetStart)) {
     const d = parseKey(presetStart);
     if (d >= today) {
@@ -397,6 +398,7 @@ function applyPresetDates(){
     const d = parseKey(presetEnd);
     if (startDate && d > startDate) endDate = d;
   }
+  if (presetGuests && /^(?:[1-9]|1[0-2])$/.test(presetGuests)) els.people.value = presetGuests;
 }
 
 const restoredDraft = loadDraft();

@@ -17,6 +17,15 @@ if (grid) {
   const dateSheetCopy = document.querySelector("#dateSheetCopy");
   const prevBtn = document.querySelector("#calendarPrev");
   const nextBtn = document.querySelector("#calendarNext");
+  const checkInInput = document.querySelector("#websiteCheckIn");
+  const checkOutInput = document.querySelector("#websiteCheckOut");
+  const guestsSelect = document.querySelector("#websiteGuests");
+  const applySelectionBtn = document.querySelector("#websiteApplySelection");
+  const selectedCheckIn = document.querySelector("#selectedCheckIn");
+  const selectedCheckOut = document.querySelector("#selectedCheckOut");
+  const selectedGuests = document.querySelector("#selectedGuests");
+  const selectedTotal = document.querySelector("#selectedTotal");
+  const calendarCard = document.querySelector(".calendar-card");
   const bookingPageBaseUrl = "https://www.5-1bbs.com/line-booking.html";
   const formatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long" });
   const fullFormatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
@@ -25,6 +34,8 @@ if (grid) {
   let cursor = new Date(today.getFullYear(), today.getMonth(), 1);
   let startDate = null;
   let endDate = null;
+  let guests = "";
+  let renderSeq = 0;
   let selectedMessage = "";
   let selectedQuote = null;
   let db = null;
@@ -42,6 +53,13 @@ if (grid) {
   const localDateFromKey = (key) => { const [y,m,d]=String(key).split("-").map(Number); return new Date(y,m-1,d); };
   const nightsBetween = (a,b) => Math.round((new Date(b.getFullYear(),b.getMonth(),b.getDate()) - new Date(a.getFullYear(),a.getMonth(),a.getDate())) / 86400000);
   const defaultMaxDate = () => { const d=new Date(today); d.setMonth(d.getMonth()+6); return d; };
+  const draftKey = "lijieWebsiteBookingDraftV648";
+  function saveWebsiteDraft(){
+    try{localStorage.setItem(draftKey,JSON.stringify({start:startDate?keyOf(startDate):"",end:endDate?keyOf(endDate):"",guests:String(guests||"")}));}catch{}
+  }
+  function loadWebsiteDraft(){
+    try{const d=JSON.parse(localStorage.getItem(draftKey)||"{}"); if(/^\d{4}-\d{2}-\d{2}$/.test(d.start||"")) startDate=localDateFromKey(d.start); if(startDate&&/^\d{4}-\d{2}-\d{2}$/.test(d.end||"")){const e=localDateFromKey(d.end);if(e>startDate)endDate=e;} if(/^(?:[1-9]|1[0-2])$/.test(String(d.guests||"")))guests=String(d.guests); if(startDate)cursor=new Date(startDate.getFullYear(),startDate.getMonth(),1);}catch{}
+  }
   const maxBookableDate = () => pricingSettings.maxBookableDate ? localDateFromKey(pricingSettings.maxBookableDate) : defaultMaxDate();
 
   async function getMonthStates(first, last, { force = false } = {}) {
@@ -123,6 +141,7 @@ if (grid) {
   function miniAppBookingUrl() {
     if (!startDate || !endDate) return bookingPageBaseUrl;
     const params = new URLSearchParams({ start: keyOf(startDate), end: keyOf(endDate), source: "website" });
+    if (guests) params.set("guests", String(guests));
     return `${bookingPageBaseUrl}?${params.toString()}`;
   }
 
@@ -138,10 +157,24 @@ if (grid) {
     dateSheet?.classList.add("open"); dateSheetBackdrop?.classList.add("open"); dateSheet?.setAttribute("aria-hidden", "false"); dateSheetBackdrop?.setAttribute("aria-hidden", "false");
   }
 
+  function syncInputs(){
+    if(checkInInput) checkInInput.value=startDate?keyOf(startDate):"";
+    if(checkOutInput) checkOutInput.value=endDate?keyOf(endDate):"";
+    if(guestsSelect) guestsSelect.value=guests||"";
+    const min=keyOf(today),max=keyOf(maxBookableDate());
+    if(checkInInput){checkInInput.min=min;checkInInput.max=max;}
+    if(checkOutInput){checkOutInput.min=startDate?keyOf(new Date(startDate.getFullYear(),startDate.getMonth(),startDate.getDate()+1)):min;checkOutInput.max=max;}
+  }
+
   function updateSelectionUI() {
+    syncInputs(); saveWebsiteDraft();
     if (!startDate) { selectedCard?.classList.add("hidden"); return; }
     selectedCard?.classList.remove("hidden"); if (selectedText) selectedText.textContent = rangeLabel();
-    if (selectedLine) { selectedLine.href = endDate ? miniAppBookingUrl() : "#"; selectedLine.textContent = endDate ? "前往 LINE 完成預約 →" : "再選擇退房日期"; selectedLine.removeAttribute("target"); }
+    if(selectedCheckIn) selectedCheckIn.textContent=startDate?keyOf(startDate):"—";
+    if(selectedCheckOut) selectedCheckOut.textContent=endDate?keyOf(endDate):"—";
+    if(selectedGuests) selectedGuests.textContent=guests?`${guests} 人`:"請選擇";
+    if(selectedTotal) selectedTotal.textContent=selectedQuote?.total?`NT$ ${money.format(selectedQuote.total)}`:"待試算";
+    if (selectedLine) { selectedLine.href = endDate ? miniAppBookingUrl() : "#"; selectedLine.textContent = endDate ? "帶入官方 LINE 日曆完成預約 →" : "再選擇退房日期"; selectedLine.removeAttribute("target"); }
   }
 
   async function selectDate(d) {
@@ -163,46 +196,76 @@ if (grid) {
   }
 
   async function render(showLoading = true) {
-    const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1); const last = new Date(cursor.getFullYear(), cursor.getMonth()+1, 0);
-    monthLabel.textContent = formatter.format(first); grid.replaceChildren();
-    if (showLoading) statusNode.textContent = startDate && !endDate ? "請選擇退房日期。" : "正在載入日期與價格…";
-    let states = new Map(), prices=new Map();
-    try {
-      [states,prices]=await Promise.all([getMonthStates(first,last,{force:true}),getMonthPricing(first,{force:true})]);
-      if (showLoading) statusNode.textContent = startDate && !endDate ? "已選入住日，請再點選退房日期。" : `先選入住日，再選退房日｜開放未來 ${pricingSettings.bookingWindowMonths||6} 個月。`;
-    } catch (error) { console.warn("Calendar unavailable", error); if (showLoading) statusNode.textContent = "目前無法同步最新日期，請直接透過 LINE 詢問。"; }
+    const seq=++renderSeq;
+    const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const last = new Date(cursor.getFullYear(), cursor.getMonth()+1, 0);
+    monthLabel.textContent = formatter.format(first);
+    if (showLoading) { calendarCard?.classList.add("is-loading"); statusNode.textContent = startDate && !endDate ? "請選擇退房日期。" : "正在載入日期與價格…"; }
 
+    // Render current-month skeleton immediately. Adjacent month dates are never rendered.
+    grid.replaceChildren();
+    for(let i=0;i<first.getDay();i++){const ph=document.createElement("span");ph.className="calendar-placeholder";ph.setAttribute("aria-hidden","true");grid.append(ph);}
+
+    let states = new Map(), prices = new Map();
+    try {
+      [states, prices] = await Promise.all([getMonthStates(first,last), getMonthPricing(first)]);
+      if(seq!==renderSeq) return;
+      if (showLoading) statusNode.textContent = startDate && !endDate ? "已選入住日，請再點選退房日期。" : `先選入住日，再選退房日｜開放未來 ${pricingSettings.bookingWindowMonths||6} 個月。`;
+    } catch (error) {
+      if(seq!==renderSeq) return;
+      console.warn("Calendar unavailable", error);
+      if (showLoading) statusNode.textContent = "目前無法同步最新日期，請直接透過 LINE 詢問。";
+    }
+
+    if(seq!==renderSeq) return;
     const max=maxBookableDate();
     if(prevBtn) prevBtn.disabled = cursor.getFullYear()===today.getFullYear() && cursor.getMonth()===today.getMonth();
     if(nextBtn){ const nextMonth=new Date(cursor.getFullYear(),cursor.getMonth()+1,1); nextBtn.disabled=nextMonth>new Date(max.getFullYear(),max.getMonth(),1); }
-
-    const startOffset = first.getDay(); const start = new Date(first); start.setDate(1 - startOffset);
-    for (let i=0; i<42; i++) {
-      const d = new Date(start); d.setDate(start.getDate()+i); const key = keyOf(d); const state = states.get(key) || "available"; const rate=prices.get(key);
-      const outside = d.getMonth() !== cursor.getMonth(); const past = d < today; const beyond=isBeyondWindow(d);
-      const btn = document.createElement("button"); btn.type = "button";
-      btn.className = `calendar-day ${outside ? "outside" : ""} ${past ? "past" : ""} ${beyond ? "future-locked" : ""} ${state}`.trim();
-      if (key === keyOf(today)) btn.classList.add("today"); if (isSameDay(d,startDate)) btn.classList.add("range-start","selected"); if (isSameDay(d,endDate)) btn.classList.add("range-end","selected"); if (isWithinRange(d)) btn.classList.add("in-range");
-      const labels = { available:"可預約", booked:"已預約", blocked:"暫停" };
-      const selectionLabel = isSameDay(d,startDate) ? "入住" : isSameDay(d,endDate) ? "退房" : (isWithinRange(d) ? "住宿" : (beyond?"尚未開放":(labels[state] || "可預約")));
-      const priceText = !outside && !past && !beyond && state==="available" && rate?.price ? `<span class="night-price">${money.format(rate.price)}</span>` : "";
-      const tag = !outside && !past && !beyond && state==="available" && rate?.label && !['平日','週五','週六'].includes(rate.label) ? `<span class="rate-tag">${shortTag(rate.label)}</span>` : "";
-      btn.innerHTML = `<span class="day-number">${d.getDate()}</span>${priceText}${tag}<span class="state">${selectionLabel}</span>`;
-      btn.setAttribute("aria-label", `${fullFormatter.format(d)}，${selectionLabel}${rate?.price?`，每晚 ${money.format(rate.price)} 元`:''}${rate?.label?`，${rate.label}`:''}`);
-      const canBeCheckout = !!startDate && !endDate && d > startDate && !beyond;
-      btn.disabled = past || beyond || (!canBeCheckout && state !== "available");
-      if (!btn.disabled) btn.addEventListener("click", () => selectDate(d)); grid.append(btn);
+    grid.replaceChildren();
+    for(let i=0;i<first.getDay();i++){const ph=document.createElement("span");ph.className="calendar-placeholder";ph.setAttribute("aria-hidden","true");grid.append(ph);}
+    for(let day=1;day<=last.getDate();day++){
+      const d=new Date(cursor.getFullYear(),cursor.getMonth(),day); const key=keyOf(d); const state=states.get(key)||"available"; const rate=prices.get(key);
+      const past=d<today,beyond=isBeyondWindow(d);
+      const btn=document.createElement("button");btn.type="button";btn.className=`calendar-day ${past?"past":""} ${beyond?"future-locked":""} ${state}`.trim();
+      if(key===keyOf(today))btn.classList.add("today");if(isSameDay(d,startDate))btn.classList.add("range-start","selected");if(isSameDay(d,endDate))btn.classList.add("range-end","selected");if(isWithinRange(d))btn.classList.add("in-range");
+      const labels={available:"可預約",booked:"已預約",blocked:"暫停"};
+      const selectionLabel=isSameDay(d,startDate)?"入住":isSameDay(d,endDate)?"退房":isWithinRange(d)?"住宿":beyond?"尚未開放":(labels[state]||"可預約");
+      const priceText=!past&&!beyond&&state==="available"&&rate?.price?`<span class="night-price">${money.format(rate.price)}</span>`:"";
+      const tag=!past&&!beyond&&state==="available"&&rate?.label&&!['平日','週五','週六','週五／週六'].includes(rate.label)?`<span class="rate-tag">${shortTag(rate.label)}</span>`:"";
+      btn.innerHTML=`<span class="day-number">${day}</span>${priceText}${tag}<span class="state">${selectionLabel}</span>`;
+      btn.setAttribute("aria-label",`${fullFormatter.format(d)}，${selectionLabel}${rate?.price?`，每晚 ${money.format(rate.price)} 元`:''}${rate?.label?`，${rate.label}`:''}`);
+      const canBeCheckout=!!startDate&&!endDate&&d>startDate&&!beyond;btn.disabled=past||beyond||(!canBeCheckout&&state!=="available");
+      if(!btn.disabled)btn.addEventListener("click",()=>selectDate(d));grid.append(btn);
     }
+    calendarCard?.classList.remove("is-loading");
+    // Warm next/previous month caches after current render, making arrows feel instant.
+    window.requestIdleCallback?.(()=>{
+      const candidates=[new Date(cursor.getFullYear(),cursor.getMonth()+1,1),new Date(cursor.getFullYear(),cursor.getMonth()-1,1)];
+      for(const m of candidates){if(m<new Date(today.getFullYear(),today.getMonth(),1)||m>new Date(max.getFullYear(),max.getMonth(),1))continue;const l=new Date(m.getFullYear(),m.getMonth()+1,0);getMonthStates(m,l).catch(()=>{});getMonthPricing(m).catch(()=>{});}
+    },{timeout:800});
   }
 
   prevBtn?.addEventListener("click", () => { if(prevBtn.disabled) return; cursor = new Date(cursor.getFullYear(), cursor.getMonth()-1, 1); render(); });
   nextBtn?.addEventListener("click", () => { if(nextBtn.disabled) return; cursor = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1); render(); });
   document.querySelector("#dateSheetClose")?.addEventListener("click", closeDateSheet); dateSheetBackdrop?.addEventListener("click", closeDateSheet);
   document.querySelector("#dateSheetCalendar")?.addEventListener("click", () => { closeDateSheet(); document.querySelector("#booking")?.scrollIntoView({ behavior: "smooth", block: "center" }); });
+  async function applyQuickSelection(){
+    const sKey=checkInInput?.value||"", eKey=checkOutInput?.value||""; guests=guestsSelect?.value||guests||"";
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(sKey)){statusNode.textContent="請先選擇入住日期。";return;}
+    const sDate=localDateFromKey(sKey); if(sDate<today||isBeyondWindow(sDate)){statusNode.textContent="入住日期不在目前開放範圍。";return;}
+    startDate=sDate;endDate=null;selectedQuote=null;cursor=new Date(sDate.getFullYear(),sDate.getMonth(),1);
+    if(/^\d{4}-\d{2}-\d{2}$/.test(eKey)){const eDate=localDateFromKey(eKey);if(eDate>sDate&&!isBeyondWindow(eDate)){endDate=eDate;const [check,quote]=await Promise.all([rangeIsAvailable(startDate,endDate),quoteRange(startDate,endDate)]);if(!check.ok){endDate=null;selectedQuote=null;statusNode.textContent=`${fullFormatter.format(check.date)} 已不可預約，請重新選擇。`;updateSelectionUI();await render(false);return;}selectedQuote=quote;}}
+    updateSelectionUI();await render(false);
+    if(endDate){statusNode.textContent=`已帶入 ${nightsBetween(startDate,endDate)} 晚${selectedQuote?.total?`，預估總價 NT$ ${money.format(selectedQuote.total)}`:""}。`;openRangeSheet();}
+    else statusNode.textContent="已帶入入住日期，請再選退房日期。";
+  }
+  applySelectionBtn?.addEventListener("click",applyQuickSelection);
+  guestsSelect?.addEventListener("change",()=>{guests=guestsSelect.value;updateSelectionUI();});
+  checkInInput?.addEventListener("change",()=>{const k=checkInInput.value;if(/^\d{4}-\d{2}-\d{2}$/.test(k)){const d=localDateFromKey(k);cursor=new Date(d.getFullYear(),d.getMonth(),1);render();}});
+  checkOutInput?.addEventListener("change",()=>{if(checkInInput?.value) applyQuickSelection();});
   selectedLine?.addEventListener("click", (e) => { if (!endDate) e.preventDefault(); });
   dateSheetCopy?.addEventListener("click", async () => { try { await navigator.clipboard.writeText(selectedMessage); dateSheetCopy.textContent = "已複製，可貼到 LINE ✓"; setTimeout(() => dateSheetCopy.textContent = "複製預約內容", 1800); } catch { dateSheetCopy.textContent = selectedMessage; } });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDateSheet(); });
-  window.addEventListener("focus", () => { monthCache.clear(); pricingMonthCache.clear(); render(false); });
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) { monthCache.clear(); pricingMonthCache.clear(); render(false); } });
-  updateSelectionUI(); render();
+  window.addEventListener("pageshow", () => { render(false); });
+  loadWebsiteDraft(); updateSelectionUI(); render();
 }
