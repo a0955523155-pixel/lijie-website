@@ -129,7 +129,7 @@ function drawCalendar(prices=new Map()){
     const d=new Date(start); d.setDate(start.getDate()+i); const state=stateOf(d); const rate=prices.get(keyOf(d)); const outside=d.getMonth()!==cursor.getMonth(); const past=d<today; const beyond=isBeyondWindow(d);
     const b=document.createElement("button"); b.type="button"; b.className=`day ${outside?"outside":""} ${past?"past":""} ${beyond?"future-locked":""} ${state} ${isInRange(d)?"range":""}`;
     if ((startDate&&keyOf(d)===keyOf(startDate))||(endDate&&keyOf(d)===keyOf(endDate))) b.classList.add("selected");
-    const rateText=(!outside&&!past&&!beyond&&state==="available"&&rate?.price)?`<em>${moneyFmt.format(rate.price)}</em>`:"";
+    const rateText="";
     const tag=(!outside&&!past&&!beyond&&state==="available"&&rate?.label&&!['平日','週五','週六'].includes(rate.label))?`<i>${rate.label.replace('連假','')}</i>`:"";
     const status=beyond?"尚未開放":state==="available"?"可詢問":state==="booked"?"已預約":"暫停";
     b.innerHTML=`<span>${d.getDate()}</span>${rateText}${tag}<small>${status}</small>`;
@@ -199,8 +199,7 @@ function syncQuickSelector(){
 function updateSelection(){
   syncQuickSelector();
   els.start.textContent=startDate?fmt.format(startDate):"請選擇";els.end.textContent=endDate?fmt.format(endDate):"請選擇";
-  const price=currentQuote?.total?`｜預估 NT$ ${moneyFmt.format(currentQuote.total)}`:"";
-  els.note.textContent=startDate&&!endDate?"已選開始日期，請再點結束日期。":startDate&&endDate?`入住 ${nightsCount()} 晚${price}；最終金額以俐姐確認為準。`:`先點入住日期，再點退房日期。日曆顯示每晚價格，開放未來 ${pricingSettings.bookingWindowMonths||6} 個月。`;
+  els.note.textContent=startDate&&!endDate?"已選開始日期，請再點結束日期。":startDate&&endDate?`入住 ${nightsCount()} 晚；價格由俐姐確認後回覆。`:`先點入住日期，再點退房日期。開放未來 ${pricingSettings.bookingWindowMonths||6} 個月。`;
   refreshForm();
 }
 
@@ -295,7 +294,7 @@ function refreshForm(){
     els.status.textContent="請先選擇完整日期並填寫姓名。";
   }
   const msg=buildMessage();
-  if(msg){els.summary.innerHTML=`<div class="row"><span>入住</span><strong>${keyOf(startDate)}</strong></div><div class="row"><span>退房</span><strong>${keyOf(endDate)}</strong></div><div class="row"><span>住宿</span><strong>${nightsCount()} 晚</strong></div>${currentQuote?.total?`<div class="row"><span>預估總價</span><strong>NT$ ${moneyFmt.format(currentQuote.total)}</strong></div>`:""}<div class="row"><span>姓名</span><strong>${escapeHtml(els.name.value.trim()||"—")}</strong></div>`;els.summary.classList.remove("hidden")}else els.summary.classList.add("hidden");
+  if(msg){els.summary.innerHTML=`<div class="row"><span>入住</span><strong>${keyOf(startDate)}</strong></div><div class="row"><span>退房</span><strong>${keyOf(endDate)}</strong></div><div class="row"><span>住宿</span><strong>${nightsCount()} 晚</strong></div><div class="row"><span>姓名</span><strong>${escapeHtml(els.name.value.trim()||"—")}</strong></div>`;els.summary.classList.remove("hidden")}else els.summary.classList.add("hidden");
 }
 function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 
@@ -386,7 +385,7 @@ async function applyLineQuickSelection(){
     endDate=eDate; currentQuote=quote;
   }
   updateSelection(); await render();
-  els.note.textContent=endDate?`已帶入 ${nightsCount()} 晚${currentQuote?.total?`｜預估 NT$ ${moneyFmt.format(currentQuote.total)}`:""}。`:`已帶入入住日期，請再選退房日期。`;
+  els.note.textContent=endDate?`已帶入 ${nightsCount()} 晚。`:`已帶入入住日期，請再選退房日期。`;
 }
 if(els.quickApply) els.quickApply.addEventListener("click",applyLineQuickSelection);
 if(els.quickGuests) els.quickGuests.addEventListener("change",()=>{els.people.value=els.quickGuests.value;refreshForm();saveDraft();});

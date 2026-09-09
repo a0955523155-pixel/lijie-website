@@ -702,7 +702,7 @@ async function savePricing(event){
   message("#pricingMessage","正在儲存…");
   try{
     await setDoc(doc(db,"settings","pricing"),{enabled:$("#pricingEnabled").checked,weekdayPrice,weekendPrice,fridayPrice:weekendPrice,saturdayPrice:weekendPrice,holidayPrice,eventPrice,bookingWindowMonths,autoGovernmentHolidays:$("#autoGovernmentHolidays").checked,autoKentingEvents:$("#autoKentingEvents").checked,specialRanges:pricingSpecialRanges,updatedAt:serverTimestamp()});
-    message("#pricingMessage",`價格設定已儲存。前台開放未來 ${bookingWindowMonths} 個月，並會顯示每日價格。`,"success");
+    message("#pricingMessage",`價格設定已儲存。前台開放未來 ${bookingWindowMonths} 個月；官網不公開顯示價格。`,"success");
   }catch(e){ const msg=e?.code==="permission-denied"||String(e?.message||"").includes("Missing or insufficient permissions") ? "價格設定被 Firestore Rules 擋住。請到 Firebase → Firestore Database → Rules，發布此版本 firebase/firestore.rules 後再試。" : (e?.message||"價格設定儲存失敗。"); message("#pricingMessage",msg,"error"); }
 }
 

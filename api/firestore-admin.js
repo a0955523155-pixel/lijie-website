@@ -192,6 +192,10 @@ export async function quoteStay(ci,co){
     const dow=new Date(`${day}T00:00:00Z`).getUTCDay();
     if(dow===5) return {date:day,label:'週五',price:weekend,source:'weekend-rule'};
     if(dow===6) return {date:day,label:'週六',price:weekend,source:'weekend-rule'};
+    // 俐姐的家固定規則：一般週日晚為 NT$10,000。
+    // 若週一仍屬 3 天以上政府連假，autoSeasonMap 會先把週日標成連假夜，
+    // 因而在上方 auto-holiday 規則套用連假價。
+    if(dow===0) return {date:day,label:'週日',price:10000,source:'sunday-fixed-rule'};
     return {date:day,label:'平日',price:weekday,source:'weekday-rule'};
   });
   const total=details.reduce((sum,x)=>sum+Number(x.price||0),0);

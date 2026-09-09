@@ -24,7 +24,6 @@ if (grid) {
   const selectedCheckIn = document.querySelector("#selectedCheckIn");
   const selectedCheckOut = document.querySelector("#selectedCheckOut");
   const selectedGuests = document.querySelector("#selectedGuests");
-  const selectedTotal = document.querySelector("#selectedTotal");
   const calendarCard = document.querySelector(".calendar-card");
   const bookingPageBaseUrl = "https://www.5-1bbs.com/line-booking.html";
   const formatter = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "long" });
@@ -127,15 +126,13 @@ if (grid) {
   function rangeLabel() {
     if (!startDate) return "尚未選擇";
     if (!endDate) return `${fullFormatter.format(startDate)}（入住）`;
-    const quote=selectedQuote?.total ? `｜預估 NT$ ${money.format(selectedQuote.total)}` : "";
-    return `${fullFormatter.format(startDate)} → ${fullFormatter.format(endDate)}${quote}`;
+    return `${fullFormatter.format(startDate)} → ${fullFormatter.format(endDate)}`;
   }
 
   function buildMessage() {
     if (!startDate || !endDate) return "";
     const nights = nightsBetween(startDate,endDate);
-    const quoteLine=selectedQuote?.total ? `\n系統試算：NT$ ${money.format(selectedQuote.total)}` : "";
-    return `您好，我想詢問俐姐的家住宿預約\n入住日期：${keyOf(startDate)}\n退房日期：${keyOf(endDate)}\n住宿晚數：${nights} 晚${quoteLine}\n入住時間：15:00 起\n退房時間：12:00 前\n想確認這段日期是否可以預約，謝謝。`;
+    return `您好，我想詢問俐姐的家住宿預約\n入住日期：${keyOf(startDate)}\n退房日期：${keyOf(endDate)}\n住宿晚數：${nights} 晚\n入住時間：15:00 起\n退房時間：12:00 前\n想確認這段日期是否可以預約與報價，謝謝。`;
   }
 
   function miniAppBookingUrl() {
@@ -150,8 +147,7 @@ if (grid) {
     const nights = nightsBetween(startDate,endDate); selectedMessage = buildMessage();
     if (dateSheetTitle) dateSheetTitle.textContent = `${keyOf(startDate)} → ${keyOf(endDate)}`;
     if (dateSheetHint) {
-      const price=selectedQuote?.total ? `｜預估總價 NT$ ${money.format(selectedQuote.total)}` : "";
-      dateSheetHint.textContent = `共 ${nights} 晚${price}｜入住 15:00 起｜退房 12:00 前。前往 LINE 後會自動帶入日期與同一套價格規則；最終金額以俐姐確認為準。`;
+      dateSheetHint.textContent = `共 ${nights} 晚｜入住 15:00 起｜退房 12:00 前。前往 LINE 後會自動帶入日期與人數，再由俐姐確認報價。`;
     }
     if (dateSheetLine) { dateSheetLine.href = miniAppBookingUrl(); dateSheetLine.removeAttribute("target"); }
     dateSheet?.classList.add("open"); dateSheetBackdrop?.classList.add("open"); dateSheet?.setAttribute("aria-hidden", "false"); dateSheetBackdrop?.setAttribute("aria-hidden", "false");
@@ -173,7 +169,6 @@ if (grid) {
     if(selectedCheckIn) selectedCheckIn.textContent=startDate?keyOf(startDate):"—";
     if(selectedCheckOut) selectedCheckOut.textContent=endDate?keyOf(endDate):"—";
     if(selectedGuests) selectedGuests.textContent=guests?`${guests} 人`:"請選擇";
-    if(selectedTotal) selectedTotal.textContent=selectedQuote?.total?`NT$ ${money.format(selectedQuote.total)}`:"待試算";
     if (selectedLine) { selectedLine.href = endDate ? miniAppBookingUrl() : "#"; selectedLine.textContent = endDate ? "帶入官方 LINE 日曆完成預約 →" : "再選擇退房日期"; selectedLine.removeAttribute("target"); }
   }
 
@@ -183,14 +178,13 @@ if (grid) {
       startDate = new Date(d); endDate = null; selectedQuote=null;
       statusNode.textContent = "已選入住日，請再點選退房日期。"; updateSelectionUI(); await render(false); return;
     }
-    endDate = new Date(d); statusNode.textContent = "正在確認住宿期間與試算價格…"; updateSelectionUI(); await render(false);
+    endDate = new Date(d); statusNode.textContent = "正在確認住宿期間…"; updateSelectionUI(); await render(false);
     try {
       if(isBeyondWindow(endDate)){ endDate=null; statusNode.textContent=`退房日期需在未來 ${pricingSettings.bookingWindowMonths||6} 個月內。`; updateSelectionUI(); await render(false); return; }
       const [check,quote]=await Promise.all([rangeIsAvailable(startDate,endDate),quoteRange(startDate,endDate)]);
       if (!check.ok) { const blockedDate = fullFormatter.format(check.date); endDate = null; selectedQuote=null; statusNode.textContent = `${blockedDate} 已不可預約，請重新選擇退房日期。`; updateSelectionUI(); await render(false); return; }
       selectedQuote=quote; const nights = nightsBetween(startDate,endDate);
-      const price=quote?.total ? `，預估總價 NT$ ${money.format(quote.total)}` : "";
-      statusNode.textContent = `已選 ${nights} 晚${price}。`;
+      statusNode.textContent = `已選 ${nights} 晚。`;
       updateSelectionUI(); openRangeSheet();
     } catch (error) { console.warn("Range availability unavailable", error); statusNode.textContent = "目前無法完整驗證日期，請透過官方 LINE 再確認。"; openRangeSheet(); }
   }
@@ -200,7 +194,7 @@ if (grid) {
     const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
     const last = new Date(cursor.getFullYear(), cursor.getMonth()+1, 0);
     monthLabel.textContent = formatter.format(first);
-    if (showLoading) { calendarCard?.classList.add("is-loading"); statusNode.textContent = startDate && !endDate ? "請選擇退房日期。" : "正在載入日期與價格…"; }
+    if (showLoading) { calendarCard?.classList.add("is-loading"); statusNode.textContent = startDate && !endDate ? "請選擇退房日期。" : "正在載入可預約日期…"; }
 
     // Render current-month skeleton immediately. Adjacent month dates are never rendered.
     grid.replaceChildren();
@@ -230,10 +224,10 @@ if (grid) {
       if(key===keyOf(today))btn.classList.add("today");if(isSameDay(d,startDate))btn.classList.add("range-start","selected");if(isSameDay(d,endDate))btn.classList.add("range-end","selected");if(isWithinRange(d))btn.classList.add("in-range");
       const labels={available:"可預約",booked:"已預約",blocked:"暫停"};
       const selectionLabel=isSameDay(d,startDate)?"入住":isSameDay(d,endDate)?"退房":isWithinRange(d)?"住宿":beyond?"尚未開放":(labels[state]||"可預約");
-      const priceText=!past&&!beyond&&state==="available"&&rate?.price?`<span class="night-price">${money.format(rate.price)}</span>`:"";
+      const priceText="";
       const tag=!past&&!beyond&&state==="available"&&rate?.label&&!['平日','週五','週六','週五／週六'].includes(rate.label)?`<span class="rate-tag">${shortTag(rate.label)}</span>`:"";
       btn.innerHTML=`<span class="day-number">${day}</span>${priceText}${tag}<span class="state">${selectionLabel}</span>`;
-      btn.setAttribute("aria-label",`${fullFormatter.format(d)}，${selectionLabel}${rate?.price?`，每晚 ${money.format(rate.price)} 元`:''}${rate?.label?`，${rate.label}`:''}`);
+      btn.setAttribute("aria-label",`${fullFormatter.format(d)}，${selectionLabel}${rate?.label?`，${rate.label}`:''}`);
       const canBeCheckout=!!startDate&&!endDate&&d>startDate&&!beyond;btn.disabled=past||beyond||(!canBeCheckout&&state!=="available");
       if(!btn.disabled)btn.addEventListener("click",()=>selectDate(d));grid.append(btn);
     }
@@ -256,7 +250,7 @@ if (grid) {
     startDate=sDate;endDate=null;selectedQuote=null;cursor=new Date(sDate.getFullYear(),sDate.getMonth(),1);
     if(/^\d{4}-\d{2}-\d{2}$/.test(eKey)){const eDate=localDateFromKey(eKey);if(eDate>sDate&&!isBeyondWindow(eDate)){endDate=eDate;const [check,quote]=await Promise.all([rangeIsAvailable(startDate,endDate),quoteRange(startDate,endDate)]);if(!check.ok){endDate=null;selectedQuote=null;statusNode.textContent=`${fullFormatter.format(check.date)} 已不可預約，請重新選擇。`;updateSelectionUI();await render(false);return;}selectedQuote=quote;}}
     updateSelectionUI();await render(false);
-    if(endDate){statusNode.textContent=`已帶入 ${nightsBetween(startDate,endDate)} 晚${selectedQuote?.total?`，預估總價 NT$ ${money.format(selectedQuote.total)}`:""}。`;openRangeSheet();}
+    if(endDate){statusNode.textContent=`已帶入 ${nightsBetween(startDate,endDate)} 晚。`;openRangeSheet();}
     else statusNode.textContent="已帶入入住日期，請再選退房日期。";
   }
   applySelectionBtn?.addEventListener("click",applyQuickSelection);
