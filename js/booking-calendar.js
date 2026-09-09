@@ -310,7 +310,21 @@ if (grid) {
       const data=await r.json().catch(()=>({})); if(!r.ok||!data.ok||!data.bookingId) throw new Error(data.error||"BOOKING_ID_MISSING");
       setMsg(`${data.isTest?"【測試訂單】\n":""}預約申請已送出 ✓\n\n預約編號：${data.bookingId}\n目前狀態：等待訂金入帳\n固定訂金：NT$3,000\n\n付款資訊\n高雄市鳥松區農會\n農分會代號：619-1089\n戶名：吳俐潔 小姐\n帳號：01089210623310\n\n訂金確認入帳後，民宿才會正式確認預約。\n\n若想在官方 LINE 查詢這筆訂單，只要在官方 LINE 輸入預約編號「${data.bookingId}」即可綁定；一筆訂單最多綁定一位 LINE 使用者。`,"success");
       btn.textContent="已送出預約需求";
-    }catch(err){setMsg("送出失敗，請稍後再試或改用官方 LINE。","error");btn.disabled=false;}
+    }catch(err){
+      const code=String(err?.message||"");
+      const map={
+        INVALID_DATES:"入住／退房日期不正確，請重新選擇日期。",
+        NAME_REQUIRED:"請填寫預約姓名。",
+        EMAIL_REQUIRED:"Email 格式不正確，請確認後再送出。",
+        FIRESTORE_NOT_CONFIGURED:"目前預約系統尚未完成 Firebase 設定。",
+        BOOKING_OUTSIDE_WINDOW:"所選日期目前不在開放預約範圍內。",
+        FORM_REJECTED:"安全檢查未通過，請重新整理頁面後再試。"
+      };
+      let friendly=map[code]||"送出失敗，請稍後再試。";
+      if(code.startsWith("FIRESTORE_BOOKING_SAVE_FAILED")) friendly="預約資料暫時無法寫入，請稍後再試。";
+      setMsg(websiteTestMode?`${friendly}\n\n測試錯誤代碼：${code}`:friendly,"error");
+      btn.disabled=false;
+    }
   });
 
   selectedLine?.addEventListener("click", (e) => { if (!endDate) e.preventDefault(); });
