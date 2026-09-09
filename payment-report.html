@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#173A35">
+  <title>匯款回報｜俐姐的家</title>
+  <link rel="stylesheet" href="css/line-booking.css">
+  <style>
+    body{background:#f7f4ee;color:#173a35}.payment-wrap{max-width:680px;margin:0 auto;padding:20px 18px 56px}.payment-card{background:#fff;border:1px solid #e3ddd2;border-radius:20px;overflow:hidden;box-shadow:0 12px 35px rgba(23,58,53,.08)}.payment-head{background:#173a35;color:#fff;padding:24px}.payment-head small{display:block;color:#d8c89f;letter-spacing:.18em;margin-bottom:8px}.payment-head h1{font-size:28px;margin:0 0 8px}.payment-head p{margin:0;color:#dbe6e2;line-height:1.7}.payment-body{padding:22px}.payment-summary{display:grid;gap:10px;margin-bottom:22px}.payment-row{display:flex;justify-content:space-between;gap:20px;padding:13px 0;border-bottom:1px solid #eee8df}.payment-row span{color:#7a8581}.payment-row strong{text-align:right;color:#173a35}.payment-note{background:#f4f7f5;border-radius:14px;padding:14px 16px;line-height:1.7;color:#52605b;margin:16px 0 20px}.payment-form{display:grid;gap:16px}.payment-form label span{display:block;font-weight:700;margin-bottom:8px}.payment-form input{width:100%;box-sizing:border-box;border:1px solid #d9d2c7;border-radius:12px;padding:14px 15px;font:inherit;background:#fff}.payment-form button{border:0;border-radius:12px;padding:15px;background:#2f6f62;color:#fff;font-weight:800;font-size:17px}.payment-form button:disabled{opacity:.5}.payment-status{margin-top:15px;text-align:center;line-height:1.7;color:#68746f}.payment-success{background:#ecf7f1;border-radius:14px;padding:18px;text-align:center;color:#245447;font-weight:700}.hidden{display:none!important}
+  </style>
+</head>
+<body>
+  <main class="payment-wrap">
+    <section class="payment-card">
+      <header class="payment-head">
+        <small>LIJIE'S HOME</small>
+        <h1>我已匯款，幫我確認一下 💚</h1>
+        <p>辛苦你了～再補兩個小資料，俐姐就能幫你核對訂金囉。</p>
+      </header>
+      <div class="payment-body">
+        <div id="paymentLoading" class="payment-status">正在帶入訂單資料…</div>
+        <div id="paymentContent" class="hidden">
+          <div class="payment-summary">
+            <div class="payment-row"><span>訂單編號</span><strong id="payBookingId">—</strong></div>
+            <div class="payment-row"><span>入住日期</span><strong id="payStayDate">—</strong></div>
+            <div class="payment-row"><span>住宿總金額</span><strong id="payTotal">—</strong></div>
+            <div class="payment-row"><span>本次訂金</span><strong id="payDeposit">NT$ 3,000</strong></div>
+          </div>
+          <div class="payment-note">匯款完成後，請填寫<strong>付款人姓名</strong>與<strong>匯款帳號末五碼</strong>。送出只是回報，仍需客服實際核對帳戶入帳後，預約才會進入正式確認流程。</div>
+          <form id="paymentReportForm" class="payment-form">
+            <label><span>付款人姓名</span><input id="payerName" name="payerName" maxlength="40" autocomplete="name" placeholder="例如：王小明" required></label>
+            <label><span>匯款帳號末五碼</span><input id="payerLast5" name="last5" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" autocomplete="off" placeholder="例如：12345" required></label>
+            <button id="paymentSubmit" type="submit">送出匯款回報</button>
+          </form>
+          <div id="paymentResult" class="payment-status"></div>
+          <div id="paymentSuccess" class="payment-success hidden">已收到你的匯款回報 💚<br>俐姐核對入帳後，會再更新預約狀態。</div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="js/payment-report.js"></script>
+</body>
+</html>

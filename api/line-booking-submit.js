@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 import { putBooking, firestoreReady, quoteStay, getPublicPricingSettings } from "./firestore-admin.js";
 import { gmailReady, sendMail, receivedEmailText, receivedEmailHtml, adminNotificationEmail, newBookingAdminMail } from "./gmail-mailer.js";
-import { COOKIE_NAME, parseCookies, verifyPayload as verifyCookiePayload } from "./line-auth-lib.js";
+import { COOKIE_NAME, parseCookies, verifyPayload as verifyCookiePayload, createBookingSession as createSecureSession } from "./line-auth-lib.js";
 
 function clean(value, max = 500) {
   return String(value ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, max);
@@ -67,7 +67,9 @@ function normalizeBooking(input={}){
   return {checkIn:a.s,checkOut:b.s,nights,name,phone:clean(input.phone,40),email,people,purpose:clean(input.purpose,120),notes:clean(input.notes,500),source:clean(input.source,40)||"official-line-secure-link"};
 }
 
-function messages(b){
+function paymentReportUrl(userId,bookingId){const session=createSecureSession(userId);return `https://www.5-1bbs.com/payment-report.html?session=${encodeURIComponent(session)}&booking=${encodeURIComponent(bookingId)}`;}
+
+function messages(b,payUrl){
   const infoRow=(label,value)=>({
     type:"box",layout:"baseline",spacing:"sm",contents:[
       {type:"text",text:label,size:"xs",color:"#8B938F",flex:2},
@@ -113,9 +115,8 @@ function messages(b){
         {type:"text",text:"此為預約申請；訂金核對入帳並由民宿後台確認後，預約才正式成立。",size:"xs",color:"#8B938F",wrap:true}
       ]},
       footer:{type:"box",layout:"vertical",paddingAll:"16px",spacing:"sm",contents:[
-        {type:"box",layout:"vertical",paddingAll:"12px",backgroundColor:"#FFF3CC",cornerRadius:"10px",contents:[
-          {type:"text",text:"🟡 等待俐姐確認",align:"center",weight:"bold",size:"sm",color:"#8A6500"}
-        ]}
+        {type:"button",style:"primary",height:"sm",color:"#2F6F62",action:{type:"uri",label:"我已匯款，幫我確認 💚",uri:payUrl}},
+        {type:"text",text:"匯款完成後點這裡，只需填付款人姓名與末五碼。",size:"xxs",color:"#7A8581",wrap:true,align:"center"}
       ]}
     }
   };
@@ -202,7 +203,7 @@ export default async function handler(req,res){
       }
     }
 
-    const customerMessages=messages(booking);
+    const customerMessages=messages({...booking,id},paymentReportUrl(String(session.uid),id));
     let customerDelivered=false;
     let customerError="";
     if(token){

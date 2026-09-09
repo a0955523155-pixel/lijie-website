@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 import { getBooking, putBooking, listBookingsByLineUser } from "./firestore-admin.js";
 import { gmailReady, sendMail, adminNotificationEmail, cancellationRequestMail, refundRequestMail, paymentReportAdminMail } from "./gmail-mailer.js";
+import { createBookingSession as createSecureSession } from "./line-auth-lib.js";
 
 function createBookingSession(userId, secret, ttlMs = 2 * 60 * 60 * 1000) {
   const payload = Buffer.from(JSON.stringify({ uid: userId, exp: Date.now() + ttlMs })).toString("base64url");
@@ -11,6 +12,10 @@ function createBookingSession(userId, secret, ttlMs = 2 * 60 * 60 * 1000) {
 function bookingUrlFor(userId, secret) {
   const session = createBookingSession(userId, secret);
   return `https://www.5-1bbs.com/line-booking.html?session=${encodeURIComponent(session)}`;
+}
+function paymentReportUrlFor(userId, bookingId){
+  const session=createSecureSession(userId);
+  return `https://www.5-1bbs.com/payment-report.html?session=${encodeURIComponent(session)}&booking=${encodeURIComponent(bookingId)}`;
 }
 function bookingButtonMessage(url) {
   return {
@@ -31,7 +36,7 @@ function lineMainMenuMessage(url){
 function bookingStatusLabel(status){
   return ({pending:"預約申請／待訂金",confirmed:"預約已成立",cancelled:"已取消"})[String(status||"")]||String(status||"處理中");
 }
-function customerOrderFlex(b,{justBound=false}={}){
+function customerOrderFlex(b,{justBound=false,paymentUrl=""}={}){
   const total=Number(b.quotedTotal||b.totalAmount||0),deposit=Number(b.depositRequired||3000),paid=Number(b.paidAmount||b.amountReceived||0);
   const remain=Math.max(0,total-paid);
   const status=bookingStatusLabel(b.status);
@@ -53,7 +58,7 @@ Email｜${b.email||"未填"}`,size:"sm",wrap:true,color:"#26332F",lineSpacing:"4
 尚餘｜NT$ ${remain.toLocaleString("zh-TW")}`,size:"sm",wrap:true,color:"#36534B",margin:"md",lineSpacing:"4px"}]:[]),
       {type:"text",text:"此 LINE 帳號已與本訂單綁定；同一筆訂單無法再綁定其他 LINE 使用者。",size:"xs",wrap:true,color:"#7A8581",margin:"md"}]},
     footer:{type:"box",layout:"vertical",paddingAll:"14px",spacing:"sm",contents:[
-      {type:"button",style:"secondary",height:"sm",action:{type:"message",label:"匯款回報",text:`匯款回報 ${b.id}`}},
+      {type:"button",style:"primary",height:"sm",color:"#2F6F62",action:{type:"uri",label:"我已匯款，幫我確認 💚",uri:paymentUrl||"https://www.5-1bbs.com/"}},
       {type:"button",style:"secondary",height:"sm",action:{type:"message",label:"取消預約",text:`取消預約 ${b.id}`}}
     ]}}};
 }
@@ -461,6 +466,19 @@ export default async function handler(req, res) {
       const customerInput=String(event.message.text||"").trim();
       const uid=String(event.source?.userId||"").trim();
 
+      if(/^匯款回報$/.test(customerInput.replace(/\s+/g,""))){
+        try{
+          const orders=await listBookingsByLineUser(uid,8);
+          const active=orders.filter(b=>String(b.status||"")!=="cancelled");
+          if(!active.length){
+            await replyLine(event.replyToken,"目前沒有可回報匯款的預約訂單。若要開始預約，請傳『立即預約』。",token);
+          }else{
+            await replyLine(event.replyToken,[{type:"text",text:"匯款完成了嗎？辛苦你了 💚\n點下面自己的訂單，再補『付款人姓名＋末五碼』就可以囉。"},...active.slice(0,4).map(b=>customerOrderFlex(b,{paymentUrl:paymentReportUrlFor(uid,b.id)}))],token);
+          }
+        }catch(e){await replyLine(event.replyToken,"目前無法開啟匯款回報，請稍後再試。",token);}
+        continue;
+      }
+
       const paymentReport=parsePaymentReport(customerInput);
       if(paymentReport){
         if(!paymentReport.last5||!paymentReport.amount){
@@ -501,7 +519,7 @@ export default async function handler(req, res) {
           if(!orders.length){
             await replyLine(event.replyToken,"目前這個 LINE 帳號還沒有預約訂單。\n\n請傳『立即預約』開啟官方預約日曆建立訂單。",token);
           }else{
-            await replyLine(event.replyToken,[{type:"text",text:`找到 ${orders.length} 筆已綁定訂單：`},...orders.slice(0,4).map(b=>customerOrderFlex(b))],token);
+            await replyLine(event.replyToken,[{type:"text",text:`找到 ${orders.length} 筆已綁定訂單：`},...orders.slice(0,4).map(b=>customerOrderFlex(b,{paymentUrl:paymentReportUrlFor(uid,b.id)}))],token);
           }
         }catch(e){
           console.error("customer order query failed",e);
