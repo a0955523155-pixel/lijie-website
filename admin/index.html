@@ -119,11 +119,11 @@
 <div class="panel-heading"><div><p class="eyebrow">REPORTS</p><h2>報表中心</h2><p>報表只讀取現有營運資料，不在這裡修改訂單、帳務或庫存，避免和營運管理重複。</p></div><button class="secondary" id="refreshReports" type="button">重新整理</button></div>
 
 <div class="report-block">
-  <div class="ops-title"><div><h3>訂單・帳務・支出報表</h3><p>依日期區間彙整訂單、收退款與支出，可預覽、列印或下載 CSV。</p></div></div>
+  <div class="ops-title"><div><h3>訂單・帳務・支出報表</h3><p>依日期區間彙整訂單、收退款與支出，可預覽、列印或下載 Excel。</p></div></div>
   <div class="report-toolbar">
     <label>開始日期<input id="reportStartDate" type="date"></label>
     <label>結束日期<input id="reportEndDate" type="date"></label>
-    <button class="secondary" id="downloadFinanceCsv" type="button">下載 CSV</button>
+    <button class="secondary" id="downloadFinanceExcel" type="button">下載 Excel</button>
     <button class="secondary" id="printFinanceReport" type="button">列印報表</button>
   </div>
   <div class="report-summary" id="financeReportSummary"></div>
@@ -135,7 +135,7 @@
 <div class="report-block">
   <div class="ops-title"><div><h3>庫存管理庫存表</h3><p>顯示目前備品庫存、安全庫存、單位成本與庫存估值；此處僅供查看與輸出。</p></div></div>
   <div class="report-toolbar">
-    <button class="secondary" id="downloadInventoryCsv" type="button">下載 CSV</button>
+    <button class="secondary" id="downloadInventoryExcel" type="button">下載 Excel</button>
     <button class="secondary" id="printInventoryReport" type="button">列印庫存表</button>
   </div>
   <div class="report-summary" id="inventoryReportSummary"></div>
@@ -214,6 +214,7 @@
 </main>
 <dialog class="picker-dialog" id="libraryPickerDialog"><div class="dialog-head"><div><p class="eyebrow">CHOOSE FROM LIBRARY</p><h2 id="libraryPickerTitle">從素材庫選擇</h2></div><button class="secondary" id="closeLibraryPicker" type="button">關閉</button></div><div class="picker-body"><label class="picker-search">搜尋素材<input id="pickerSearch" placeholder="搜尋檔名或分類" type="search"/></label><p class="muted" id="pickerHint"></p><div class="library-grid picker-grid" id="pickerGrid"></div></div></dialog>
 <dialog id="previewDialog"><div class="dialog-head"><h2>草稿預覽</h2><button class="secondary" id="closePreview" type="button">關閉</button></div><iframe id="previewFrame" title="網站草稿預覽"></iframe></dialog>
+<script src="/admin/jszip.min.js"></script>
 <script src="/admin/admin.js" type="module"></script>
 </body>
 </html>

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#173A35">
+  <title>取消預約申請｜俐姐的家</title>
+  <link rel="stylesheet" href="css/line-booking.css">
+  <style>
+    body{background:#f7f4ee;color:#173a35}.cancel-wrap{max-width:680px;margin:0 auto;padding:20px 18px 56px}.cancel-card{background:#fff;border:1px solid #e3ddd2;border-radius:20px;overflow:hidden;box-shadow:0 12px 35px rgba(23,58,53,.08)}.cancel-head{background:#173a35;color:#fff;padding:24px}.cancel-head small{display:block;color:#d8c89f;letter-spacing:.18em;margin-bottom:8px}.cancel-head h1{font-size:27px;margin:0 0 8px}.cancel-head p{margin:0;color:#dbe6e2;line-height:1.7}.cancel-body{padding:22px}.summary{display:grid;gap:10px;margin-bottom:20px}.row{display:flex;justify-content:space-between;gap:20px;padding:12px 0;border-bottom:1px solid #eee8df}.row span{color:#7a8581}.row strong{text-align:right;color:#173a35}.notice{background:#f7f3ea;border-radius:14px;padding:16px;line-height:1.75;color:#52605b;margin:16px 0 22px}.notice strong{color:#173a35}.notice ol{margin:8px 0 0;padding-left:22px}.form{display:grid;gap:14px}.form label span{display:block;font-weight:700;margin-bottom:8px}.form textarea{width:100%;box-sizing:border-box;min-height:120px;border:1px solid #d9d2c7;border-radius:12px;padding:14px 15px;font:inherit;resize:vertical}.form button{border:0;border-radius:12px;padding:15px;background:#2f6f62;color:#fff;font-weight:800;font-size:17px}.form button:disabled{opacity:.5}.status{margin-top:15px;text-align:center;line-height:1.7;color:#68746f}.success{background:#ecf7f1;border-radius:14px;padding:18px;color:#245447;line-height:1.8}.hidden{display:none!important}
+  </style>
+</head>
+<body>
+  <main class="cancel-wrap">
+    <section class="cancel-card">
+      <header class="cancel-head">
+        <small>LIJIE'S HOME</small>
+        <h1>需要取消這次預約嗎？🌿</h1>
+        <p>行程臨時有變沒關係，謝謝您提前告訴我們。訂單資料已經幫您帶入，只要補上取消原因即可送出申請。</p>
+      </header>
+      <div class="cancel-body">
+        <div id="cancelLoading" class="status">正在帶入訂單資料…</div>
+        <div id="cancelContent" class="hidden">
+          <div class="summary">
+            <div class="row"><span>訂單編號</span><strong id="cancelBookingId">—</strong></div>
+            <div class="row"><span>入住日期</span><strong id="cancelStayDate">—</strong></div>
+            <div class="row"><span>入住人數</span><strong id="cancelGuests">—</strong></div>
+            <div class="row"><span>訂單總額</span><strong id="cancelTotal">—</strong></div>
+          </div>
+          <div class="notice"><strong>取消預約須知</strong><ol><li>送出申請不代表訂單立即取消，會由俐姐核對後正式處理。</li><li>取消原因需填寫，方便後續確認與保留處理紀錄。</li><li>如已支付訂金，保留、部分退款或全額退款會依該筆訂單與實際情況確認，不會由系統自動退款。</li><li>正式取消完成後，原住宿日期才會重新釋出。</li></ol></div>
+          <form id="cancelRequestForm" class="form">
+            <label><span>取消原因</span><textarea id="cancelReason" maxlength="500" placeholder="例如：行程臨時有變、同行家人無法前往…" required></textarea></label>
+            <button id="cancelSubmit" type="submit">送出取消預約申請</button>
+          </form>
+          <div id="cancelResult" class="status"></div>
+          <div id="cancelSuccess" class="success hidden"><strong>已收到您的取消申請 💚</strong><br>俐姐會盡快核對並協助處理。若處理過程造成您的不便，還請見諒。很可惜這次沒能與您見面，也期待下次有機會在後壁湖迎接您。</div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="js/cancel-request.js"></script>
+</body>
+</html>

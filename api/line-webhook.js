@@ -17,6 +17,10 @@ function paymentReportUrlFor(userId, bookingId){
   const session=createSecureSession(userId);
   return `https://www.5-1bbs.com/payment-report.html?session=${encodeURIComponent(session)}&booking=${encodeURIComponent(bookingId)}`;
 }
+function cancelRequestUrlFor(userId, bookingId){
+  const session=createSecureSession(userId);
+  return `https://www.5-1bbs.com/cancel-request.html?session=${encodeURIComponent(session)}&booking=${encodeURIComponent(bookingId)}`;
+}
 function bookingButtonMessage(url) {
   return {
     type:"template",
@@ -36,7 +40,7 @@ function lineMainMenuMessage(url){
 function bookingStatusLabel(status){
   return ({pending:"預約申請／待訂金",confirmed:"預約已成立",cancelled:"已取消"})[String(status||"")]||String(status||"處理中");
 }
-function customerOrderFlex(b,{justBound=false,paymentUrl=""}={}){
+function customerOrderFlex(b,{justBound=false,paymentUrl="",cancelUrl=""}={}){
   const total=Number(b.quotedTotal||b.totalAmount||0),deposit=Number(b.depositRequired||3000),paid=Number(b.paidAmount||b.amountReceived||0);
   const remain=Math.max(0,total-paid);
   const status=bookingStatusLabel(b.status);
@@ -59,7 +63,7 @@ Email｜${b.email||"未填"}`,size:"sm",wrap:true,color:"#26332F",lineSpacing:"4
       {type:"text",text:"此 LINE 帳號已與本訂單綁定；同一筆訂單無法再綁定其他 LINE 使用者。",size:"xs",wrap:true,color:"#7A8581",margin:"md"}]},
     footer:{type:"box",layout:"vertical",paddingAll:"14px",spacing:"sm",contents:[
       {type:"button",style:"primary",height:"sm",color:"#2F6F62",action:{type:"uri",label:"我已匯款，幫我確認 💚",uri:paymentUrl||"https://www.5-1bbs.com/"}},
-      {type:"button",style:"secondary",height:"sm",action:{type:"message",label:"取消預約",text:`取消預約 ${b.id}`}}
+      {type:"button",style:"secondary",height:"sm",action:{type:"uri",label:"需要取消這次預約",uri:cancelUrl||"https://www.5-1bbs.com/"}}
     ]}}};
 }
 
@@ -265,24 +269,9 @@ function keywordReply(text = "") {
     ].join("\n") };
   }
 
-  // 取消類關鍵字必須優先於「預約」，避免「取消預約」被誤判成新預約。
+  // 取消類關鍵字由事件處理器直接顯示訂單卡片與取消申請入口。
   if (/取消訂單|取消預約|取消訂房|取消預定|取消預訂|我要取消|我想取消|想取消|退訂|取消住宿|不住了|行程取消/.test(t)) {
-    return {
-      text: [
-        "【取消預約須知】",
-        "如需取消，請先閱讀以下內容：",
-        "",
-        "1. 提出取消不代表訂單立即取消，須由俐姐核對訂單後才會正式處理。",
-        "2. 取消原因為必填，後台會永久保留取消原因與處理紀錄。",
-        "3. 若已支付訂金，訂金是否保留、部分退款或全額退款，會依該筆訂單約定與實際情況確認，不會由系統自動退款。",
-        "4. 正式取消完成後，原住宿日期才會重新釋出。",
-        "",
-        "請回覆：『訂單編號＋取消原因』。",
-        "例如：BXXXXXXX，行程臨時取消。",
-        "",
-        "若忘記訂單編號，可先傳『查詢訂單』。"
-      ].join("\n")
-    };
+    return { special: "cancel" };
   }
 
   if (/退款|退費|申請退款|我要退款|想退款/.test(t)) {
@@ -466,6 +455,17 @@ export default async function handler(req, res) {
       const customerInput=String(event.message.text||"").trim();
       const uid=String(event.source?.userId||"").trim();
 
+      if(/取消訂單|取消預約|取消訂房|取消預定|取消預訂|我要取消|我想取消|想取消|退訂|取消住宿|不住了|行程取消/.test(customerInput.replace(/\s+/g,"")) && !parseServiceRequest(customerInput)){
+        try{
+          const orders=await listBookingsByLineUser(uid,8);
+          const active=orders.filter(b=>String(b.status||"")!=="cancelled");
+          const info={type:"flex",altText:"俐姐的家｜取消預約須知",contents:{type:"bubble",size:"mega",header:{type:"box",layout:"vertical",backgroundColor:"#173A35",paddingAll:"20px",contents:[{type:"text",text:"LIJIE'S HOME",color:"#CDBD92",size:"xs",weight:"bold"},{type:"text",text:"需要取消預約嗎？",color:"#FFFFFF",size:"xl",weight:"bold"},{type:"text",text:"行程有變沒關係，謝謝您提前告訴我們 🌿",color:"#D7E4DF",size:"sm",wrap:true}]},body:{type:"box",layout:"vertical",paddingAll:"20px",spacing:"md",contents:[{type:"text",text:"取消預約須知",weight:"bold",size:"lg",color:"#173A35"},{type:"text",text:"• 送出申請不代表訂單立即取消，會由俐姐核對後正式處理。\n• 取消原因需填寫並保留處理紀錄。\n• 已支付訂金的保留或退款方式，會依該筆訂單與實際情況確認。\n• 正式取消完成後，住宿日期才會重新釋出。",size:"sm",wrap:true,color:"#52605B",lineSpacing:"5px"},{type:"text",text:"下方已幫您帶入目前的預約訂單，直接點選要取消的那一筆即可，不用再輸入訂單編號。",size:"sm",wrap:true,color:"#2F6F62",weight:"bold"}]}}};
+          if(!active.length){await replyLine(event.replyToken,[info,{type:"text",text:"目前這個 LINE 帳號沒有可取消的預約。若需要協助，直接留言給俐姐就可以囉。"}],token);}
+          else{await replyLine(event.replyToken,[info,...active.slice(0,4).map(b=>customerOrderFlex(b,{paymentUrl:paymentReportUrlFor(uid,b.id),cancelUrl:cancelRequestUrlFor(uid,b.id)}))],token);}
+        }catch(e){await replyLine(event.replyToken,"目前無法開啟取消預約，麻煩稍後再試一次；若仍有問題，直接留言給俐姐，我們會協助您。",token);}
+        continue;
+      }
+
       if(/^匯款回報$/.test(customerInput.replace(/\s+/g,""))){
         try{
           const orders=await listBookingsByLineUser(uid,8);
@@ -473,7 +473,7 @@ export default async function handler(req, res) {
           if(!active.length){
             await replyLine(event.replyToken,"目前沒有可回報匯款的預約訂單。若要開始預約，請傳『立即預約』。",token);
           }else{
-            await replyLine(event.replyToken,[{type:"text",text:"匯款完成了嗎？辛苦你了 💚\n點下面自己的訂單，再補『付款人姓名＋末五碼』就可以囉。"},...active.slice(0,4).map(b=>customerOrderFlex(b,{paymentUrl:paymentReportUrlFor(uid,b.id)}))],token);
+            await replyLine(event.replyToken,[{type:"text",text:"匯款完成了嗎？辛苦你了 💚\n點下面自己的訂單，再補『付款人姓名＋末五碼』就可以囉。"},...active.slice(0,4).map(b=>customerOrderFlex(b,{paymentUrl:paymentReportUrlFor(uid,b.id),cancelUrl:cancelRequestUrlFor(uid,b.id)}))],token);
           }
         }catch(e){await replyLine(event.replyToken,"目前無法開啟匯款回報，請稍後再試。",token);}
         continue;
@@ -519,7 +519,7 @@ export default async function handler(req, res) {
           if(!orders.length){
             await replyLine(event.replyToken,"目前這個 LINE 帳號還沒有預約訂單。\n\n請傳『立即預約』開啟官方預約日曆建立訂單。",token);
           }else{
-            await replyLine(event.replyToken,[{type:"text",text:`找到 ${orders.length} 筆已綁定訂單：`},...orders.slice(0,4).map(b=>customerOrderFlex(b,{paymentUrl:paymentReportUrlFor(uid,b.id)}))],token);
+            await replyLine(event.replyToken,[{type:"text",text:`幫您找到 ${orders.length} 筆預約 💚\n入住日期、金額與目前狀態都整理在下面，直接查看就可以，不需要再輸入訂單編號。`},...orders.slice(0,4).map(b=>customerOrderFlex(b,{paymentUrl:paymentReportUrlFor(uid,b.id),cancelUrl:cancelRequestUrlFor(uid,b.id)}))],token);
           }
         }catch(e){
           console.error("customer order query failed",e);

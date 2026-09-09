@@ -866,9 +866,9 @@ function bindEvents() {
   $("#stockMovementForm")?.addEventListener("submit",saveStockMovement);
   $("#reportStartDate")?.addEventListener("change",renderFinanceReport);
   $("#reportEndDate")?.addEventListener("change",renderFinanceReport);
-  $("#downloadFinanceCsv")?.addEventListener("click",downloadFinanceCsv);
+  $("#downloadFinanceExcel")?.addEventListener("click",downloadFinanceExcel);
   $("#printFinanceReport")?.addEventListener("click",()=>window.print());
-  $("#downloadInventoryCsv")?.addEventListener("click",downloadInventoryCsv);
+  $("#downloadInventoryExcel")?.addEventListener("click",downloadInventoryExcel);
   $("#printInventoryReport")?.addEventListener("click",()=>window.print());
   $("#clearLegacyOrders")?.addEventListener("click",clearLegacyOrderData);
   
@@ -1136,8 +1136,32 @@ $("#closeCancellation")?.addEventListener("click",closeCancellationSop);
 let reportInventory=[];
 function reportDateValue(v){ return String(v||"").slice(0,10); }
 function reportInRange(v,start,end){ const d=reportDateValue(v); if(!d)return false; return (!start||d>=start)&&(!end||d<=end); }
-function csvCell(v){ const x=String(v??"").replace(/"/g,'""'); return `"${x}"`; }
-function saveCsv(name,rows){ const bom="\ufeff"; const data=bom+rows.map(r=>r.map(csvCell).join(",")).join("\r\n"); const blob=new Blob([data],{type:"text/csv;charset=utf-8"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); URL.revokeObjectURL(a.href); a.remove(); }
+function xmlEsc(v){ return String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;"); }
+function xlsxCol(n){ let out=""; for(let x=n+1;x>0;x=Math.floor((x-1)/26))out=String.fromCharCode(65+((x-1)%26))+out; return out; }
+function xlsxCellXml(value,row,col,style=0){ const ref=`${xlsxCol(col)}${row+1}`; if(value===null||value===undefined||value==="") return `<c r="${ref}" s="${style}"/>`; if(typeof value==="number" && Number.isFinite(value)) return `<c r="${ref}" s="${style}"><v>${value}</v></c>`; return `<c r="${ref}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(value)}</t></is></c>`; }
+function xlsxSheetXml(rows,opts={}){
+  const titleRows=new Set(opts.titleRows||[]),headerRows=new Set(opts.headerRows||[]),currencyCols=new Set(opts.currencyCols||[]);
+  const maxCols=Math.max(1,...rows.map(r=>r.length));
+  const widths=Array.from({length:maxCols},(_,c)=>Math.min(34,Math.max(11,...rows.map(r=>String(r[c]??"").length+2))));
+  const cols=`<cols>${widths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join("")}</cols>`;
+  const data=rows.map((r,ri)=>{const styleRow=titleRows.has(ri)?1:headerRows.has(ri)?2:0;return `<row r="${ri+1}"${titleRows.has(ri)?' ht="24" customHeight="1"':''}>${r.map((v,ci)=>xlsxCellXml(v,ri,ci,styleRow||((currencyCols.has(ci)&&typeof v==="number")?3:0))).join("")}</row>`}).join("");
+  const filter=opts.autoFilterRange?`<autoFilter ref="${opts.autoFilterRange}"/>`:"";
+  const freeze=opts.freezeRow?`<sheetViews><sheetView workbookViewId="0"><pane ySplit="${opts.freezeRow}" topLeftCell="A${opts.freezeRow+1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`:`<sheetViews><sheetView workbookViewId="0"/></sheetViews>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${freeze}<sheetFormatPr defaultRowHeight="18"/>${cols}<sheetData>${data}</sheetData>${filter}<pageMargins left="0.4" right="0.4" top="0.6" bottom="0.6" header="0.2" footer="0.2"/></worksheet>`;
+}
+async function saveXlsx(name,sheets){
+  if(!window.JSZip) throw new Error("Excel 元件尚未載入，請重新整理後再試。");
+  const zip=new window.JSZip();
+  zip.file("[Content_Types].xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}</Types>`);
+  zip.folder("_rels").file(".rels",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
+  const xl=zip.folder("xl");
+  xl.file("workbook.xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>${sheets.map((sh,i)=>`<sheet name="${xmlEsc(String(sh.name).slice(0,31))}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join("")}</sheets></workbook>`);
+  xl.folder("_rels").file("workbook.xml.rels",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join("")}<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
+  xl.file("styles.xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="NT$ #,##0"/></numFmts><fonts count="3"><font><sz val="11"/><name val="Microsoft JhengHei"/></font><font><b/><sz val="16"/><color rgb="FF153F38"/><name val="Microsoft JhengHei"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Microsoft JhengHei"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF153F38"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><bottom style="thin"><color rgb="FFD8D2C7"/></bottom></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/></cellXfs></styleSheet>`);
+  const ws=xl.folder("worksheets"); sheets.forEach((sh,i)=>ws.file(`sheet${i+1}.xml`,xlsxSheetXml(sh.rows,sh.options||{})));
+  const blob=await zip.generateAsync({type:"blob",mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",compression:"DEFLATE"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); a.remove();
+}
 function reportTable(headers,rows){ if(!rows.length)return `<p class="muted">此區間沒有資料。</p>`; return `<table class="report-table"><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(v=>`<td>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table>`; }
 function setReportDefaultDates(){ const end=new Date(),start=new Date(end.getFullYear(),end.getMonth(),1),fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; if($("#reportStartDate")&&!$("#reportStartDate").value)$("#reportStartDate").value=fmt(start); if($("#reportEndDate")&&!$("#reportEndDate").value)$("#reportEndDate").value=fmt(end); }
 async function loadReports(){ setReportDefaultDates(); const [b,p,e,i]=await Promise.all([readCollection("bookings"),readCollection("paymentTransactions"),readCollection("expenseTransactions"),readCollection("inventoryItems")]); opsBookings=b;opsPayments=p;opsExpenses=e;reportInventory=i.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"zh-Hant")); renderFinanceReport();renderInventoryReport(); }
@@ -1166,13 +1190,22 @@ function renderInventoryReport(){
   if($("#inventoryReportSummary"))$("#inventoryReportSummary").innerHTML=`<div class="report-stat"><span>備品種類</span><strong>${reportInventory.length} 項</strong></div><div class="report-stat"><span>低庫存</span><strong>${low} 項</strong></div><div class="report-stat"><span>庫存估值</span><strong>${twd(totalValue)}</strong></div>`;
   if($("#inventoryReportTable"))$("#inventoryReportTable").innerHTML=reportTable(["品名","目前庫存","安全庫存","單位成本","庫存估值","狀態"],rows);
 }
-function downloadFinanceCsv(){
+async function downloadFinanceExcel(){
   const start=$("#reportStartDate")?.value||"",end=$("#reportEndDate")?.value||"";
   const bookings=opsBookings.filter(b=>reportInRange(b.startDate,start,end)),payments=opsPayments.filter(x=>reportInRange(x.date,start,end)),expenses=opsExpenses.filter(x=>reportInRange(x.date,start,end));
-  const rows=[[`俐姐的家 訂單・帳務・支出報表 ${start||""}~${end||""}`],[],["訂單"],["訂單編號","客戶","入住","退房","人數","狀態","訂單總額","淨已收","未收","備註"]];
-  bookings.forEach(b=>{const paid=reportPaidFor(b.id,opsPayments),total=Number((b.totalAmount??b.quotedTotal)||0);rows.push([b.id,b.guestName||"",b.startDate||"",b.endDate||"",Number(b.people)||0,b.status||"",total,paid,Math.max(0,total-paid),b.cancellationReason||b.cancelReason||b.cancellationDepositNote||b.cancelDepositNote||""])});
-  rows.push([],["收款／退款"],["日期","類型","訂單編號","金額","方式","末五碼／來源","備註"]); payments.forEach(x=>rows.push([x.date||"",x.type==="refund"?"退款":"收款",x.bookingId||"",Number(x.amount)||0,x.method||"",x.last5||"",x.note||""]));
-  rows.push([],["支出"],["日期","分類","訂單編號","金額","付款方式","備註"]); expenses.forEach(x=>rows.push([x.date||"",x.category||"",x.bookingId||"",Number(x.amount)||0,x.method||"",x.note||""]));
-  saveCsv(`lijie-finance-${start||"all"}-${end||"all"}.csv`,rows);
+  const bookingTotal=bookings.reduce((sum,b)=>sum+Number((b.totalAmount??b.quotedTotal)||0),0),paymentsIn=payments.filter(x=>x.type!=="refund").reduce((sum,x)=>sum+Number(x.amount||0),0),refunds=payments.filter(x=>x.type==="refund").reduce((sum,x)=>sum+Number(x.amount||0),0),expenseTotal=expenses.reduce((sum,x)=>sum+Number(x.amount||0),0);
+  const summary=[["俐姐的家｜訂單・帳務・支出報表"],["報表期間",`${start||"全部"} ～ ${end||"全部"}`],[],["指標","金額／數量"],["訂單數",bookings.length],["訂單總額",bookingTotal],["收款",paymentsIn],["退款",refunds],["支出",expenseTotal],["淨現金流",paymentsIn-refunds-expenseTotal]];
+  const orderRows=[["訂單編號","客戶","入住","退房","人數","狀態","訂單總額","淨已收","未收","備註"],...bookings.sort((a,b)=>String(a.startDate||"").localeCompare(String(b.startDate||""))).map(b=>{const paid=reportPaidFor(b.id,opsPayments),total=Number((b.totalAmount??b.quotedTotal)||0);return [b.id,b.guestName||"",b.startDate||"",b.endDate||"",Number(b.people)||0,b.status==="confirmed"?"已確認":b.status==="cancelled"?"已取消":"待確認",total,paid,Math.max(0,total-paid),b.cancellationReason||b.cancelReason||b.cancellationDepositNote||b.cancelDepositNote||""]})];
+  const paymentRows=[["日期","類型","訂單編號","金額","方式","末五碼／來源","備註"],...payments.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).map(x=>[x.date||"",x.type==="refund"?"退款":"收款",x.bookingId||"",Number(x.amount)||0,x.method||"",x.last5||"",x.note||""])];
+  const expenseRows=[["日期","分類","訂單編號","金額","付款方式","備註"],...expenses.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).map(x=>[x.date||"",x.category||"",x.bookingId||"",Number(x.amount)||0,x.method||"",x.note||""])];
+  try{ await saveXlsx(`俐姐的家-營運報表-${start||"全部"}-${end||"全部"}.xlsx`,[
+    {name:"摘要",rows:summary,options:{titleRows:[0],headerRows:[3],currencyCols:[1]}},
+    {name:"訂單",rows:orderRows,options:{headerRows:[0],currencyCols:[6,7,8],freezeRow:1,autoFilterRange:`A1:J${Math.max(1,orderRows.length)}`}},
+    {name:"收款退款",rows:paymentRows,options:{headerRows:[0],currencyCols:[3],freezeRow:1,autoFilterRange:`A1:G${Math.max(1,paymentRows.length)}`}},
+    {name:"支出",rows:expenseRows,options:{headerRows:[0],currencyCols:[3],freezeRow:1,autoFilterRange:`A1:F${Math.max(1,expenseRows.length)}`}}
+  ]);}catch(e){ alert(`Excel 下載失敗：${e.message||e}`); }
 }
-function downloadInventoryCsv(){ const rows=[["俐姐的家 庫存管理庫存表"],["品名","目前庫存","單位","安全庫存","單位成本","庫存估值","狀態"]];reportInventory.forEach(i=>{const q=Number(i.quantity)||0,m=Number(i.minQuantity)||0,c=Number(i.unitCost)||0;rows.push([i.name||"",q,i.unit||"",m,c,q*c,q<=m?"低庫存":"正常"])});saveCsv("lijie-inventory.csv",rows); }
+async function downloadInventoryExcel(){
+  const rows=[["品名","目前庫存","單位","安全庫存","單位成本","庫存估值","狀態"],...reportInventory.map(i=>{const q=Number(i.quantity)||0,m=Number(i.minQuantity)||0,c=Number(i.unitCost)||0;return [i.name||"",q,i.unit||"",m,c,q*c,q<=m?"低庫存":"正常"]})];
+  try{ await saveXlsx("俐姐的家-庫存表.xlsx",[{name:"庫存表",rows,options:{headerRows:[0],currencyCols:[4,5],freezeRow:1,autoFilterRange:`A1:G${Math.max(1,rows.length)}`}}]); }catch(e){ alert(`Excel 下載失敗：${e.message||e}`); }
+}
