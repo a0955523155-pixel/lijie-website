@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 import { putBooking, firestoreReady, quoteStay, getPublicPricingSettings } from "./firestore-admin.js";
 import { gmailReady, sendMail, receivedEmailText, receivedEmailHtml, adminNotificationEmail, newBookingAdminMail } from "./gmail-mailer.js";
+import { COOKIE_NAME, parseCookies, verifyPayload as verifyCookiePayload } from "./line-auth-lib.js";
 
 function clean(value, max = 500) {
   return String(value ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, max);
@@ -32,9 +33,16 @@ function verifySessionWithSecrets(token, secrets=[]){
 }
 
 function resolveSession(req, explicit){
-  if(!explicit) throw new Error("BOOKING_SESSION_REQUIRED");
-  const payload=verifySessionWithSecrets(explicit,[process.env.BOOKING_SESSION_SECRET,process.env.LINE_CHANNEL_SECRET]);
-  return {payload,source:"official-line-secure-link"};
+  if(explicit){
+    const payload=verifySessionWithSecrets(explicit,[process.env.BOOKING_SESSION_SECRET,process.env.LINE_CHANNEL_SECRET]);
+    return {payload,source:"official-line-secure-link"};
+  }
+  const cookieToken=parseCookies(req)[COOKIE_NAME];
+  if(cookieToken){
+    const payload=verifyCookiePayload(cookieToken);
+    return {payload,source:"line-login-cookie"};
+  }
+  throw new Error("BOOKING_SESSION_REQUIRED");
 }
 function parseDateKey(v){
   const s=clean(v,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;

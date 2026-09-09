@@ -165,7 +165,7 @@ function buildBookingReply(b) {
 }
 
 
-function bookingFlexReply(b) {
+function bookingFlexReply(b, secureBookingUrl) {
   const infoRows = [
     ["姓名", b.name], ["電話", b.phone || "未填"], ["人數", b.people || "未填"],
     ["需求", b.purpose || "未填"], ["備註", b.notes || "沒有"]
@@ -230,7 +230,7 @@ function bookingFlexReply(b) {
           { type: "box", layout: "vertical", paddingAll: "12px", backgroundColor: "#FFF7DF", cornerRadius: "8px", contents: [
             { type: "text", text: "🟡 等待俐姐確認", align: "center", weight: "bold", size: "sm", color: "#8A6400" }
           ]},
-          { type: "button", style: "secondary", height: "sm", action: { type: "uri", label: "再次查看預約日曆", uri: "https://www.5-1bbs.com/line-booking.html" } }
+          { type: "button", style: "secondary", height: "sm", action: { type: "uri", label: "再次查看預約日曆", uri: secureBookingUrl || "https://www.5-1bbs.com/line-booking.html" } }
         ]
       }
     }
@@ -512,7 +512,7 @@ export default async function handler(req, res) {
 
       const booking = parseBooking(event.message.text);
       if (booking) {
-        await replyLine(event.replyToken, bookingFlexReply(booking), token);
+        await replyLine(event.replyToken, bookingFlexReply(booking, bookingUrlFor(uid,secret)), token);
         continue;
       }
 

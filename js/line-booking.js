@@ -54,10 +54,26 @@ async function ensureLineIdentity(){
     els.mode.textContent="官方 LINE 安全預約連線已建立";
     return true;
   }
-  els.mode.textContent="請從官方 LINE 開啟預約";
-  els.status.textContent="為保護訂單資料，預約頁只接受從『俐姐的家』官方 LINE 的「立即預約」入口開啟。";
-  els.send.disabled=true;
+  try{
+    const r=await fetch("/api/line-session",{cache:"no-store",credentials:"same-origin"});
+    const data=await r.json().catch(()=>({}));
+    if(r.ok&&data?.authenticated){
+      els.mode.textContent="官方 LINE 身分已連結";
+      return true;
+    }
+  }catch(e){ console.warn("line session check failed",e); }
+  els.mode.textContent="正在連結官方 LINE 身分…";
+  els.status.textContent="第一次從預約日曆送出前，需要連結一次 LINE 身分。完成後會自動回到目前預約頁。";
+  els.send.disabled=false;
+  els.send.dataset.authRequired="1";
+  els.send.innerHTML="<span>LINE</span> 連結身分並繼續預約";
   return false;
+}
+
+function startLineLogin(){
+  saveDraft();
+  const returnTo=`/line-booking.html${location.search||""}`;
+  location.href=`/api/line-auth-start?return=${encodeURIComponent(returnTo)}`;
 }
 
 function openOfficialLine(){
@@ -256,7 +272,7 @@ function loadDraft(){
 function clearDraft(){ try { localStorage.removeItem(DRAFT_KEY); } catch {} }
 
 function updateSendMode(){
-  const chatReady = Boolean(bookingSession);
+  const chatReady = Boolean(bookingSession||lineIdentityReady);
   const label = chatReady ? '<span>LINE</span> 傳送預約申請' : '<span>LINE</span> 請先從官方 LINE 開始';
   els.send.innerHTML = label;
   if (chatReady) {
@@ -267,12 +283,12 @@ function updateSendMode(){
 }
 
 function refreshForm(){
-  const valid=!!(startDate&&endDate&&els.name.value.trim()); els.send.disabled=!valid || !bookingSession;
+  const valid=!!(startDate&&endDate&&els.name.value.trim()); els.send.disabled=!valid || !(bookingSession||lineIdentityReady);
   updateSendMode();
   if (valid) {
-    els.status.textContent = Boolean(bookingSession)
-      ? "資料已整理好，現在可直接傳送到『俐姐的家』官方 LINE。"
-      : "資料已保留。按下後會前往官方 LINE；請從圖文選單點『立即預約』，回到這裡即可真正送出。";
+    els.status.textContent = Boolean(bookingSession||lineIdentityReady)
+      ? "資料已整理好，可以送出預約申請。"
+      : "第一次送出前需要先連結 LINE 身分。";
     saveDraft();
   } else {
     els.status.textContent="請先選擇完整日期並填寫姓名。";
@@ -384,6 +400,7 @@ els.copy.addEventListener("click", copyMessage);
 let submitInFlight = false;
 async function triggerSend(e){
   if(e){ e.preventDefault(); e.stopPropagation(); }
+  if(els.send.dataset.authRequired==="1" && !lineIdentityReady && !bookingSession){ startLineLogin(); return; }
   if(submitInFlight || els.send.disabled) return;
   submitInFlight = true;
   // iOS Safari / LINE 內建瀏覽器在鍵盤開啟時，第一下常只負責收鍵盤。
@@ -421,9 +438,8 @@ const restoredDraft = loadDraft();
 renderStayRules();
 readBookingSession();
 lineIdentityReady = await ensureLineIdentity();
-if (lineIdentityReady || bookingSession) {
-  applyPresetDates();
-  await render();
-  updateSelection();
-  updateSendMode();
-}
+if(lineIdentityReady||bookingSession){ delete els.send.dataset.authRequired; }
+applyPresetDates();
+await render();
+updateSelection();
+if(lineIdentityReady||bookingSession) updateSendMode();
