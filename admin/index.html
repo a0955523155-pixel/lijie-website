@@ -106,8 +106,7 @@
         <form id="pricingForm" class="pricing-editor">
           <div class="pricing-grid">
             <label>平日每晚（週日～週四）<input id="weekdayPrice" type="number" min="0" step="100" required></label>
-            <label>週五每晚<input id="fridayPrice" type="number" min="0" step="100" required></label>
-            <label>週六每晚<input id="saturdayPrice" type="number" min="0" step="100" required></label>
+            <label>週五／週六每晚<input id="weekendPrice" type="number" min="0" step="100" required></label>
             <label>政府連假每晚<input id="holidayPrice" type="number" min="0" step="100" placeholder="例如 18000"></label>
             <label>墾丁活動／跨年旺季每晚<input id="eventPrice" type="number" min="0" step="100" placeholder="例如 20000"></label>
             <label>開放預約月數<input id="bookingWindowMonths" type="number" min="1" max="18" step="1" value="6"></label>
@@ -117,8 +116,8 @@
             <label><input id="autoGovernmentHolidays" type="checkbox" checked> 自動辨識台灣政府 3 天以上連續假期</label>
             <label><input id="autoKentingEvents" type="checkbox" checked> 自動辨識墾丁旺季（台灣祭 4 月連假、跨年 12/31～1/1）</label>
           </div>
-          <p class="muted">價格優先順序：手動特殊日期 ＞ 墾丁活動／跨年 ＞ 政府連假 ＞ 週六 ＞ 週五 ＞ 平日。前台日曆會顯示每晚價格，超過開放月數的日期不可預約。</p>
-          <div class="special-rate-head"><div><h3>特殊日期價格</h3><p class="muted">例如春節、跨年、連假、活動檔期。特殊日期會優先於平日／週五／週六價格。</p></div><button id="addSpecialRate" class="secondary" type="button">＋ 新增特殊日期</button></div>
+          <p class="muted">價格優先順序：手動特殊日期 ＞ 墾丁活動／跨年 ＞ 政府連假 ＞ 週五／週六 ＞ 平日。前台日曆會顯示每晚價格，超過開放月數的日期不可預約。</p>
+          <div class="special-rate-head"><div><h3>特殊日期價格</h3><p class="muted">例如春節、跨年、連假、活動檔期。特殊日期會優先於平日／週五週六價格。</p></div><button id="addSpecialRate" class="secondary" type="button">＋ 新增特殊日期</button></div>
           <div id="specialRates" class="special-rates"></div>
           <div class="pricing-actions"><button class="primary" type="submit">儲存價格設定</button></div>
           <p id="pricingMessage" class="message" aria-live="polite"></p>

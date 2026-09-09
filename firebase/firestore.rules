@@ -75,6 +75,7 @@ service cloud.firestore {
     // 圖片素材庫：只有管理員可以查看與管理素材索引；圖片本身由 Storage 提供。
     // 價格規則：僅管理員可讀寫；官網前台不直接公開。
     match /settings/pricing {
+      // 後台價格設定：已登入且 admins/{uid} 存在才可讀寫。
       allow read, create, update: if isAdmin();
       allow delete: if false;
     }

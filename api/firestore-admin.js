@@ -171,8 +171,9 @@ function inRange(day,start,end){ return Boolean(start&&end&&day>=start&&day<=end
 export async function quoteStay(ci,co){
   const cfg=await getPricingConfig();
   if(!cfg || cfg.enabled===false) return null;
-  const weekday=Number(cfg.weekdayPrice||0), friday=Number(cfg.fridayPrice||0), saturday=Number(cfg.saturdayPrice||0);
-  if(!(weekday>0) || !(friday>0) || !(saturday>0)) return null;
+  const weekday=Number(cfg.weekdayPrice||0);
+  const weekend=Number(cfg.weekendPrice||cfg.fridayPrice||cfg.saturdayPrice||0);
+  if(!(weekday>0) || !(weekend>0)) return null;
   const specials=Array.isArray(cfg.specialRanges)?cfg.specialRanges:[];
   const nights=pricingNights(ci,co);
   const last=nights[nights.length-1]||ci;
@@ -189,8 +190,8 @@ export async function quoteStay(ci,co){
     if(season?.type==='event' && eventPrice>0) return {date:day,label:season.label,price:eventPrice,source:'auto-event'};
     if(season?.type==='holiday' && holidayPrice>0) return {date:day,label:season.label,price:holidayPrice,source:'auto-holiday'};
     const dow=new Date(`${day}T00:00:00Z`).getUTCDay();
-    if(dow===5) return {date:day,label:'週五',price:friday,source:'weekday-rule'};
-    if(dow===6) return {date:day,label:'週六',price:saturday,source:'weekday-rule'};
+    if(dow===5) return {date:day,label:'週五',price:weekend,source:'weekend-rule'};
+    if(dow===6) return {date:day,label:'週六',price:weekend,source:'weekend-rule'};
     return {date:day,label:'平日',price:weekday,source:'weekday-rule'};
   });
   const total=details.reduce((sum,x)=>sum+Number(x.price||0),0);
