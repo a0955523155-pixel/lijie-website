@@ -4,10 +4,6 @@ import {gmailReady,sendMail,receivedEmailText} from "./gmail-mailer.js";
 function c(v,m=500){return String(v??"").replace(/[\u0000-\u001F\u007F]/g," ").trim().slice(0,m)}
 function validDate(v){const s=c(v,10);return /^\d{4}-\d{2}-\d{2}$/.test(s)?s:null}
 function bid(){return`W${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(3).toString("hex").toUpperCase()}`}
-function secret(){return process.env.BOOKING_SESSION_SECRET||process.env.LINE_CHANNEL_SECRET||""}
-function act(p){const b=Buffer.from(JSON.stringify(p)).toString("base64url"),s=crypto.createHmac("sha256",secret()).update(b).digest("base64url");return`${b}.${s}`}
-function flex(b){const t=act({id:b.id,uid:"website",ci:b.startDate,co:b.endDate,n:b.guestName,exp:Date.now()+604800000});return{type:"flex",altText:`新官網預約 ${b.id}`,contents:{type:"bubble",size:"mega",header:{type:"box",layout:"vertical",backgroundColor:"#173A35",paddingAll:"18px",contents:[{type:"text",text:b.isTest?"俐姐的家｜TEST 官網預約":"俐姐的家｜官網預約申請",color:"#FFFFFF",weight:"bold",size:"lg"},{type:"text",text:`編號 ${b.id}`,color:"#D7E4DF",size:"xs"}]},body:{type:"box",layout:"vertical",paddingAll:"18px",spacing:"sm",contents:[{type:"text",text:`${b.startDate} → ${b.endDate}`,weight:"bold",size:"xl",color:"#173A35"},{type:"text",text:`姓名｜${b.guestName}\n電話｜${b.phone||"未填"}\nEmail｜${b.email}\n人數｜${b.people} 人`,size:"sm",wrap:true,color:"#26332F"}]},footer:{type:"box",layout:"vertical",paddingAll:"14px",spacing:"sm",contents:[{type:"button",style:"primary",color:"#173A35",action:{type:"postback",label:"確認預約",data:`booking_action=confirm&token=${encodeURIComponent(t)}`,displayText:`確認預約 ${b.id}`}},{type:"button",style:"link",height:"sm",action:{type:"uri",label:"開啟後台",uri:`https://www.5-1bbs.com/admin/?tab=operations&booking=${encodeURIComponent(b.id)}`}}]}}}}
-async function notify(m){const to=String(process.env.LINE_BOOKING_NOTIFY_TO||"").trim(),tok=String(process.env.LINE_CHANNEL_ACCESS_TOKEN||"").trim();if(!to||!tok)return false;const r=await fetch("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${tok}`},body:JSON.stringify({to,messages:[m]})});if(!r.ok)throw new Error(`LINE_PUSH ${r.status}`);return true}
 function publicError(code){
   const map={
     INVALID_JSON:"送出的資料格式有誤，請重新整理頁面後再試。",
@@ -38,11 +34,10 @@ export default async function handler(req,res){
     if(startDate<today||endDate>settings.maxBookableDate) throw new Error("BOOKING_OUTSIDE_WINDOW");
     const q=await quoteStay(startDate,endDate),id=`${isTest?"TEST-":""}${bid()}`,now=new Date().toISOString(),data={id,startDate,endDate,guestName,phone,email,people,status:"pending",source:"website-desktop",quotedTotal:q?.total||null,quoteBreakdown:q?.details||[],totalAmount:q?.total||0,depositRequired:3000,paidAmount:0,balanceAmount:Math.max(0,(q?.total||0)-0),financeStatus:"待收訂金",isTest,testCreatedAt:isTest?now:null,createdAt:now,updatedAt:now};
     await putBooking(id,data);
-    let lineNotified=false,emailSent=false;
-    try{lineNotified=await notify(flex(data))}catch(e){console.warn("website booking LINE notify failed",String(e?.message||e))}
+    let emailSent=false;
     if(gmailReady()) try{await sendMail({to:email,subject:isTest?"俐姐的家｜【測試】已收到您的預約需求":"俐姐的家｜已收到您的預約需求",text:receivedEmailText(data)});emailSent=true}catch(e){console.warn("website booking email failed",String(e?.message||e))}
     console.info("website-booking-submit OK",{bookingId:id,isTest,startDate,endDate,people});
-    return res.status(200).json({ok:true,bookingId:id,lineNotified,emailSent,isTest});
+    return res.status(200).json({ok:true,bookingId:id,emailSent,isTest});
   }catch(e){
     const code=String(e?.message||e||"UNKNOWN_ERROR");
     console.error("website-booking-submit FAILED",{code,isTest});

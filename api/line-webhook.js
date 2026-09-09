@@ -1,8 +1,6 @@
 import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
-import { lineConfig } from "../js/line-config.js";
-import { getBooking, putBooking, listPendingBookings, listBookingsByLineUser, setBookingStatus, firestoreDiagnostic, firestoreReady } from "./firestore-admin.js";
-import { gmailReady, sendMail, confirmedEmailText } from "./gmail-mailer.js";
+import { getBooking, putBooking, listBookingsByLineUser } from "./firestore-admin.js";
 
 function createBookingSession(userId, secret, ttlMs = 2 * 60 * 60 * 1000) {
   const payload = Buffer.from(JSON.stringify({ uid: userId, exp: Date.now() + ttlMs })).toString("base64url");
@@ -81,78 +79,6 @@ async function bindBookingToLine(bookingId,userId){
   return {...b,justBound:false};
 }
 
-
-function actionSecret(){ return process.env.BOOKING_SESSION_SECRET || process.env.LINE_CHANNEL_SECRET || ""; }
-function makeActionToken(payload){
-  const body=Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const sig=crypto.createHmac("sha256",actionSecret()).update(body).digest("base64url");
-  return `${body}.${sig}`;
-}
-function ownerBookingFlex(b){
-  const id=b.id;
-  const uid=b.lineUserId || "";
-  const token=makeActionToken({uid,id,ci:b.startDate,co:b.endDate,n:b.guestName,exp:Date.now()+7*24*60*60*1000});
-  const nights=Math.max(1,Math.round((new Date(`${b.endDate}T00:00:00Z`)-new Date(`${b.startDate}T00:00:00Z`))/86400000));
-  return {type:"flex",altText:`待確認預約 ${id}｜${b.startDate} → ${b.endDate}`,contents:{type:"bubble",size:"mega",
-    header:{type:"box",layout:"vertical",backgroundColor:"#173A35",paddingAll:"18px",contents:[
-      {type:"text",text:"LIJIE'S HOME",color:"#CDBD92",size:"xs",weight:"bold"},
-      {type:"text",text:b.isTest?"俐姐的家｜TEST 測試預約":"俐姐的家｜待確認預約",color:"#FFFFFF",weight:"bold",size:"lg"},
-      {type:"text",text:`編號 ${id}`,color:"#D7E4DF",size:"xs"}]},
-    body:{type:"box",layout:"vertical",paddingAll:"18px",spacing:"sm",contents:[
-      {type:"text",text:`${b.startDate} → ${b.endDate}`,weight:"bold",size:"xl",color:"#173A35",wrap:true},
-      {type:"text",text:`${nights} 晚 · ${b.people?`${b.people} 人`:"人數未填"}`,size:"sm",color:"#7A8581"},
-      ...(b.quotedTotal?[{type:"text",text:`系統試算｜NT$ ${Number(b.quotedTotal).toLocaleString("zh-TW")}`,size:"md",weight:"bold",color:"#8A6C2E",margin:"sm"}]:[]),
-      {type:"text",text:Number(b.depositRequired)>0?`訂金｜NT$ ${Number(b.depositRequired).toLocaleString("zh-TW")}　已收 NT$ ${Number(b.paidAmount||0).toLocaleString("zh-TW")}`:"訂金｜NT$ 3,000",size:"sm",weight:"bold",color:Number(b.depositRequired)>0&&Number(b.paidAmount||0)>=Number(b.depositRequired)?"#1C6B59":"#9A6A2A",wrap:true,margin:"sm"},
-      {type:"separator",margin:"md",color:"#E5E0D6"},
-      {type:"text",text:`姓名｜${b.guestName||"未填"}
-電話｜${b.phone||"未填"}
-Email｜${b.email||"未填"}
-需求｜${b.purpose||"未填"}
-備註｜${b.notes||"沒有"}`,size:"sm",wrap:true,color:"#26332F",lineSpacing:"4px"}]},
-    footer:{type:"box",layout:"vertical",paddingAll:"14px",spacing:"sm",contents:[
-      {type:"button",style:"primary",color:"#173A35",action:{type:"postback",label:"確認預約",data:`booking_action=confirm&token=${encodeURIComponent(token)}`,displayText:`確認預約 ${id}`}}
-    ]}}};
-}
-function verifyActionToken(token){
-  const [body,sig,extra]=String(token||"").split(".");
-  if(!body||!sig||extra) throw new Error("ACTION_TOKEN_INVALID");
-  const expected=crypto.createHmac("sha256",actionSecret()).update(body).digest("base64url");
-  const a=Buffer.from(sig), b=Buffer.from(expected);
-  if(a.length!==b.length || !crypto.timingSafeEqual(a,b)) throw new Error("ACTION_TOKEN_INVALID");
-  const payload=JSON.parse(Buffer.from(body,"base64url").toString("utf8"));
-  if(!payload?.uid||!payload?.id||!payload?.exp||Date.now()>Number(payload.exp)) throw new Error("ACTION_TOKEN_EXPIRED");
-  return payload;
-}
-async function pushLine(to,messages,token){
-  const normalized=(Array.isArray(messages)?messages:[messages]).map(m=>typeof m==="string"?{type:"text",text:m}:m);
-  const r=await fetch("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify({to,messages:normalized.slice(0,5)})});
-  if(!r.ok) throw new Error(`LINE push failed: ${r.status} ${await r.text()}`);
-}
-function customerStatusFlex(p,status,actionToken){
-  const confirmed=status==="confirm";
-  const calendarUrl=confirmed && actionToken
-    ? `https://www.5-1bbs.com/api/booking-calendar?token=${encodeURIComponent(actionToken)}`
-    : null;
-  return {type:"flex",altText:`俐姐的家｜${confirmed?"預約已確認":"預約已取消"}`,contents:{type:"bubble",size:"mega",
-    header:{type:"box",layout:"vertical",paddingAll:"22px",spacing:"xs",backgroundColor:confirmed?"#153C36":"#6A4141",contents:[
-      {type:"text",text:"LIJIE'S HOME",color:confirmed?"#CDBD92":"#E7CACA",size:"xs",weight:"bold"},
-      {type:"text",text:"俐姐的家",color:"#FFFFFF",weight:"bold",size:"xxl"},
-      {type:"text",text:confirmed?"預約已確認":"預約已取消",color:"#FFFFFF",size:"sm"}]},
-    body:{type:"box",layout:"vertical",paddingAll:"22px",spacing:"md",contents:[
-      {type:"text",text:confirmed?"住宿日期已為您保留":"本次預約已取消",size:"sm",color:"#7C8682"},
-      {type:"text",text:`${p.ci}  →  ${p.co}`,weight:"bold",size:"xl",color:"#153C36",wrap:true},
-      ...(p.total?[{type:"text",text:`住宿總額｜NT$ ${Number(p.total).toLocaleString("zh-TW")}`,weight:"bold",size:"md",color:"#8A6C2E",margin:"sm"}]:[]),
-      {type:"separator",margin:"md",color:"#E5E0D6"},
-      {type:"text",text:`預約編號｜${p.id}\n姓名｜${p.n||"未填"}`,size:"sm",wrap:true,color:"#394743",lineSpacing:"4px"},
-      {type:"separator",margin:"md",color:"#E5E0D6"},
-      {type:"text",text:confirmed?"訂金已確認入帳，您的預約已正式成立。尾款與住宿細節請依官方 LINE 後續通知。":"本次日期已釋出；若想重新安排，歡迎再次開啟預約日曆。",size:"sm",wrap:true,color:"#394743"}]},
-    footer:{type:"box",layout:"vertical",paddingAll:"16px",spacing:"sm",contents:[
-      ...(confirmed&&calendarUrl?[{type:"button",style:"primary",color:"#153C36",height:"sm",action:{type:"uri",label:"加入行事曆",uri:calendarUrl}}]:[]),
-      {type:"box",layout:"vertical",paddingAll:"11px",backgroundColor:confirmed?"#EAF4F0":"#F6ECEC",cornerRadius:"10px",contents:[
-        {type:"text",text:confirmed?"● 已確認預約":"● 已取消預約",align:"center",weight:"bold",size:"sm",color:confirmed?"#1C6B59":"#8A4747"}
-      ]}
-    ]}}};
-}
 
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
@@ -457,125 +383,9 @@ export default async function handler(req, res) {
         continue;
       }
 
-      if (event.type === "postback") {
-        const ownerId=String(process.env.LINE_BOOKING_NOTIFY_TO || "").trim();
-        if(!ownerId || event.source?.userId !== ownerId){
-          await replyLine(event.replyToken,"此操作僅限俐姐管理帳號使用。",token);
-          continue;
-        }
-        const q=new URLSearchParams(event.postback?.data||"");
-        const action=q.get("booking_action");
-        if(action!=="confirm") continue;
-        try{
-          const payload=verifyActionToken(q.get("token"));
-          if(!firestoreReady()) throw new Error("FIRESTORE_NOT_CONFIGURED");
-          const current=await getBooking(payload.id);
-          if(!current) throw new Error("BOOKING_NOT_FOUND");
-          if(current.status === "confirmed" && action === "confirm"){
-            await replyLine(event.replyToken,`這筆預約 ${payload.id} 已經確認過了。`,token); continue;
-          }
-          const depositRequired=Number(current.depositRequired||0);
-          const paidAmount=Number(current.paidAmount||current.amountReceived||0);
-          if(!(depositRequired>0)){
-            await replyLine(event.replyToken,`這筆預約 ${payload.id} 尚未設定訂金金額。請先到後台設定訂金並登記收款，之後再回 LINE 按「確認預約」。`,token); continue;
-          }
-          if(paidAmount<depositRequired){
-            await replyLine(event.replyToken,`這筆預約尚未收足訂金，不能確認。\n訂金：NT$ ${depositRequired.toLocaleString("zh-TW")}\n目前已收：NT$ ${paidAmount.toLocaleString("zh-TW")}\n尚差：NT$ ${(depositRequired-paidAmount).toLocaleString("zh-TW")}\n\n請先到後台新增收款紀錄。`,token); continue;
-          }
-          const nextStatus="confirmed";
-          const updated=await setBookingStatus(payload.id,nextStatus);
-          const statusPayload={id:payload.id,uid:updated.lineUserId||"",ci:updated.startDate,co:updated.endDate,n:updated.guestName,total:updated.quotedTotal||null,isTest:Boolean(updated.isTest)};
-          let customerNotified=false, notifyError="";
-          if(statusPayload.uid){
-            try{
-              const calendarToken=makeActionToken({...statusPayload,exp:Date.now()+30*24*60*60*1000});
-              await pushLine(statusPayload.uid,customerStatusFlex(statusPayload,action,calendarToken),token);
-              customerNotified=true;
-            }catch(e){ notifyError=String(e?.message||e); console.warn("customer status push failed",e); }
-          }
-          let emailNotified=false;
-          if(updated.email && gmailReady()){
-            try{ await sendMail({to:updated.email,subject:updated.isTest?"俐姐的家｜【測試】預約流程已完成":"俐姐的家｜您的預約已確認",text:confirmedEmailText(updated)}); emailNotified=true; }
-            catch(e){ console.warn("confirmed email failed",e); }
-          }
-          const adminText=[
-            `✅ 已確認預約 ${payload.id}`,
-            `${updated.startDate} → ${updated.endDate}`,
-            `客人：${updated.guestName||"未填"}`,
-            updated.isTest?"🧪 測試訂單：未鎖正式官網日期。":"官網日曆已鎖定。",
-            updated.lineUserId ? (customerNotified ? "已通知客戶 LINE。" : "⚠️ 客戶 LINE Push 失敗，但預約已確認。") : "此筆為官網預約。",
-            updated.email ? (emailNotified ? "已寄出確認 Email。" : "⚠️ 確認 Email 尚未寄出，請檢查 Gmail 設定。") : "客戶未填 Email。",
-            "其餘取消、收款、支出與庫存請到後台操作。"
-          ].join("\n");
-          await replyLine(event.replyToken,adminText,token);
-          if(notifyError) console.warn("booking action customer notify",{bookingId:payload.id,notifyError});
-        }catch(e){
-          console.error("booking action failed",e);
-          const msg=String(e?.message||e);
-          await replyLine(event.replyToken,msg.includes("BOOKING_DATE_CONFLICT")
-            ? `⚠️ 無法確認：${msg.split(" ")[1] || "所選日期"} 已被另一筆已確認預約占用。請先查看後台日曆。`
-            : msg.includes("FIRESTORE")
-              ? "預約資料庫尚未完成伺服器設定，請先設定 FIREBASE_SERVICE_ACCOUNT_JSON。"
-              : "這個預約操作無法完成，請傳『待確認預約』取得最新訂單卡片。",token);
-        }
-        continue;
-      }
+      if (event.type === "postback") { continue; }
 
       if (event.type !== "message" || event.message?.type !== "text") continue;
-
-      if (/^(管理者ID|我的LINEID|我的LINE ID)$/i.test(String(event.message.text||"").trim())) {
-        await replyLine(event.replyToken, `你的 LINE userId：\n${event.source?.userId||"無法取得"}\n\n請把這個值放到 Vercel 的 LINE_BOOKING_NOTIFY_TO。`, token);
-        continue;
-      }
-
-      const adminTextInput=String(event.message.text||"").trim();
-      if (/^待確認預約$/.test(adminTextInput)) {
-        const ownerId=String(process.env.LINE_BOOKING_NOTIFY_TO||"").trim();
-        if(!ownerId || event.source?.userId!==ownerId){
-          await replyLine(event.replyToken,"此指令僅限俐姐管理帳號使用。",token); continue;
-        }
-        try{
-          const pending=await listPendingBookings(4);
-          if(!pending.length){ await replyLine(event.replyToken,"目前沒有待確認預約。",token); continue; }
-          const msgs=[{type:"text",text:`目前有 ${pending.length} 筆待確認預約。\n請直接在卡片下方按「確認預約」。取消、修改與帳務請到網站後台操作。`},...pending.map(ownerBookingFlex)];
-          await replyLine(event.replyToken,msgs,token);
-        }catch(e){
-          console.error("pending bookings command failed",e);
-          await replyLine(event.replyToken,"目前無法讀取待確認預約，請確認 Firestore 伺服器憑證設定。",token);
-        }
-        continue;
-      }
-
-      if (/^管理者測試$/.test(adminTextInput)) {
-        const current=event.source?.userId||"";
-        const ownerId=String(process.env.LINE_BOOKING_NOTIFY_TO||"").trim();
-        const idMatch=Boolean(ownerId && current===ownerId);
-        let botOk=false, botInfo="", pushOk=false, pushError="";
-        try{
-          const r=await fetch("https://api.line.me/v2/bot/info",{headers:{Authorization:`Bearer ${token}`}});
-          botOk=r.ok;
-          const j=await r.json().catch(()=>({}));
-          botInfo=r.ok ? `${j.displayName||"未知官方帳號"} (${j.basicId||j.premiumId||"無ID"})` : `HTTP ${r.status}`;
-        }catch(e){ botInfo=String(e?.message||e); }
-        if(idMatch){
-          try{ await pushLine(current,"✅ 俐姐的家管理者 Push 測試成功。",token); pushOk=true; }
-          catch(e){ pushError=String(e?.message||e).slice(0,260); }
-        }
-        const db=await firestoreDiagnostic();
-        const lines=[
-          "【俐姐的家｜管理者測試】",
-          `管理者 ID：${idMatch?"✅ 符合":"❌ 不符合"}`,
-          `Messaging API Token：${botOk?"✅ 可用":"❌ 異常"}`,
-          `官方帳號：${botInfo}`,
-          `Push 測試：${idMatch?(pushOk?"✅ 成功":"❌ 失敗"):"未執行（ID 不符）"}`,
-          `Firestore：${db.ready?(db.readOk?"✅ 可讀取":"⚠️ 已設定但讀取失敗"):"❌ 尚未設定"}`,
-          db.projectId?`Firebase Project：${db.projectId}`:null,
-          pushError?`Push 錯誤：${pushError}`:null,
-          (!idMatch && ownerId)?`目前 userId：${current}\n設定的管理者：${ownerId}`:null
-        ].filter(Boolean);
-        await replyLine(event.replyToken,lines.join("\n"),token);
-        continue;
-      }
 
       const customerInput=String(event.message.text||"").trim();
       const uid=String(event.source?.userId||"").trim();

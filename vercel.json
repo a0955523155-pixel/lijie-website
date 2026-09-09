@@ -73,24 +73,6 @@
       ]
     },
     {
-      "source": "/js/line-config.js",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store, no-cache, must-revalidate, max-age=0"
-        }
-      ]
-    },
-    {
-      "source": "/api/liff-diagnostic",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store, no-cache, must-revalidate, max-age=0"
-        }
-      ]
-    },
-    {
       "source": "/api/line-auth-start",
       "headers": [
         {

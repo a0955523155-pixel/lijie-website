@@ -13,7 +13,7 @@
 <body>
   <main class="shell">
     <section id="configNotice" class="notice hidden" role="alert">
-      尚未連接 Firebase。請依照壓縮檔內的「安裝說明.md」從建立專案開始完成一次性設定。
+      尚未連接 Firebase。請確認 js/config.js 的 Firebase Web 設定，以及 Firebase Authentication、Firestore 與 Storage 已啟用。
     </section>
 
     <section id="loginView" class="login-card">
@@ -102,7 +102,7 @@
             <p id="bookingMessage" class="message" aria-live="polite"></p>
           </form>
           <section class="booking-finance" id="bookingFinance">
-            <div><p class="eyebrow">ACCOUNTING</p><h3>帳務與收款紀錄</h3><p class="muted">先從左側日曆點選已預約日期。官方 LINE 只負責確認預約；收款、匯款、退款與取消都在這裡管理。</p></div>
+            <div><p class="eyebrow">ACCOUNTING</p><h3>帳務與收款紀錄</h3><p class="muted">先從左側日曆點選已預約日期。預約確認、收款、匯款、退款與取消全部集中在網站後台管理。</p></div>
             <div class="finance-summary">
               <label>訂單總額<input id="financeTotal" type="number" min="0" step="100" placeholder="例如 20000"></label>
               <label>固定訂金<input id="financeDepositRequired" type="number" value="3000" readonly></label>
@@ -125,7 +125,7 @@
       </section>
 
       <section id="operationsPanel" class="panel hidden">
-        <div class="panel-heading"><div><p class="eyebrow">OPERATIONS</p><h2>訂單・帳務・支出</h2><p>官方 LINE 只負責確認預約；確認後的收款、退款、支出與取消都在這裡管理。備品庫存已獨立到「庫存管理」分頁。</p></div><button id="refreshOperations" class="secondary" type="button">重新整理</button></div><div class="ops-test-panel"><div><strong>🧪 測試模式</strong><p class="muted">用測試連結送出的訂單會標記 TEST、不鎖正式日期、不列入營運統計。可模擬 NT$3,000 訂金後從 LINE 按確認，完成後一鍵清除。</p></div><div class="ops-order-actions"><button id="openTestWebsite" class="secondary" type="button">開啟官網測試模式</button><button id="clearTestData" class="danger" type="button">清除全部測試資料</button></div><p id="testModeMessage" class="message"></p></div>
+        <div class="panel-heading"><div><p class="eyebrow">OPERATIONS</p><h2>訂單・帳務・支出</h2><p>訂單確認、收款、退款、支出與取消全部集中在網站後台；官方 LINE 僅提供客戶預約、查詢與取消須知。備品庫存獨立在「庫存管理」分頁。</p></div><button id="refreshOperations" class="secondary" type="button">重新整理</button></div><div class="ops-test-panel"><div><strong>🧪 測試模式</strong><p class="muted">用測試連結送出的訂單會標記 TEST、不鎖正式日期、不列入營運統計。可模擬 NT$3,000 訂金後直接在後台確認，完成後一鍵清除。</p></div><div class="ops-order-actions"><button id="openTestWebsite" class="secondary" type="button">開啟官網測試模式</button><button id="clearTestData" class="danger" type="button">清除全部測試資料</button></div><p id="testModeMessage" class="message"></p></div>
         <div class="ops-metrics"><article><span>已確認訂單</span><strong id="metricConfirmed">0</strong></article><article><span>累計已收</span><strong id="metricReceived">NT$ 0</strong></article><article><span>尚未收款</span><strong id="metricBalance">NT$ 0</strong></article><article><span>支出合計</span><strong id="metricExpenses">NT$ 0</strong></article></div>
         <div class="ops-section"><div class="ops-title"><div><h3>訂單進度</h3><p>預設依入住日只顯示該日訂單，不會一次列出全部。收款後會自動更新「待收訂金／部分付款／已結清」。</p></div></div>
         <div class="ops-filter-bar"><label>入住日<input id="orderArrivalFilter" type="date"></label><div class="ops-order-actions"><button id="orderFilterToday" class="secondary" type="button">今天</button><button id="orderFilterNearest" class="secondary" type="button">最近入住</button><button id="orderShowAll" class="secondary" type="button">顯示全部</button></div><span id="orderFilterSummary" class="muted"></span></div>

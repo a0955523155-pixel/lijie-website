@@ -26,6 +26,13 @@ function credentials(){
 
 export function firestoreReady(){ return Boolean(credentials()); }
 export function firestoreProjectId(){ return credentials()?.project_id || ""; }
+export async function adminExists(uid){
+  if(!uid) return false;
+  const r=await authedFetch(`${base()}/admins/${encodeURIComponent(uid)}`);
+  if(r.status===404) return false;
+  if(!r.ok) throw new Error(`FIRESTORE_ADMIN_READ_FAILED ${r.status} ${await r.text()}`);
+  return true;
+}
 
 async function accessToken(){
   if (cachedToken && Date.now() < cachedExp - 60_000) return cachedToken;

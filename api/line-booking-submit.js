@@ -63,29 +63,6 @@ function normalizeBooking(input={}){
   return {checkIn:a.s,checkOut:b.s,nights,name,phone:clean(input.phone,40),email,people,purpose:clean(input.purpose,120),notes:clean(input.notes,500),source:clean(input.source,40)||"official-line-secure-link"};
 }
 
-function actionSecret(){ return process.env.BOOKING_SESSION_SECRET || process.env.LINE_CHANNEL_SECRET || ""; }
-function makeActionToken(payload){
-  const body=Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const sig=crypto.createHmac("sha256", actionSecret()).update(body).digest("base64url");
-  return `${body}.${sig}`;
-}
-function bookingId(){ return `B${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(3).toString("hex").toUpperCase()}`; }
-function ownerFlex(b, uid, id){
-  const token=makeActionToken({uid,id,ci:b.checkIn,co:b.checkOut,n:b.name,exp:Date.now()+7*24*60*60*1000});
-  return {type:"flex",altText:`新預約 ${id}｜${b.checkIn} → ${b.checkOut}`,contents:{type:"bubble",size:"mega",
-    header:{type:"box",layout:"vertical",backgroundColor:"#173A35",paddingAll:"18px",contents:[
-      {type:"text",text:"俐姐的家｜新預約申請",color:"#FFFFFF",weight:"bold",size:"lg"},
-      {type:"text",text:`編號 ${id}`,color:"#D7E4DF",size:"xs"}]},
-    body:{type:"box",layout:"vertical",paddingAll:"18px",spacing:"sm",contents:[
-      {type:"text",text:`${b.checkIn} → ${b.checkOut}（${b.nights} 晚）`,weight:"bold",size:"lg",color:"#173A35",wrap:true},
-      ...(b.quotedTotal?[{type:"text",text:`系統試算｜NT$ ${Number(b.quotedTotal).toLocaleString("zh-TW")}`,weight:"bold",size:"md",color:"#8A6C2E",margin:"sm"}]:[]),
-      {type:"text",text:`姓名｜${b.name}\n電話｜${b.phone||"未填"}\nEmail｜${b.email||"未填"}\n人數｜${b.people?b.people+" 人":"未填"}\n需求｜${b.purpose||"未填"}\n備註｜${b.notes||"沒有"}`,size:"sm",wrap:true,color:"#26332F"}]},
-    footer:{type:"box",layout:"vertical",paddingAll:"14px",spacing:"sm",contents:[
-      {type:"button",style:"primary",color:"#173A35",action:{type:"postback",label:"確認預約",data:`booking_action=confirm&token=${encodeURIComponent(token)}`,displayText:`確認預約 ${id}`}},
-      {type:"button",style:"link",height:"sm",action:{type:"uri",label:"開啟後台日曆",uri:`https://www.5-1bbs.com/admin/?tab=calendar&booking=${encodeURIComponent(id)}&date=${encodeURIComponent(b.checkIn)}`}}
-    ]}}};
-}
-
 function messages(b){
   const infoRow=(label,value)=>({
     type:"box",layout:"baseline",spacing:"sm",contents:[
@@ -157,7 +134,7 @@ export default async function handler(req,res){
   try{
     const requestId=String(req.headers["x-vercel-id"]||req.headers["x-request-id"]||crypto.randomUUID());
     const diag=(stage,data={})=>console.log("booking-submit-diag",{requestId,stage,...data});
-    diag("START",{method:req.method,host:req.headers.host||"",hasCookie:Boolean(req.headers.cookie),hasToken:Boolean(token),hasNotifyTo:Boolean(String(process.env.LINE_BOOKING_NOTIFY_TO||"").trim()),firestoreReady:firestoreReady()});
+    diag("START",{method:req.method,host:req.headers.host||"",hasCookie:Boolean(req.headers.cookie),hasToken:Boolean(token),firestoreReady:firestoreReady()});
     const body=typeof req.body==="string"?JSON.parse(req.body):(req.body||{});
     const explicit = clean(body.session,4000);
     const resolvedSession = resolveSession(req, explicit);
@@ -213,34 +190,9 @@ export default async function handler(req,res){
       catch(e){ console.warn("booking received email failed",e); }
     }
 
-    const notifyTo=String(process.env.LINE_BOOKING_NOTIFY_TO||"").trim();
     const customerMessages=messages(booking);
     let customerDelivered=false;
-    let ownerDelivered=false;
     let customerError="";
-    let ownerError="";
-
-    // 管理卡與客戶卡「永遠分開 Push」。
-    // 管理者自己測試時 userId 可能與客戶相同；舊版把兩種卡合併成同一個 Push，
-    // 只要客戶 Flex 有任何格式問題，整包會被 LINE 拒絕，連管理卡也一起消失。
-    // V6.38 起先單獨送管理卡，確保確認／取消按鈕不被客戶訊息拖累。
-    diag("OWNER_PUSH_PRECHECK",{bookingId:id,notifyConfigured:Boolean(notifyTo),tokenConfigured:Boolean(token),sameAsCustomer:Boolean(notifyTo && notifyTo===session.uid)});
-    if(notifyTo && token){
-      try{
-        diag("OWNER_PUSH_START",{bookingId:id});
-        await push(notifyTo,[ownerFlex(booking,session.uid,id)],token,{requestId,stage:"OWNER",bookingId:id});
-        ownerDelivered=true;
-        diag("OWNER_PUSH_SUCCESS",{bookingId:id});
-      }catch(e){
-        ownerError=String(e?.message||e);
-        diag("OWNER_PUSH_ERROR",{bookingId:id,error:ownerError.slice(0,800),httpStatus:e?.httpStatus||null});
-        console.warn("owner notify failed",e);
-      }
-    }else{
-      if(!notifyTo) console.warn("LINE_BOOKING_NOTIFY_TO not configured; owner card skipped");
-      if(!token) console.warn("LINE_CHANNEL_ACCESS_TOKEN not configured; LINE push skipped");
-    }
-
     if(token){
       try{
         diag("CUSTOMER_PUSH_START",{bookingId:id,userIdPrefix:String(session.uid).slice(0,10)});
@@ -253,9 +205,7 @@ export default async function handler(req,res){
         console.warn("customer push failed",e);
       }
     }
-
-    console.log("booking-secure-delivery",{bookingId:id,customerDelivered,ownerDelivered,checkIn:booking.checkIn,checkOut:booking.checkOut});
-    diag("COMPLETE",{bookingId:id,customerDelivered,ownerDelivered,ownerError:ownerError.slice(0,300),customerError:customerError.slice(0,300)});
+    diag("COMPLETE",{bookingId:id,customerDelivered,customerError:customerError.slice(0,300)});
 
     // 只要 Firestore 已成功存檔，就回傳預約成功。
     // LINE 主動 Push 是通知層，不再決定預約是否成立為「待確認」。
@@ -264,13 +214,10 @@ export default async function handler(req,res){
       saved:true,
       bookingId:id,
       customerDelivered,
-      ownerDelivered,
-      warning: (!customerDelivered || !ownerDelivered) ? "LINE_NOTIFICATION_PARTIAL" : null,
+      warning: !customerDelivered ? "LINE_NOTIFICATION_PARTIAL" : null,
       sessionSource: resolvedSession.source,
-      diagnostic: (!customerDelivered || !ownerDelivered)
-        ? "預約已安全存入 Firestore；LINE 通知有部分失敗。請到 Vercel Logs 搜尋 booking-submit-diag 與此 bookingId。"
-        : null,
-      delivery:{ownerDelivered,customerDelivered,ownerError:ownerError?ownerError.slice(0,240):null,customerError:customerError?customerError.slice(0,240):null}
+      diagnostic: !customerDelivered ? "預約已安全存入 Firestore；客戶 LINE 通知暫時失敗。" : null,
+      delivery:{customerDelivered,customerError:customerError?customerError.slice(0,240):null}
     });
   }catch(e){
     console.error("booking secure submit error",e);

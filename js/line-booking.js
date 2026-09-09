@@ -344,7 +344,7 @@ async function sendMessage(){
     const result = await submitBookingToOfficialLine();
     clearDraft();
     if(result?.warning){
-      els.status.textContent=`預約申請已送出 ✓ 編號 ${result.bookingId||""}。資料已安全保存；若 LINE 通知暫時沒有出現，俐姐可在官方 LINE 傳「待確認預約」查看並確認／取消。`;
+      els.status.textContent=`預約申請已送出 ✓ 編號 ${result.bookingId||""}。資料已安全保存；資料已安全保存，俐姐會由官網後台進行後續確認。`;
     }else{
       els.status.textContent=`預約申請已送出 ✓ 編號 ${result.bookingId||""}。請回官方 LINE 查看確認卡片。`;
     }
