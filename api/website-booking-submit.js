@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import {putBooking,firestoreReady,quoteStay,getPublicPricingSettings} from "./firestore-admin.js";
-import {gmailReady,sendMail,receivedEmailText} from "./gmail-mailer.js";
+import {gmailReady,sendMail,receivedEmailText,adminNotificationEmail,newBookingAdminMail} from "./gmail-mailer.js";
 function c(v,m=500){return String(v??"").replace(/[\u0000-\u001F\u007F]/g," ").trim().slice(0,m)}
 function validDate(v){const s=c(v,10);return /^\d{4}-\d{2}-\d{2}$/.test(s)?s:null}
 function bid(){return`W${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(3).toString("hex").toUpperCase()}`}
@@ -34,10 +34,14 @@ export default async function handler(req,res){
     if(startDate<today||endDate>settings.maxBookableDate) throw new Error("BOOKING_OUTSIDE_WINDOW");
     const q=await quoteStay(startDate,endDate),id=`${isTest?"TEST-":""}${bid()}`,now=new Date().toISOString(),data={id,startDate,endDate,guestName,phone,email,people,status:"pending",source:"website-desktop",quotedTotal:q?.total||null,quoteBreakdown:q?.details||[],totalAmount:q?.total||0,depositRequired:3000,paidAmount:0,balanceAmount:Math.max(0,(q?.total||0)-0),financeStatus:"待收訂金",isTest,testCreatedAt:isTest?now:null,createdAt:now,updatedAt:now};
     await putBooking(id,data);
-    let emailSent=false;
-    if(gmailReady()) try{await sendMail({to:email,subject:isTest?"俐姐的家｜【測試】已收到您的預約需求":"俐姐的家｜已收到您的預約需求",text:receivedEmailText(data)});emailSent=true}catch(e){console.warn("website booking email failed",String(e?.message||e))}
-    console.info("website-booking-submit OK",{bookingId:id,isTest,startDate,endDate,people});
-    return res.status(200).json({ok:true,bookingId:id,emailSent,isTest});
+    let emailSent=false,adminNotified=false;
+    if(gmailReady()) {
+      try{await sendMail({to:email,subject:isTest?"俐姐的家｜【測試】已收到您的預約需求":"俐姐的家｜已收到您的預約需求",text:receivedEmailText(data)});emailSent=true}catch(e){console.warn("website booking customer email failed",String(e?.message||e))}
+      const adminTo=adminNotificationEmail();
+      if(adminTo) try{const m=newBookingAdminMail(data);await sendMail({to:adminTo,subject:m.subject,text:m.text,html:m.html});adminNotified=true}catch(e){console.warn("website booking admin email failed",String(e?.message||e))}
+    }
+    console.info("website-booking-submit OK",{bookingId:id,isTest,startDate,endDate,people,adminNotified});
+    return res.status(200).json({ok:true,bookingId:id,emailSent,adminNotified,isTest});
   }catch(e){
     const code=String(e?.message||e||"UNKNOWN_ERROR");
     console.error("website-booking-submit FAILED",{code,isTest});

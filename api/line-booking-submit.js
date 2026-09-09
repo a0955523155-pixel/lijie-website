@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { COOKIE_NAME, parseCookies, verifyPayload as verifyCookieSession } from "./line-auth-lib.js";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 import { putBooking, firestoreReady, quoteStay, getPublicPricingSettings } from "./firestore-admin.js";
-import { gmailReady, sendMail, receivedEmailText } from "./gmail-mailer.js";
+import { gmailReady, sendMail, receivedEmailText, adminNotificationEmail, newBookingAdminMail } from "./gmail-mailer.js";
 
 function clean(value, max = 500) {
   return String(value ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, max);
@@ -185,9 +185,17 @@ export default async function handler(req,res){
     });
     console.log("booking-firestore-saved",{bookingId:id});
     diag("FIRESTORE_SAVED",{bookingId:id});
-    if(booking.email && gmailReady()){
-      try{ await sendMail({to:booking.email,subject:"俐姐的家｜已收到您的預約需求",text:receivedEmailText({id,guestName:booking.name,startDate:booking.checkIn,endDate:booking.checkOut,people:booking.people})}); }
-      catch(e){ console.warn("booking received email failed",e); }
+    const savedBooking={id,startDate:booking.checkIn,endDate:booking.checkOut,guestName:booking.name,phone:booking.phone,email:booking.email||"",people:booking.people,quotedTotal:booking.quotedTotal||0,totalAmount:booking.quotedTotal||0,depositRequired:3000,status:"pending",isTest:false};
+    if(gmailReady()){
+      if(booking.email){
+        try{ await sendMail({to:booking.email,subject:"俐姐的家｜已收到您的預約需求",text:receivedEmailText(savedBooking)}); }
+        catch(e){ console.warn("booking received email failed",e); }
+      }
+      const adminTo=adminNotificationEmail();
+      if(adminTo){
+        try{const m=newBookingAdminMail(savedBooking);await sendMail({to:adminTo,subject:m.subject,text:m.text,html:m.html});}
+        catch(e){console.warn("booking admin notification email failed",e);}
+      }
     }
 
     const customerMessages=messages(booking);

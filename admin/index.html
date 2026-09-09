@@ -140,7 +140,11 @@
             <label>訂金處理<select id="cancelDepositDisposition"><option value="not_received">尚未收訂金</option><option value="forfeit_full">訂金全額保留（沒收）</option><option value="refund_partial">部分退款</option><option value="refund_full">全額退款</option><option value="other">其他</option></select></label>
           </div>
           <label>取消原因（必填）<textarea id="cancelReason" rows="3" maxlength="500" required placeholder="例如：客戶臨時行程變更、同行者無法前往等"></textarea></label>
-          <label>訂金／退款處理備註<textarea id="cancelDepositNote" rows="2" maxlength="500" placeholder="例如：已收訂金 5,000 元，依雙方確認保留；如有退款請另新增退款紀錄"></textarea></label>
+          <div id="cancelRefundFields" class="ops-grid hidden">
+            <label>退款金額<input id="cancelRefundAmount" type="number" min="1" step="1" placeholder="部分退款請輸入金額"></label>
+            <label>退款方式<select id="cancelRefundMethod"><option>轉帳</option><option>現金</option><option>其他</option></select></label>
+          </div>
+          <label>訂金／退款處理備註<textarea id="cancelDepositNote" rows="2" maxlength="500" placeholder="例如：客戶臨時取消，已確認退款 3,000 元"></textarea></label>
           <div class="ops-order-actions"><button id="confirmCancellation" class="danger" type="button">確認取消並釋出日期</button><button id="closeCancellation" class="secondary" type="button">暫不取消</button></div>
           <p id="cancellationMessage" class="message"></p>
         </form>

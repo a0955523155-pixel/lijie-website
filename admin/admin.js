@@ -766,7 +766,13 @@ async function savePricing(event){
 function applyAdminDeepLink() {
   const params = new URLSearchParams(location.search);
   const requested=params.get("tab");
-  if(requested==="operations"||requested==="inventory"){ document.querySelector(`.tab[data-tab="${requested}"]`)?.click(); return; }
+  if(requested==="operations"){
+    const date=params.get("date");
+    if(/^\d{4}-\d{2}-\d{2}$/.test(date||"")&&$("#orderArrivalFilter")){ $("#orderArrivalFilter").value=date; orderArrivalMode="date"; }
+    document.querySelector('.tab[data-tab="operations"]')?.click();
+    return;
+  }
+  if(requested==="inventory"){ document.querySelector('.tab[data-tab="inventory"]')?.click(); return; }
   if (requested !== "calendar") return;
   const calendarTab = document.querySelector('.tab[data-tab="calendar"]');
   if (calendarTab) calendarTab.click();
@@ -991,10 +997,22 @@ async function saveExpenseRecord(e){e.preventDefault();const amount=Number($("#e
 async function saveInventoryItem(e){e.preventDefault();const name=$("#inventoryName").value.trim(),qty=Number($("#inventoryQty").value);if(!name||qty<0)return message("#inventoryItemMessage","請填寫備品名稱與庫存。","error");await setDoc(doc(db,"inventoryItems",crypto.randomUUID()),{name,unit:$("#inventoryUnit").value.trim(),quantity:qty,minQuantity:Number($("#inventoryMin").value)||0,unitCost:Number($("#inventoryCost").value)||0,createdBy:auth.currentUser.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});e.target.reset();message("#inventoryItemMessage","備品已建立。","success");await loadOperations();}
 async function saveStockMovement(e){e.preventDefault();const itemId=$("#stockItem").value,qty=Number($("#stockQty").value),type=$("#stockType").value;if(!itemId||!(qty>0))return message("#stockMessage","請選備品並填寫數量。","error");const refDoc=doc(db,"inventoryItems",itemId),snap=await getDoc(refDoc);if(!snap.exists())return message("#stockMessage","找不到備品。","error");const item=snap.data(),before=Number(item.quantity)||0,after=type==="in"?before+qty:before-qty;if(after<0)return message("#stockMessage","庫存不足，不能扣成負數。","error");const batch=writeBatch(db);batch.set(refDoc,{quantity:after,updatedAt:serverTimestamp()},{merge:true});batch.set(doc(db,"inventoryTransactions",crypto.randomUUID()),{itemId,itemName:item.name,type,quantity:qty,beforeQuantity:before,afterQuantity:after,bookingId:$("#stockBooking").value||null,date:$("#stockDate").value,note:$("#stockNote").value.trim(),createdBy:auth.currentUser.uid,createdAt:serverTimestamp()});await batch.commit();e.target.reset();setOperationsDefaultDates();message("#stockMessage","庫存已更新，進出庫紀錄已保存。","success");await loadOperations();}
 async function editOrderTotal(id){const b=opsBookings.find(x=>x.id===id),current=Number(b?.totalAmount??b?.quotedTotal)||0;const raw=prompt(`輸入訂單 ${id} 的總額`,String(current));if(raw===null)return;const total=Number(raw);if(total<0||!Number.isFinite(total))return alert("請輸入正確金額。");const paid=paidFor(id);await setDoc(doc(db,"bookings",id),{totalAmount:total,balanceAmount:Math.max(0,total-paid),financeStatus:financeStatusFor({...b,totalAmount:total},paid),updatedAt:serverTimestamp()},{merge:true});await loadOperations();}
+function updateCancellationRefundFields(){
+  const disposition=$("#cancelDepositDisposition")?.value||"";
+  const fields=$("#cancelRefundFields"); if(!fields)return;
+  const show=disposition==="refund_partial"||disposition==="refund_full";
+  fields.classList.toggle("hidden",!show);
+  if(!show){$("#cancelRefundAmount").value="";return;}
+  const id=$("#cancelBookingId")?.value||"";
+  const paid=Math.max(0,paidFor(id));
+  if(disposition==="refund_full") $("#cancelRefundAmount").value=paid>0?String(paid):"";
+  else if($("#cancelRefundAmount").value===String(paid)) $("#cancelRefundAmount").value="";
+}
 function openCancellationSop(id){
   const b=opsBookings.find(x=>x.id===id); if(!b)return;
   $("#cancelBookingId").value=id; $("#cancelRequestedBy").value="customer"; $("#cancelReason").value=""; $("#cancelDepositNote").value="";
   const paid=paidFor(id); $("#cancelDepositDisposition").value=paid>0?"forfeit_full":"not_received";
+  $("#cancelRefundAmount").value=""; $("#cancelRefundMethod").value="轉帳"; updateCancellationRefundFields();
   $("#cancellationForm").classList.remove("hidden");
   message("#cancellationMessage",`正在處理 ${id}｜${b.guestName||"未填"}｜目前淨收 ${twd(paid)}。請確認取消原因與訂金處理。`);
   $("#cancellationForm").scrollIntoView({behavior:"smooth",block:"center"});
@@ -1005,10 +1023,22 @@ async function confirmCancellationSop(){
   const reason=$("#cancelReason").value.trim(), requestedBy=$("#cancelRequestedBy").value, depositDisposition=$("#cancelDepositDisposition").value, depositNote=$("#cancelDepositNote").value.trim();
   if(!reason)return message("#cancellationMessage","請先填寫客戶取消原因。","error");
   const labels={not_received:"尚未收訂金",forfeit_full:"訂金全額保留（沒收）",refund_partial:"部分退款",refund_full:"全額退款",other:"其他"};
-  if(!confirm(`確認取消 ${id}（${b.guestName||"未填"}）？\n原因：${reason}\n訂金處理：${labels[depositDisposition]||depositDisposition}\n\n確認後會釋出日期，但取消與帳務歷史會保留。`))return;
-  message("#cancellationMessage","正在取消並釋出日期…");
+  const paid=Math.max(0,paidFor(id));
+  const needsRefund=depositDisposition==="refund_partial"||depositDisposition==="refund_full";
+  let refundAmount=needsRefund?Number($("#cancelRefundAmount").value):0;
+  if(depositDisposition==="refund_full") refundAmount=paid;
+  if(needsRefund&&!(refundAmount>0))return message("#cancellationMessage","請填寫退款金額。","error");
+  if(needsRefund&&refundAmount>paid)return message("#cancellationMessage",`退款金額不可大於目前淨收 ${twd(paid)}。`,"error");
+  const refundMethod=$("#cancelRefundMethod").value||"轉帳";
+  const refundLine=needsRefund?`\n退款：${twd(refundAmount)}（${refundMethod}）`:"";
+  if(!confirm(`確認取消 ${id}（${b.guestName||"未填"}）？\n原因：${reason}\n訂金處理：${labels[depositDisposition]||depositDisposition}${refundLine}\n\n確認後會釋出日期，取消與收退款歷史都會保留。`))return;
+  message("#cancellationMessage","正在取消並更新帳務…");
   const q=query(collection(db,"availability"),where("bookingId","==",id)),snap=await getDocs(q),batch=writeBatch(db); snap.docs.forEach(d=>batch.delete(d.ref));
-  batch.set(doc(db,"bookings",id),{status:"cancelled",financeStatus:"已取消",cancellationRequestedBy:requestedBy,cancellationReason:reason,depositDisposition,depositDispositionLabel:labels[depositDisposition]||depositDisposition,cancellationDepositNote:depositNote,cancelledBy:auth.currentUser.uid,cancelledAt:serverTimestamp(),updatedAt:serverTimestamp()},{merge:true});
+  batch.set(doc(db,"bookings",id),{status:"cancelled",financeStatus:"已取消",cancellationRequestedBy:requestedBy,cancellationReason:reason,depositDisposition,depositDispositionLabel:labels[depositDisposition]||depositDisposition,cancellationDepositNote:depositNote,cancellationRefundAmount:refundAmount||0,cancellationRefundMethod:needsRefund?refundMethod:"",cancelledBy:auth.currentUser.uid,cancelledAt:serverTimestamp(),updatedAt:serverTimestamp()},{merge:true});
+  if(needsRefund){
+    const refundId=crypto.randomUUID();
+    batch.set(doc(db,"paymentTransactions",refundId),{bookingId:id,type:"refund",amount:refundAmount,method:refundMethod,date:new Date().toLocaleDateString("en-CA"),last5:"",note:[`取消退款｜${reason}`,depositNote].filter(Boolean).join("｜"),cancellationRefund:true,isTest:Boolean(b.isTest),createdBy:auth.currentUser.uid,createdAt:serverTimestamp()});
+  }
   await batch.commit(); closeCancellationSop(); await loadOperations();
 }
 async function clearLegacyOrderData(){
@@ -1027,5 +1057,6 @@ async function clearLegacyOrderData(){
 }
 async function cancelOrderById(id){openCancellationSop(id);}
 
+$("#cancelDepositDisposition")?.addEventListener("change",updateCancellationRefundFields);
 $("#confirmCancellation")?.addEventListener("click",confirmCancellationSop);
 $("#closeCancellation")?.addEventListener("click",closeCancellationSop);
