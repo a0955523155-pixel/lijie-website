@@ -226,12 +226,23 @@ function bookingFlexReply(b) {
       body: {
         type: "box", layout: "vertical", paddingAll: "20px", spacing: "md",
         contents: [
-          { type: "text", text: `${b.checkIn}  →  ${b.checkOut}`, weight: "bold", size: "xl", color: "#173A35", wrap: true },
-          { type: "text", text: `${b.nights} 晚｜${b.people || "人數未填"}`, size: "sm", color: "#6C7773" },
+          { type: "box", layout: "vertical", spacing: "sm", contents: [
+            { type: "box", layout: "vertical", paddingAll: "14px", backgroundColor: "#F7F3EA", cornerRadius: "12px", contents: [
+              { type: "text", text: "📅 入住日期", size: "xs", color: "#8B7E61", weight: "bold" },
+              { type: "text", text: b.checkIn, weight: "bold", size: "xl", color: "#173A35", margin: "xs", wrap: true },
+              { type: "text", text: `🕒 ${BOOKING_RULES.checkInFrom} 起`, size: "xs", color: "#6C7773", margin: "xs" }
+            ]},
+            { type: "box", layout: "vertical", paddingAll: "14px", backgroundColor: "#F7F3EA", cornerRadius: "12px", contents: [
+              { type: "text", text: "🌙 退房日期", size: "xs", color: "#8B7E61", weight: "bold" },
+              { type: "text", text: b.checkOut, weight: "bold", size: "xl", color: "#173A35", margin: "xs", wrap: true },
+              { type: "text", text: `🕛 ${BOOKING_RULES.checkOutBy} 前`, size: "xs", color: "#6C7773", margin: "xs" }
+            ]}
+          ]},
+          { type: "text", text: `✨ ${b.nights} 晚｜${b.people || "人數未填"}`, size: "sm", color: "#6C7773", weight: "bold", align: "center" },
           { type: "separator", margin: "md" },
           { type: "box", layout: "vertical", spacing: "sm", margin: "md", contents: infoRows.map(row) },
           { type: "separator", margin: "md" },
-          { type: "text", text: "入住須知", weight: "bold", size: "md", color: "#173A35", margin: "md" },
+          { type: "text", text: "🌿 入住須知", weight: "bold", size: "md", color: "#173A35", margin: "md" },
           { type: "box", layout: "horizontal", spacing: "sm", contents: [
             { type: "box", layout: "vertical", paddingAll: "12px", backgroundColor: "#F3F6F4", flex: 1, contents: [
               { type: "text", text: "最早入住", size: "xs", color: "#7A8581" },
