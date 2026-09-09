@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { COOKIE_NAME, parseCookies, verifyPayload as verifyCookieSession } from "./line-auth-lib.js";
 import { BOOKING_RULES } from "../js/booking-rules.js";
-import { putBooking, firestoreReady } from "./firestore-admin.js";
+import { putBooking, firestoreReady, quoteStay } from "./firestore-admin.js";
 
 function clean(value, max = 500) {
   return String(value ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, max);
@@ -76,6 +76,7 @@ function ownerFlex(b, uid, id){
       {type:"text",text:`編號 ${id}`,color:"#D7E4DF",size:"xs"}]},
     body:{type:"box",layout:"vertical",paddingAll:"18px",spacing:"sm",contents:[
       {type:"text",text:`${b.checkIn} → ${b.checkOut}（${b.nights} 晚）`,weight:"bold",size:"lg",color:"#173A35",wrap:true},
+      ...(b.quotedTotal?[{type:"text",text:`系統試算｜NT$ ${Number(b.quotedTotal).toLocaleString("zh-TW")}`,weight:"bold",size:"md",color:"#8A6C2E",margin:"sm"}]:[]),
       {type:"text",text:`姓名｜${b.name}\n電話｜${b.phone||"未填"}\n人數｜${b.people?b.people+" 人":"未填"}\n需求｜${b.purpose||"未填"}\n備註｜${b.notes||"沒有"}`,size:"sm",wrap:true,color:"#26332F"}]},
     footer:{type:"box",layout:"vertical",paddingAll:"14px",spacing:"sm",contents:[
       {type:"button",style:"primary",color:"#173A35",action:{type:"postback",label:"確認預約",data:`booking_action=confirm&token=${encodeURIComponent(token)}`,displayText:`確認預約 ${id}`}},
@@ -114,6 +115,11 @@ function messages(b){
           ]}
         ]},
         {type:"text",text:`✨ ${b.nights} 晚  ·  ${b.people?`${b.people} 人`:"人數未填"}`,size:"sm",weight:"bold",color:"#6B756F",align:"center"},
+        ...(b.quotedTotal?[{type:"box",layout:"vertical",paddingAll:"14px",backgroundColor:"#F2EEE2",cornerRadius:"12px",contents:[
+          {type:"text",text:"本次日期住宿試算",size:"xs",color:"#8B7E61",weight:"bold",align:"center"},
+          {type:"text",text:`NT$ ${Number(b.quotedTotal).toLocaleString("zh-TW")}`,size:"xxl",color:"#153C36",weight:"bold",align:"center",margin:"xs"},
+          {type:"text",text:"依目前後台價格規則試算，最終金額以俐姐確認為準。",size:"xxs",color:"#7A8581",wrap:true,align:"center",margin:"xs"}
+        ]}]:[]),
         {type:"separator",margin:"md",color:"#E5E0D6"},
         infoRow("姓名",b.name),
         infoRow("電話",b.phone||"未填"),
@@ -131,7 +137,7 @@ function messages(b){
       ]}
     }
   };
-  const text={type:"text",text:["【俐姐的家｜預約申請】",`入住：${b.checkIn}`,`退房：${b.checkOut}（${b.nights} 晚）`,`姓名：${b.name}`,`電話：${b.phone||"未填"}`,`人數：${b.people?`${b.people} 人`:"未填"}`,`需求：${b.purpose||"未填"}`,`備註：${b.notes||"沒有"}`,"","預約資料已送達，請等待俐姐確認日期與訂金安排。"].join("\n")};
+  const text={type:"text",text:["【俐姐的家｜預約申請】",`入住：${b.checkIn}`,`退房：${b.checkOut}（${b.nights} 晚）`,`姓名：${b.name}`,`電話：${b.phone||"未填"}`,`人數：${b.people?`${b.people} 人`:"未填"}`,`需求：${b.purpose||"未填"}`,`備註：${b.notes||"沒有"}`,...(b.quotedTotal?[`試算金額：NT$ ${Number(b.quotedTotal).toLocaleString("zh-TW")}`]:[]),"","預約資料已送達，請等待俐姐確認日期與訂金安排。"].join("\n")};
   return [text,flex];
 }
 
@@ -178,6 +184,9 @@ export default async function handler(req,res){
       status:"pending",
       lineUserId:String(session.uid),
       source:booking.source,
+      quotedTotal:booking.quotedTotal||null,
+      quoteBreakdown:booking.quoteBreakdown||[],
+      pricingUpdatedAt:booking.pricingUpdatedAt||null,
       createdAt:now,
       updatedAt:now
     });

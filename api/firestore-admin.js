@@ -154,6 +154,37 @@ export async function setBookingStatus(id,status){
   return {id,...updated};
 }
 
+export async function getPricingConfig(){
+  const r=await authedFetch(`${base()}/settings/pricing`);
+  if(r.status===404) return null;
+  if(!r.ok) throw new Error(`FIRESTORE_PRICING_READ_FAILED ${r.status} ${await r.text()}`);
+  const j=await r.json(); return fromFields(j.fields||{});
+}
+
+function pricingNights(ci,co){
+  const out=[]; const cur=new Date(`${ci}T00:00:00Z`), end=new Date(`${co}T00:00:00Z`);
+  while(cur<end){ out.push(cur.toISOString().slice(0,10)); cur.setUTCDate(cur.getUTCDate()+1); }
+  return out;
+}
+function inRange(day,start,end){ return Boolean(start&&end&&day>=start&&day<=end); }
+export async function quoteStay(ci,co){
+  const cfg=await getPricingConfig();
+  if(!cfg || cfg.enabled===false) return null;
+  const weekday=Number(cfg.weekdayPrice||0), friday=Number(cfg.fridayPrice||0), saturday=Number(cfg.saturdayPrice||0);
+  if(!(weekday>0) || !(friday>0) || !(saturday>0)) return null;
+  const specials=Array.isArray(cfg.specialRanges)?cfg.specialRanges:[];
+  const details=pricingNights(ci,co).map(day=>{
+    const special=specials.find(x=>x && inRange(day,String(x.startDate||''),String(x.endDate||'')) && Number(x.nightlyPrice)>0);
+    if(special) return {date:day,label:String(special.label||'特殊假期'),price:Number(special.nightlyPrice)};
+    const dow=new Date(`${day}T00:00:00Z`).getUTCDay();
+    if(dow===5) return {date:day,label:'週五',price:friday};
+    if(dow===6) return {date:day,label:'週六',price:saturday};
+    return {date:day,label:'平日',price:weekday};
+  });
+  const total=details.reduce((sum,x)=>sum+Number(x.price||0),0);
+  return {currency:'TWD',total,details,pricingUpdatedAt:cfg.updatedAt||null};
+}
+
 export async function firestoreDiagnostic(){
   if(!firestoreReady()) return {ready:false,projectId:firestoreProjectId()};
   try { await listPendingBookings(1); return {ready:true,projectId:firestoreProjectId(),readOk:true}; }

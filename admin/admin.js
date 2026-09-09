@@ -20,6 +20,7 @@ let adminSelectedDate = "";
 let adminMonthStates = new Map();
 let libraryAssets = [];
 let libraryPickerTarget = null;
+let pricingSpecialRanges = [];
 
 function message(selector, text, type = "") {
   const node = $(selector);
@@ -665,6 +666,43 @@ async function cancelSelectedBooking() {
 }
 
 
+
+function newSpecialRate(data={}) {
+  return { id:data.id || crypto.randomUUID(), label:data.label || "連續假期", startDate:data.startDate || "", endDate:data.endDate || "", nightlyPrice:Number(data.nightlyPrice)||0 };
+}
+function renderSpecialRates(){
+  const root=$("#specialRates"); if(!root) return; root.innerHTML="";
+  if(!pricingSpecialRanges.length){
+    const empty=document.createElement("p"); empty.className="muted"; empty.textContent="目前沒有特殊日期價格。"; root.append(empty); return;
+  }
+  pricingSpecialRanges.forEach((r,index)=>{
+    const row=document.createElement("div"); row.className="special-rate-row";
+    row.innerHTML=`<label>名稱<input data-field="label" value="${String(r.label||"").replace(/"/g,"&quot;")}" placeholder="例如：春節連假"></label><label>開始日期<input data-field="startDate" type="date" value="${r.startDate||""}"></label><label>結束日期<input data-field="endDate" type="date" value="${r.endDate||""}"></label><label>每晚價格<input data-field="nightlyPrice" type="number" min="0" step="100" value="${Number(r.nightlyPrice)||0}"></label><button class="secondary remove-special" type="button" aria-label="刪除特殊日期">×</button>`;
+    row.querySelectorAll("input[data-field]").forEach(input=>input.addEventListener("input",()=>{ const field=input.dataset.field; pricingSpecialRanges[index][field]=field==="nightlyPrice"?Number(input.value)||0:input.value; }));
+    row.querySelector(".remove-special").addEventListener("click",()=>{ pricingSpecialRanges.splice(index,1); renderSpecialRates(); });
+    root.append(row);
+  });
+}
+async function loadPricing(){
+  if(!db) return;
+  try{
+    const snap=await getDoc(doc(db,"settings","pricing")); const d=snap.exists()?snap.data():{};
+    $("#weekdayPrice").value=Number(d.weekdayPrice)||0; $("#fridayPrice").value=Number(d.fridayPrice)||0; $("#saturdayPrice").value=Number(d.saturdayPrice)||0;
+    $("#pricingEnabled").checked=d.enabled!==false; pricingSpecialRanges=Array.isArray(d.specialRanges)?d.specialRanges.map(newSpecialRate):[]; renderSpecialRates();
+  }catch(e){ message("#pricingMessage",e?.message||"讀取價格設定失敗。","error"); }
+}
+async function savePricing(event){
+  event.preventDefault();
+  const weekdayPrice=Number($("#weekdayPrice").value), fridayPrice=Number($("#fridayPrice").value), saturdayPrice=Number($("#saturdayPrice").value);
+  if(!(weekdayPrice>0&&fridayPrice>0&&saturdayPrice>0)) return message("#pricingMessage","平日、週五、週六價格都必須大於 0。","error");
+  for(const r of pricingSpecialRanges){ if(!r.label||!r.startDate||!r.endDate||!(Number(r.nightlyPrice)>0)||r.endDate<r.startDate) return message("#pricingMessage","請完整填寫特殊日期名稱、日期區間與價格。","error"); }
+  message("#pricingMessage","正在儲存…");
+  try{
+    await setDoc(doc(db,"settings","pricing"),{enabled:$("#pricingEnabled").checked,weekdayPrice,fridayPrice,saturdayPrice,specialRanges:pricingSpecialRanges,updatedAt:serverTimestamp()});
+    message("#pricingMessage","價格設定已儲存。新預約會依實際入住日期自動試算。","success");
+  }catch(e){ message("#pricingMessage",e?.message||"價格設定儲存失敗。","error"); }
+}
+
 function applyAdminDeepLink() {
   const params = new URLSearchParams(location.search);
   if (params.get("tab") !== "calendar") return;
@@ -688,8 +726,9 @@ function bindEvents() {
   $("#logoutButton").addEventListener("click", async () => { await signOut(auth); location.reload(); });
   document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab === button));
-    ["photos", "library", "calendar", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
+    ["photos", "library", "calendar", "pricing", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
     if (button.dataset.tab === "calendar") renderAdminCalendar().catch((e)=>message("#bookingMessage",e.message,"error"));
+    if (button.dataset.tab === "pricing") loadPricing();
     if (button.dataset.tab === "library") loadLibrary();
   }));
   $("#photoInput").addEventListener("change", (event) => {
@@ -712,6 +751,8 @@ function bindEvents() {
   $("#bookingStatus").addEventListener("change",toggleBookingPrivateFields);
   $("#bookingForm").addEventListener("submit",saveBookingDates);
   $("#cancelSelectedBooking").addEventListener("click", cancelSelectedBooking);
+  $("#pricingForm").addEventListener("submit",savePricing);
+  $("#addSpecialRate").addEventListener("click",()=>{pricingSpecialRanges.push(newSpecialRate());renderSpecialRates();});
   $("#clearBookingForm").addEventListener("click",clearBookingEditor);
   $("#contentForm").addEventListener("submit", async (event) => {
     event.preventDefault();

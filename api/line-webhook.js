@@ -42,6 +42,7 @@ function ownerBookingFlex(b){
     body:{type:"box",layout:"vertical",paddingAll:"18px",spacing:"sm",contents:[
       {type:"text",text:`${b.startDate} → ${b.endDate}`,weight:"bold",size:"xl",color:"#173A35",wrap:true},
       {type:"text",text:`${nights} 晚 · ${b.people?`${b.people} 人`:"人數未填"}`,size:"sm",color:"#7A8581"},
+      ...(b.quotedTotal?[{type:"text",text:`系統試算｜NT$ ${Number(b.quotedTotal).toLocaleString("zh-TW")}`,size:"md",weight:"bold",color:"#8A6C2E",margin:"sm"}]:[]),
       {type:"separator",margin:"md",color:"#E5E0D6"},
       {type:"text",text:`姓名｜${b.guestName||"未填"}
 電話｜${b.phone||"未填"}
@@ -80,6 +81,7 @@ function customerStatusFlex(p,status,actionToken){
     body:{type:"box",layout:"vertical",paddingAll:"22px",spacing:"md",contents:[
       {type:"text",text:confirmed?"住宿日期已為您保留":"本次預約已取消",size:"sm",color:"#7C8682"},
       {type:"text",text:`${p.ci}  →  ${p.co}`,weight:"bold",size:"xl",color:"#153C36",wrap:true},
+      ...(p.total?[{type:"text",text:`住宿總額｜NT$ ${Number(p.total).toLocaleString("zh-TW")}`,weight:"bold",size:"md",color:"#8A6C2E",margin:"sm"}]:[]),
       {type:"separator",margin:"md",color:"#E5E0D6"},
       {type:"text",text:`預約編號｜${p.id}\n姓名｜${p.n||"未填"}`,size:"sm",wrap:true,color:"#394743",lineSpacing:"4px"},
       {type:"separator",margin:"md",color:"#E5E0D6"},
@@ -296,6 +298,21 @@ function keywordReply(text = "") {
     return { text: `入住時間：${BOOKING_RULES.checkInFrom} 起\n退房時間：${BOOKING_RULES.checkOutBy} 前\n若預計較晚抵達，請先透過官方 LINE 告知。` };
   }
 
+  if (/價格|價錢|房價|費用|多少錢|一晚多少|住宿費/.test(t)) {
+    return {
+      text: [
+        "俐姐的家房價會依入住日期計算 🌿",
+        "",
+        "平日、週五、週六、國定假日與連續假期價格可能不同，因此我們不在官網放一個固定價格，避免客人看到錯誤金額。",
+        "",
+        "請點下方『立即預約』選擇實際入住／退房日期；送出預約後，LINE 會直接顯示這次日期的系統試算金額。",
+        "",
+        "※ 特殊活動、連假或臨時方案仍以俐姐最後確認的金額為準。"
+      ].join("\n"),
+      button: welcomeButtonMessage()
+    };
+  }
+
   if (/付款|訂金|現金|轉帳|匯款|帳號/.test(t)) {
     return {
       text: [
@@ -382,7 +399,7 @@ export default async function handler(req, res) {
           }
           const nextStatus=action==="confirm"?"confirmed":"cancelled";
           const updated=await setBookingStatus(payload.id,nextStatus);
-          const statusPayload={id:payload.id,uid:updated.lineUserId||payload.uid,ci:updated.startDate,co:updated.endDate,n:updated.guestName};
+          const statusPayload={id:payload.id,uid:updated.lineUserId||payload.uid,ci:updated.startDate,co:updated.endDate,n:updated.guestName,total:updated.quotedTotal||null};
           let customerNotified=false, notifyError="";
           if(statusPayload.uid){
             try{

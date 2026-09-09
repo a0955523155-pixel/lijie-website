@@ -39,6 +39,7 @@
         <button class="tab active" data-tab="photos" type="button">照片管理</button>
         <button class="tab" data-tab="library" type="button">圖片素材庫</button>
         <button class="tab" data-tab="calendar" type="button">預約日曆</button>
+        <button class="tab" data-tab="pricing" type="button">價格設定</button>
         <button class="tab" data-tab="copy" type="button">文字與資訊</button>
         <button class="tab" data-tab="publish" type="button">預覽與發布</button>
       </nav>
@@ -98,6 +99,22 @@
             <p id="bookingMessage" class="message" aria-live="polite"></p>
           </form>
         </div>
+      </section>
+
+      <section id="pricingPanel" class="panel hidden">
+        <div class="panel-heading"><div><p class="eyebrow">RATE CONTROL</p><h2>價格設定</h2><p>官網不公開固定價格；系統會依客人實際入住日期試算。特殊假日／連續假期請用下方「特殊日期價格」覆蓋基本價格。</p></div></div>
+        <form id="pricingForm" class="pricing-editor">
+          <div class="pricing-grid">
+            <label>平日每晚（週日～週四）<input id="weekdayPrice" type="number" min="0" step="100" required></label>
+            <label>週五每晚<input id="fridayPrice" type="number" min="0" step="100" required></label>
+            <label>週六每晚<input id="saturdayPrice" type="number" min="0" step="100" required></label>
+          </div>
+          <div class="pricing-toggle"><label><input id="pricingEnabled" type="checkbox" checked> 啟用日期自動試算</label></div>
+          <div class="special-rate-head"><div><h3>特殊日期價格</h3><p class="muted">例如春節、跨年、連假、活動檔期。特殊日期會優先於平日／週五／週六價格。</p></div><button id="addSpecialRate" class="secondary" type="button">＋ 新增特殊日期</button></div>
+          <div id="specialRates" class="special-rates"></div>
+          <div class="pricing-actions"><button class="primary" type="submit">儲存價格設定</button></div>
+          <p id="pricingMessage" class="message" aria-live="polite"></p>
+        </form>
       </section>
 
       <section id="copyPanel" class="panel hidden">
