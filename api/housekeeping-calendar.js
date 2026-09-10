@@ -21,11 +21,12 @@ export default async function handler(req,res){
       .map(b=>({
         id:b.id,
         guestName:String(b.guestName||"未填姓名"),
+        phone:String(b.phone||""),
         startDate:String(b.startDate||""),
         endDate:String(b.endDate||""),
         people:Number(b.people)||0,
         status:b.status==="confirmed"?"confirmed":"pending",
-        notes:String(b.housekeepingNote||"")
+        notes:String(b.notes||b.housekeepingNote||"")
       }))
       .sort((a,b)=>a.startDate.localeCompare(b.startDate)||a.guestName.localeCompare(b.guestName,"zh-Hant"));
     return json(res,200,{month,bookings:rows});
