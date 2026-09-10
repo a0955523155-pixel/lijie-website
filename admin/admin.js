@@ -832,13 +832,19 @@ function bindEvents() {
   $("#logoutButton").addEventListener("click", async () => { await signOut(auth); location.reload(); });
   document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab === button));
-    ["photos", "library", "operations", "reports", "inventory", "pricing", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
+    ["photos", "library", "operations", "reports", "inventory", "housekeeping", "pricing", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
     if (button.dataset.tab === "operations") loadOperations().catch((e)=>console.error(e));
     if (button.dataset.tab === "reports") loadReports().catch((e)=>console.error(e));
     if (button.dataset.tab === "inventory") loadInventoryManagement().catch((e)=>console.error(e));
     if (button.dataset.tab === "pricing") loadPricing();
     if (button.dataset.tab === "library") loadLibrary();
   }));
+  $("#openHousekeepingPortal")?.addEventListener("click",()=>window.open("/housekeeping/","_blank","noopener"));
+  $("#copyHousekeepingUrl")?.addEventListener("click",async()=>{
+    const url=new URL("/housekeeping/",location.origin).href;
+    try{await navigator.clipboard.writeText(url);const el=$("#housekeepingAdminMessage");if(el){el.textContent="房務工作台網址已複製。";el.className="message success"}}
+    catch{const el=$("#housekeepingAdminMessage");if(el){el.textContent=url;el.className="message"}}
+  });
   $("#photoInput").addEventListener("change", (event) => {
     selectedFiles = [...event.target.files];
     renderSelectionPreview();

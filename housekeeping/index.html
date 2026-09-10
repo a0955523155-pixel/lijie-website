@@ -5,6 +5,7 @@
   <form id="loginForm"><label>房務帳號<input id="email" type="email" autocomplete="username" required></label><label>密碼<input id="password" type="password" autocomplete="current-password" required></label><button class="primary">登入</button></form><p id="loginMessage" class="message"></p>
 </section>
 <section id="appView" class="app hidden">
+<div class="mobile-hero"><div class="mini-mark">俐</div><div><span>LIJIE'S HOME</span><strong>今日房務，一眼就好。</strong></div></div>
 <header class="top"><div><p class="eyebrow">HOUSEKEEPING</p><h1>房務工作台</h1><p id="accountEmail" class="sub"></p></div><button id="logoutButton" class="ghost">登出</button></header>
 <nav class="tabs"><button data-tab="calendar" class="tab active">住宿日曆</button><button data-tab="inventory" class="tab">庫存管理</button></nav>
 <section id="calendarPanel" class="panel">
@@ -19,4 +20,5 @@
   <details class="form-card" open><summary>登記進貨／領用</summary><form id="movementForm"><label>備品<select id="stockItem" required></select></label><div class="two"><label>動作<select id="stockAction"><option value="in">進貨</option><option value="out">領用／消耗</option></select></label><label>數量<input id="stockQty" type="number" min="0.01" step="0.01" required></label></div><label>備註<input id="stockNote" placeholder="例如：補充衛生紙"></label><button class="primary">儲存</button></form><p id="stockMessage" class="message"></p></details>
   <details class="form-card"><summary>新增備品</summary><form id="itemForm"><label>備品名稱<input id="itemName" required></label><div class="two"><label>單位<input id="itemUnit" placeholder="包、瓶、個" required></label><label>目前庫存<input id="itemQty" type="number" min="0" step="0.01" value="0" required></label></div><label>安全庫存<input id="itemMin" type="number" min="0" step="0.01" value="0"></label><button class="primary">新增備品</button></form><p id="itemMessage" class="message"></p></details>
 </section>
+<nav class="bottom-nav" aria-label="房務功能"><button class="bottom-tab active" data-go="calendar"><span>▦</span>住宿日曆</button><button class="bottom-tab" data-go="inventory"><span>◫</span>庫存管理</button></nav>
 </section></main><script type="module" src="./housekeeping.js"></script></body></html>
