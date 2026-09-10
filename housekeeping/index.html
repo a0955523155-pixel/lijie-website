@@ -1,0 +1,22 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#173f38"><title>房務工作台｜俐姐的家</title><link rel="stylesheet" href="./housekeeping.css"></head><body>
+<main class="shell">
+<section id="loginView" class="login-card">
+  <div class="mark">俐</div><p class="eyebrow">LIJIE'S HOME</p><h1>房務工作台</h1><p class="sub">登入後可查看住宿日曆與管理備品庫存。</p>
+  <form id="loginForm"><label>房務帳號<input id="email" type="email" autocomplete="username" required></label><label>密碼<input id="password" type="password" autocomplete="current-password" required></label><button class="primary">登入</button></form><p id="loginMessage" class="message"></p>
+</section>
+<section id="appView" class="app hidden">
+<header class="top"><div><p class="eyebrow">HOUSEKEEPING</p><h1>房務工作台</h1><p id="accountEmail" class="sub"></p></div><button id="logoutButton" class="ghost">登出</button></header>
+<nav class="tabs"><button data-tab="calendar" class="tab active">住宿日曆</button><button data-tab="inventory" class="tab">庫存管理</button></nav>
+<section id="calendarPanel" class="panel">
+  <div class="month-head"><button id="prevMonth" class="square">‹</button><div><h2 id="monthTitle"></h2><p class="sub">點日期查看當天住宿名單</p></div><button id="nextMonth" class="square">›</button></div>
+  <div class="week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+  <div id="calendarGrid" class="calendar-grid"></div>
+  <section class="day-card"><h2 id="selectedTitle">今日住宿</h2><div id="dayBookings" class="booking-list"></div></section>
+</section>
+<section id="inventoryPanel" class="panel hidden">
+  <div class="section-head"><div><h2>備品庫存</h2><p class="sub">進貨、領用與低庫存提醒</p></div><button id="refreshInventory" class="ghost">重新整理</button></div>
+  <div id="inventoryList" class="inventory-list"></div>
+  <details class="form-card" open><summary>登記進貨／領用</summary><form id="movementForm"><label>備品<select id="stockItem" required></select></label><div class="two"><label>動作<select id="stockAction"><option value="in">進貨</option><option value="out">領用／消耗</option></select></label><label>數量<input id="stockQty" type="number" min="0.01" step="0.01" required></label></div><label>備註<input id="stockNote" placeholder="例如：補充衛生紙"></label><button class="primary">儲存</button></form><p id="stockMessage" class="message"></p></details>
+  <details class="form-card"><summary>新增備品</summary><form id="itemForm"><label>備品名稱<input id="itemName" required></label><div class="two"><label>單位<input id="itemUnit" placeholder="包、瓶、個" required></label><label>目前庫存<input id="itemQty" type="number" min="0" step="0.01" value="0" required></label></div><label>安全庫存<input id="itemMin" type="number" min="0" step="0.01" value="0"></label><button class="primary">新增備品</button></form><p id="itemMessage" class="message"></p></details>
+</section>
+</section></main><script type="module" src="./housekeeping.js"></script></body></html>

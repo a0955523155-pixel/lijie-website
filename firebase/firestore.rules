@@ -5,6 +5,9 @@ service cloud.firestore {
     function isAdmin() {
       return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
+    function isHousekeeping() {
+      return signedIn() && request.auth.token.email == '51bbsadmin@gmai.com';
+    }
 
     match /admins/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
@@ -84,8 +87,15 @@ service cloud.firestore {
     // 營運管理：收款／退款、支出、備品與進出庫僅管理員可存取。
     match /paymentTransactions/{id} { allow read, create, update, delete: if isAdmin(); }
     match /expenseTransactions/{id} { allow read, create, update, delete: if isAdmin(); }
-    match /inventoryItems/{id} { allow read, create, update: if isAdmin(); allow delete: if false; }
-    match /inventoryTransactions/{id} { allow read, create, update: if isAdmin(); allow delete: if false; }
+    match /inventoryItems/{id} {
+      allow read: if isAdmin() || isHousekeeping();
+      allow create, update: if isAdmin() || isHousekeeping();
+      allow delete: if false;
+    }
+    match /inventoryTransactions/{id} {
+      allow read, create: if isAdmin() || isHousekeeping();
+      allow update, delete: if isAdmin();
+    }
 
     match /imageLibrary/{assetId} {
       allow read: if isAdmin();

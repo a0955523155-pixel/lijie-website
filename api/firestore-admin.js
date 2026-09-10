@@ -105,6 +105,15 @@ export async function getBooking(id){
   const j=await r.json(); return { id, ...fromFields(j.fields||{}) };
 }
 
+
+export async function listAllBookings(limit=500){
+  const c=credentials(); if(!c) throw new Error("FIRESTORE_NOT_CONFIGURED");
+  const max=Math.min(Math.max(Number(limit)||500,1),1000);
+  const r=await authedFetch(`${base()}/bookings?pageSize=${max}`);
+  if(!r.ok) throw new Error(`FIRESTORE_BOOKING_LIST_FAILED ${r.status} ${await r.text()}`);
+  const j=await r.json();
+  return (j.documents||[]).map(d=>({id:docIdFromName(d.name),...fromFields(d.fields||{})}));
+}
 export async function listBookingsByLineUser(lineUserId,limit=8){
   const uid=String(lineUserId||"").trim();
   if(!uid) return [];
