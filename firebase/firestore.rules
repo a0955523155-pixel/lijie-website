@@ -6,7 +6,7 @@ service cloud.firestore {
       return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
     function isHousekeeping() {
-      return signedIn() && request.auth.token.email == '51bbsadmin@gmai.com';
+      return signedIn() && request.auth.token.email == '51bbsadmin@gmail.com';
     }
 
     match /admins/{uid} {
@@ -43,8 +43,6 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-
-    // 公開預約狀態：訪客只能讀取日期狀態，不能看到客人資料。
     match /availability/{dateId} {
       allow read: if true;
       allow create, update: if isAdmin()
@@ -55,7 +53,6 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 私人預約資料：姓名、電話、備註僅管理員可存取。
     match /bookings/{bookingId} {
       allow read: if isAdmin();
       allow create: if isAdmin()
@@ -75,16 +72,11 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-
-    // 圖片素材庫：只有管理員可以查看與管理素材索引；圖片本身由 Storage 提供。
-    // 價格規則：僅管理員可讀寫；官網前台不直接公開。
     match /settings/pricing {
-      // 後台價格設定：已登入且 admins/{uid} 存在才可讀寫。
       allow read, create, update: if isAdmin();
       allow delete: if false;
     }
 
-    // 營運管理：收款／退款、支出、備品與進出庫僅管理員可存取。
     match /paymentTransactions/{id} { allow read, create, update, delete: if isAdmin(); }
     match /expenseTransactions/{id} { allow read, create, update, delete: if isAdmin(); }
     match /inventoryItems/{id} {
