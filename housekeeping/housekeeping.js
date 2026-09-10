@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import { getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged,setPersistence,browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
 import { getFirestore,collection,getDocs,doc,setDoc,serverTimestamp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
-import { firebaseConfig,isConfigured } from "../js/config.js";
-const $=s=>document.querySelector(s);let auth,db,user,monthCursor=new Date(new Date().getFullYear(),new Date().getMonth(),1),bookings=[],inventory=[];const STAFF_EMAIL="51bbsadmin@gmai.com";
+import { firebaseConfig,isConfigured } from "/js/config.js";
+const $=s=>document.querySelector(s);let auth,db,user,monthCursor=new Date(new Date().getFullYear(),new Date().getMonth(),1),bookings=[],inventory=[];const STAFF_EMAIL="51bbsadmin@gmail.com";
 function msg(sel,text,type=""){const el=$(sel);if(!el)return;el.textContent=text;el.className=`message ${type}`.trim()}
 function ymd(d){return d.toLocaleDateString("en-CA")} function ym(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`}
 async function token(){return await user.getIdToken()}
