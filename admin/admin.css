@@ -50,3 +50,16 @@
 .housekeeping-admin-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:18px}.housekeeping-account-card{position:relative;overflow:hidden}.housekeeping-icon{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;background:#173f38;color:#fff;font-size:24px;font-weight:800;margin-bottom:12px}.housekeeping-info-row{display:grid;grid-template-columns:110px 1fr;gap:12px;padding:13px 0;border-top:1px solid #e7e0d5;align-items:center}.housekeeping-info-row span{color:#687671;font-size:13px}.housekeeping-info-row code{word-break:break-all}.housekeeping-actions{display:flex;gap:10px;margin-top:16px}.housekeeping-actions .primary{width:auto}.permission-list{display:grid;gap:12px;margin-top:12px}.permission-list>div{padding:14px;border:1px solid #ded7cb;border-radius:14px;background:#fff}.permission-list strong,.permission-list span{display:block}.permission-list span{color:#687671;font-size:13px;margin-top:5px;line-height:1.55}.permission-list .permission-deny{background:#faf8f4}.housekeeping-guide ol{margin:12px 0 0;padding-left:22px;color:#405550;line-height:1.8}@media(max-width:760px){.housekeeping-admin-grid{grid-template-columns:1fr}.housekeeping-actions{display:grid;grid-template-columns:1fr}.housekeeping-actions .primary{width:100%}.housekeeping-info-row{grid-template-columns:1fr;gap:4px}}
 
 .inventory-row{grid-template-columns:1.2fr .8fr .8fr .8fr auto}.inventory-row-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}.inventory-row-actions button{padding:7px 10px;font-size:12px}.inventory-import-card{margin-top:18px}.inventory-import-tools{display:grid;grid-template-columns:minmax(240px,1fr) auto auto;gap:10px;align-items:center}.inventory-import-tools input[type=file]{min-width:0}.danger.small{padding:7px 10px;font-size:12px}@media(max-width:760px){.inventory-import-tools{grid-template-columns:1fr}.inventory-row{grid-template-columns:1fr}.inventory-row-actions{justify-content:flex-start}}
+
+.inventory-edit-dialog{width:min(760px,calc(100% - 24px));height:auto;max-height:min(90vh,900px);border-radius:18px;overflow:hidden;background:#fff}.inventory-edit-body{padding:22px;overflow:auto;max-height:calc(90vh - 78px)}.inventory-edit-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}@media(max-width:620px){.inventory-edit-body{padding:16px}.inventory-edit-actions{justify-content:stretch}.inventory-edit-actions button{flex:1}}
+
+.inventory-delete-dialog{width:min(500px,calc(100% - 28px));height:auto;border-radius:22px;overflow:hidden;background:#fff}
+.delete-confirm-card{padding:30px;text-align:center}
+.delete-confirm-icon{width:58px;height:58px;margin:0 auto 14px;border-radius:50%;display:grid;place-items:center;background:#fff1ef;color:#a5453f;font-size:28px;font-weight:900;border:1px solid #e8c2be}
+.delete-confirm-card h2{font-size:28px;margin:0 0 10px}
+.delete-confirm-card .muted{margin:0 auto 16px;max-width:380px}
+.delete-confirm-note{background:#faf7f2;border:1px solid var(--line);border-radius:12px;padding:12px 14px;color:#6d746f;font-size:13px;margin-bottom:20px;text-align:left}
+.delete-confirm-button{background:#fff5f4}
+#inventoryEditForm .wide{grid-column:1/-1}
+#inventoryEditForm textarea{resize:vertical;min-height:96px}
+@media(max-width:620px){.delete-confirm-card{padding:24px 18px}.delete-confirm-card h2{font-size:24px}}

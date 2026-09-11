@@ -23,6 +23,8 @@ let adminMonthStates = new Map();
 let libraryAssets = [];
 let libraryPickerTarget = null;
 let pricingSpecialRanges = [];
+let editingInventoryId = "";
+let deletingInventoryId = "";
 
 function message(selector, text, type = "") {
   const node = $(selector);
@@ -871,6 +873,13 @@ function bindEvents() {
   $("#downloadInventoryTemplate")?.addEventListener("click",downloadInventoryTemplate);
   $("#importInventoryFile")?.addEventListener("click",importInventoryFile);
   $("#inventoryItemForm")?.addEventListener("submit",saveInventoryItem);
+  $("#inventoryEditForm")?.addEventListener("submit",saveInventoryEdit);
+  $("#closeInventoryEdit")?.addEventListener("click",closeInventoryEditDialog);
+  $("#cancelInventoryEdit")?.addEventListener("click",closeInventoryEditDialog);
+  $("#inventoryEditDialog")?.addEventListener("cancel",(event)=>{ event.preventDefault(); closeInventoryEditDialog(); });
+  $("#cancelInventoryDelete")?.addEventListener("click",closeInventoryDeleteDialog);
+  $("#confirmInventoryDelete")?.addEventListener("click",confirmInventoryDelete);
+  $("#inventoryDeleteDialog")?.addEventListener("cancel",(event)=>{ event.preventDefault(); closeInventoryDeleteDialog(); });
   $("#stockMovementForm")?.addEventListener("submit",saveStockMovement);
   $("#reportStartDate")?.addEventListener("change",renderFinanceReport);
   $("#reportEndDate")?.addEventListener("change",renderFinanceReport);
@@ -1004,25 +1013,95 @@ function renderInventory(){
   list.querySelectorAll(".inventory-delete").forEach(btn=>btn.addEventListener("click",()=>deleteInventoryItem(btn.dataset.id)));
 }
 
-async function editInventoryItem(id){
-  const item=opsInventory.find(x=>x.id===id); if(!item)return;
-  const name=prompt("品名",item.name||""); if(name===null)return;
-  const unit=prompt("單位",item.unit||""); if(unit===null)return;
-  const minRaw=prompt("安全庫存",String(Number(item.minQuantity)||0)); if(minRaw===null)return;
-  const costRaw=prompt("單位成本",String(Number(item.unitCost)||0)); if(costRaw===null)return;
-  const min=Number(minRaw),cost=Number(costRaw);
-  if(!name.trim()||!unit.trim()||min<0||cost<0||!Number.isFinite(min)||!Number.isFinite(cost)) return alert("資料格式不正確，請重新輸入。");
-  await setDoc(doc(db,"inventoryItems",id),{name:name.trim(),unit:unit.trim(),minQuantity:min,unitCost:cost,updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid},{merge:true});
-  await loadInventoryManagement();
+function closeInventoryEditDialog(){
+  editingInventoryId = "";
+  const dialog = $("#inventoryEditDialog");
+  const form = $("#inventoryEditForm");
+  if(form) form.reset();
+  message("#inventoryEditMessage", "");
+  if(dialog?.open) dialog.close();
 }
 
-async function deleteInventoryItem(id){
-  const item=opsInventory.find(x=>x.id===id); if(!item)return;
-  const qty=Number(item.quantity)||0;
-  if(!confirm(`確定刪除「${item.name||"此備品"}」嗎？\n\n目前庫存：${qty} ${item.unit||""}\n歷史進出庫紀錄會保留，只有品項本身會刪除。`)) return;
-  await deleteDoc(doc(db,"inventoryItems",id));
+async function editInventoryItem(id){
+  const item = opsInventory.find(x => x.id === id);
+  const dialog = $("#inventoryEditDialog");
+  if(!item || !dialog) return;
+  editingInventoryId = id;
+  $("#editInventoryName").value = item.name || "";
+  $("#editInventoryUnit").value = item.unit || "";
+  $("#editInventoryQty").value = String(Number(item.quantity) || 0);
+  $("#editInventoryMin").value = String(Number(item.minQuantity) || 0);
+  $("#editInventoryCost").value = String(Number(item.unitCost) || 0);
+  $("#editInventoryCategory").value = item.category || "";
+  $("#editInventoryNote").value = item.note || "";
+  message("#inventoryEditMessage", "");
+  dialog.showModal();
+  setTimeout(() => $("#editInventoryName")?.focus(), 30);
+}
+
+async function saveInventoryEdit(event){
+  event.preventDefault();
+  if(!editingInventoryId) return;
+  const name = $("#editInventoryName").value.trim();
+  const unit = $("#editInventoryUnit").value.trim();
+  const quantity = Number($("#editInventoryQty").value);
+  const min = Number($("#editInventoryMin").value);
+  const cost = Number($("#editInventoryCost").value);
+  const category = $("#editInventoryCategory").value.trim();
+  const note = $("#editInventoryNote").value.trim();
+  if(!name || !unit || quantity < 0 || min < 0 || cost < 0 || !Number.isFinite(quantity) || !Number.isFinite(min) || !Number.isFinite(cost)) {
+    return message("#inventoryEditMessage", "請完整填寫資料，且數值不可小於 0。", "error");
+  }
+  await setDoc(doc(db, "inventoryItems", editingInventoryId), {
+    name,
+    unit,
+    quantity,
+    minQuantity: min,
+    unitCost: cost,
+    category,
+    note,
+    updatedAt: serverTimestamp(),
+    updatedBy: auth.currentUser.uid
+  }, { merge: true });
+  const updatedName = name;
+  closeInventoryEditDialog();
   await loadInventoryManagement();
-  message("#inventoryItemMessage",`已刪除「${item.name||"備品"}」。歷史進出庫紀錄仍保留。`,"success");
+  message("#inventoryItemMessage", `已更新「${updatedName}」。`, "success");
+}
+
+function closeInventoryDeleteDialog(){
+  deletingInventoryId = "";
+  const dialog = $("#inventoryDeleteDialog");
+  if(dialog?.open) dialog.close();
+}
+
+function deleteInventoryItem(id){
+  const item = opsInventory.find(x => x.id === id); if(!item)return;
+  deletingInventoryId = id;
+  const qty = Number(item.quantity) || 0;
+  $("#inventoryDeleteText").textContent = `「${item.name || "此備品"}」目前庫存 ${qty} ${item.unit || ""}。刪除後將不再出現在庫存清單中。`;
+  $("#inventoryDeleteDialog")?.showModal();
+}
+
+async function confirmInventoryDelete(){
+  if(!deletingInventoryId) return;
+  const item = opsInventory.find(x => x.id === deletingInventoryId);
+  if(!item) return closeInventoryDeleteDialog();
+  const id = deletingInventoryId;
+  const name = item.name || "備品";
+  const button = $("#confirmInventoryDelete");
+  if(button){ button.disabled = true; button.textContent = "刪除中…"; }
+  try{
+    await deleteDoc(doc(db,"inventoryItems",id));
+    closeInventoryDeleteDialog();
+    await loadInventoryManagement();
+    message("#inventoryItemMessage",`已刪除「${name}」。歷史進出庫紀錄仍保留。`,"success");
+  }catch(error){
+    console.error(error);
+    message("#inventoryItemMessage","刪除失敗，請確認 Firestore Rules 是否已發布。","error");
+  }finally{
+    if(button){ button.disabled = false; button.textContent = "確認刪除"; }
+  }
 }
 
 function csvCell(v){const s=String(v??"");return /[",\n]/.test(s)?`"${s.replaceAll('"','""')}"`:s}

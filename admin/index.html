@@ -165,6 +165,7 @@
 </div>
 <div class="ops-two">
 <form id="inventoryItemForm" class="ops-card"><h3>新增備品</h3><div class="ops-grid"><label>品名<input id="inventoryName" maxlength="80" required placeholder="例如 礦泉水"></label><label>單位<input id="inventoryUnit" maxlength="20" required placeholder="瓶／包／組"></label><label>目前庫存<input id="inventoryQty" type="number" min="0" step="1" required></label><label>安全庫存<input id="inventoryMin" type="number" min="0" step="1" value="0"></label><label>單位成本<input id="inventoryCost" type="number" min="0" step="1" value="0"></label></div><button class="primary" type="submit">新增備品</button><p id="inventoryItemMessage" class="message"></p></form>
+<dialog id="inventoryEditDialog" class="inventory-edit-dialog"><div class="dialog-head"><div><p class="eyebrow">EDIT INVENTORY</p><h2>編輯備品</h2></div><button class="secondary" id="closeInventoryEdit" type="button">關閉</button></div><div class="inventory-edit-body"><form id="inventoryEditForm" class="ops-card"><h3>編輯備品資料</h3><div class="ops-grid"><label>品名<input id="editInventoryName" maxlength="80" required placeholder="例如 礦泉水"></label><label>單位<input id="editInventoryUnit" maxlength="20" required placeholder="瓶／包／組"></label><label>目前庫存<input id="editInventoryQty" type="number" min="0" step="1" required></label><label>安全庫存<input id="editInventoryMin" type="number" min="0" step="1" value="0"></label><label>單位成本<input id="editInventoryCost" type="number" min="0" step="1" value="0"></label><label>分類<input id="editInventoryCategory" maxlength="40" placeholder="例如 寢具／清潔／盥洗"></label><label class="wide">備註<textarea id="editInventoryNote" rows="3" maxlength="300" placeholder="例如：房務備品、補貨品牌或規格"></textarea></label></div><div class="inventory-edit-actions"><button class="secondary" id="cancelInventoryEdit" type="button">取消</button><button class="primary" type="submit">儲存修改</button></div><p id="inventoryEditMessage" class="message"></p></form></div></dialog>
 <form id="stockMovementForm" class="ops-card"><h3>備品進出庫</h3><label>備品<select id="stockItem" required></select></label><div class="ops-grid"><label>動作<select id="stockType"><option value="in">進貨</option><option value="out">領用／消耗</option></select></label><label>數量<input id="stockQty" type="number" min="1" step="1" required></label><label>日期<input id="stockDate" type="date" required></label></div><label>備註<input id="stockNote" maxlength="200" placeholder="例如 入住備品補充"></label><button class="primary" type="submit">儲存進出庫</button><p id="stockMessage" class="message"></p></form>
 </div>
 <div class="ops-section"><div class="ops-title"><div><h3>備品庫存表</h3><p>顯示目前庫存與安全庫存；低於安全庫存會標示提醒。</p></div></div><div id="inventoryList" class="inventory-list"></div></div>
@@ -255,6 +256,19 @@
 </section>
 </main>
 <dialog class="picker-dialog" id="libraryPickerDialog"><div class="dialog-head"><div><p class="eyebrow">CHOOSE FROM LIBRARY</p><h2 id="libraryPickerTitle">從素材庫選擇</h2></div><button class="secondary" id="closeLibraryPicker" type="button">關閉</button></div><div class="picker-body"><label class="picker-search">搜尋素材<input id="pickerSearch" placeholder="搜尋檔名或分類" type="search"/></label><p class="muted" id="pickerHint"></p><div class="library-grid picker-grid" id="pickerGrid"></div></div></dialog>
+<dialog id="inventoryDeleteDialog" class="inventory-delete-dialog">
+  <div class="delete-confirm-card">
+    <div class="delete-confirm-icon">!</div>
+    <p class="eyebrow">DELETE INVENTORY</p>
+    <h2>確定刪除這項備品？</h2>
+    <p id="inventoryDeleteText" class="muted"></p>
+    <div class="delete-confirm-note">歷史進出庫紀錄會保留，只會刪除這個備品項目。</div>
+    <div class="inventory-edit-actions">
+      <button class="secondary" id="cancelInventoryDelete" type="button">取消</button>
+      <button class="danger delete-confirm-button" id="confirmInventoryDelete" type="button">確認刪除</button>
+    </div>
+  </div>
+</dialog>
 <dialog id="previewDialog"><div class="dialog-head"><h2>草稿預覽</h2><button class="secondary" id="closePreview" type="button">關閉</button></div><iframe id="previewFrame" title="網站草稿預覽"></iframe></dialog>
 <script src="/admin/jszip.min.js"></script>
 <script src="/admin/admin.js" type="module"></script>
