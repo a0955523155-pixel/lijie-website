@@ -157,7 +157,12 @@
 
 
 <section class="panel hidden" id="inventoryPanel">
-<div class="panel-heading"><div><p class="eyebrow">INVENTORY</p><h2>庫存管理</h2><p>備品新增、進貨、領用與低庫存提醒集中在這裡。此區只管理庫存，不綁定訂單、不處理帳務。</p></div><button class="secondary" id="refreshInventory" type="button">重新整理</button></div>
+<div class="panel-heading"><div><p class="eyebrow">INVENTORY</p><h2>庫存管理</h2><p>備品新增、進貨、領用、產品清單匯入與低庫存提醒集中在這裡。此區只管理庫存，不綁定訂單、不處理帳務。</p></div><button class="secondary" id="refreshInventory" type="button">重新整理</button></div>
+<div class="ops-card inventory-import-card">
+  <div class="ops-title"><div><h3>匯入產品清單</h3><p>可匯入 Excel .xlsx 或 CSV；支援欄位：品名、單位、目前庫存、安全庫存、單位成本、分類、備註。相同品名會更新，不會重複建立。</p></div></div>
+  <div class="inventory-import-tools"><input id="inventoryImportFile" type="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"><button class="secondary" id="downloadInventoryTemplate" type="button">下載匯入範本</button><button class="primary" id="importInventoryFile" type="button">匯入清單</button></div>
+  <p id="inventoryImportMessage" class="message"></p>
+</div>
 <div class="ops-two">
 <form id="inventoryItemForm" class="ops-card"><h3>新增備品</h3><div class="ops-grid"><label>品名<input id="inventoryName" maxlength="80" required placeholder="例如 礦泉水"></label><label>單位<input id="inventoryUnit" maxlength="20" required placeholder="瓶／包／組"></label><label>目前庫存<input id="inventoryQty" type="number" min="0" step="1" required></label><label>安全庫存<input id="inventoryMin" type="number" min="0" step="1" value="0"></label><label>單位成本<input id="inventoryCost" type="number" min="0" step="1" value="0"></label></div><button class="primary" type="submit">新增備品</button><p id="inventoryItemMessage" class="message"></p></form>
 <form id="stockMovementForm" class="ops-card"><h3>備品進出庫</h3><label>備品<select id="stockItem" required></select></label><div class="ops-grid"><label>動作<select id="stockType"><option value="in">進貨</option><option value="out">領用／消耗</option></select></label><label>數量<input id="stockQty" type="number" min="1" step="1" required></label><label>日期<input id="stockDate" type="date" required></label></div><label>備註<input id="stockNote" maxlength="200" placeholder="例如 入住備品補充"></label><button class="primary" type="submit">儲存進出庫</button><p id="stockMessage" class="message"></p></form>
@@ -170,7 +175,7 @@
   <section class="ops-card housekeeping-account-card">
     <div class="housekeeping-icon">房</div>
     <div><p class="eyebrow">STAFF ACCOUNT</p><h3>現場房務帳號</h3></div>
-    <div class="housekeeping-info-row"><span>登入帳號</span><strong id="housekeepingAccountEmail">51bbsadmin@gmai.com</strong></div>
+    <div class="housekeeping-info-row"><span>登入帳號</span><strong id="housekeepingAccountEmail">51bbsadmin@gmail.com</strong></div>
     <div class="housekeeping-info-row"><span>手機入口</span><code id="housekeepingUrlText">/housekeeping/</code></div>
     <div class="housekeeping-actions"><button class="primary" id="openHousekeepingPortal" type="button">開啟房務工作台</button><button class="secondary" id="copyHousekeepingUrl" type="button">複製工作台網址</button></div>
     <p class="message" id="housekeepingAdminMessage"></p>

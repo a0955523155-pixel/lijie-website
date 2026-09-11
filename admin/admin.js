@@ -868,6 +868,8 @@ function bindEvents() {
   $("#refreshOperations")?.addEventListener("click",()=>loadOperations());
   $("#refreshReports")?.addEventListener("click",()=>loadReports());
   $("#refreshInventory")?.addEventListener("click",()=>loadInventoryManagement());
+  $("#downloadInventoryTemplate")?.addEventListener("click",downloadInventoryTemplate);
+  $("#importInventoryFile")?.addEventListener("click",importInventoryFile);
   $("#inventoryItemForm")?.addEventListener("submit",saveInventoryItem);
   $("#stockMovementForm")?.addEventListener("submit",saveStockMovement);
   $("#reportStartDate")?.addEventListener("change",renderFinanceReport);
@@ -996,8 +998,85 @@ function renderInventory(){
   const list=$("#inventoryList"); if(!list)return;
   list.innerHTML=opsInventory.length?opsInventory.map(i=>{
     const qty=Number(i.quantity)||0,min=Number(i.minQuantity)||0,isLow=qty<=min;
-    return `<div class="inventory-row ${isLow?"low":""}"><strong>${esc(i.name||"未命名備品")}</strong><span>庫存 ${qty} ${esc(i.unit||"")}</span><span>安全庫存 ${min} ${esc(i.unit||"")}</span><small>${isLow?"⚠ 低庫存":"庫存正常"}</small></div>`;
+    return `<div class="inventory-row ${isLow?"low":""}" data-inventory-id="${esc(i.id)}"><strong>${esc(i.name||"未命名備品")}</strong><span>庫存 ${qty} ${esc(i.unit||"")}</span><span>安全庫存 ${min} ${esc(i.unit||"")}</span><small>${isLow?"⚠ 低庫存":"庫存正常"}</small><div class="inventory-row-actions"><button type="button" class="secondary inventory-edit" data-id="${esc(i.id)}">編輯</button><button type="button" class="danger small inventory-delete" data-id="${esc(i.id)}">刪除</button></div></div>`;
   }).join(""):"<p class='muted'>尚未建立備品。</p>";
+  list.querySelectorAll(".inventory-edit").forEach(btn=>btn.addEventListener("click",()=>editInventoryItem(btn.dataset.id)));
+  list.querySelectorAll(".inventory-delete").forEach(btn=>btn.addEventListener("click",()=>deleteInventoryItem(btn.dataset.id)));
+}
+
+async function editInventoryItem(id){
+  const item=opsInventory.find(x=>x.id===id); if(!item)return;
+  const name=prompt("品名",item.name||""); if(name===null)return;
+  const unit=prompt("單位",item.unit||""); if(unit===null)return;
+  const minRaw=prompt("安全庫存",String(Number(item.minQuantity)||0)); if(minRaw===null)return;
+  const costRaw=prompt("單位成本",String(Number(item.unitCost)||0)); if(costRaw===null)return;
+  const min=Number(minRaw),cost=Number(costRaw);
+  if(!name.trim()||!unit.trim()||min<0||cost<0||!Number.isFinite(min)||!Number.isFinite(cost)) return alert("資料格式不正確，請重新輸入。");
+  await setDoc(doc(db,"inventoryItems",id),{name:name.trim(),unit:unit.trim(),minQuantity:min,unitCost:cost,updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid},{merge:true});
+  await loadInventoryManagement();
+}
+
+async function deleteInventoryItem(id){
+  const item=opsInventory.find(x=>x.id===id); if(!item)return;
+  const qty=Number(item.quantity)||0;
+  if(!confirm(`確定刪除「${item.name||"此備品"}」嗎？\n\n目前庫存：${qty} ${item.unit||""}\n歷史進出庫紀錄會保留，只有品項本身會刪除。`)) return;
+  await deleteDoc(doc(db,"inventoryItems",id));
+  await loadInventoryManagement();
+  message("#inventoryItemMessage",`已刪除「${item.name||"備品"}」。歷史進出庫紀錄仍保留。`,"success");
+}
+
+function csvCell(v){const s=String(v??"");return /[",\n]/.test(s)?`"${s.replaceAll('"','""')}"`:s}
+function downloadInventoryTemplate(){
+  const rows=[["品名","單位","目前庫存","安全庫存","單位成本","分類","備註"],["床","張",5,5,0,"寢具","範例，可直接刪除後填入自己的型錄"],["棉被胎","組",6,9,0,"寢具",""]];
+  const csv="\ufeff"+rows.map(r=>r.map(csvCell).join(",")).join("\r\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download="俐姐的家-備品匯入範本.csv";document.body.appendChild(a);a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);a.remove();
+}
+function normalizeHeader(v){return String(v??"").trim().toLowerCase().replace(/[\s_－-]/g,"")}
+function inventoryFieldMap(headers){
+  const aliases={name:["品名","名稱","產品名稱","備品名稱","name"],unit:["單位","unit"],quantity:["目前庫存","庫存","數量","quantity","qty"],minQuantity:["安全庫存","最低庫存","minquantity","minqty"],unitCost:["單位成本","成本","unitcost","cost"],category:["分類","類別","category"],note:["備註","說明","note","notes"]};
+  const norm=headers.map(normalizeHeader),out={};
+  for(const [key,arr] of Object.entries(aliases)){const idx=norm.findIndex(h=>arr.map(normalizeHeader).includes(h));if(idx>=0)out[key]=idx}
+  return out;
+}
+function parseCsv(text){
+  const rows=[];let row=[],cell="",quoted=false;
+  for(let i=0;i<text.length;i++){const ch=text[i];if(quoted){if(ch==='"'&&text[i+1]==='"'){cell+='"';i++;}else if(ch==='"')quoted=false;else cell+=ch;}else if(ch==='"')quoted=true;else if(ch===','){row.push(cell);cell="";}else if(ch==='\n'){row.push(cell.replace(/\r$/,""));rows.push(row);row=[];cell="";}else cell+=ch;}
+  if(cell.length||row.length){row.push(cell);rows.push(row)}return rows.filter(r=>r.some(x=>String(x).trim()));
+}
+async function parseXlsx(file){
+  if(typeof JSZip==="undefined")throw new Error("Excel 解析元件未載入，請重新整理後再試。");
+  const zip=await JSZip.loadAsync(await file.arrayBuffer());
+  const parser=new DOMParser();
+  let shared=[];const ss=zip.file("xl/sharedStrings.xml");
+  if(ss){const xml=parser.parseFromString(await ss.async("text"),"application/xml");shared=[...xml.querySelectorAll("si")].map(si=>[...si.querySelectorAll("t")].map(t=>t.textContent||"").join(""));}
+  const wbFile=zip.file("xl/workbook.xml"),relsFile=zip.file("xl/_rels/workbook.xml.rels");
+  if(!wbFile||!relsFile)throw new Error("找不到 Excel 工作表。");
+  const wb=parser.parseFromString(await wbFile.async("text"),"application/xml"),rels=parser.parseFromString(await relsFile.async("text"),"application/xml");
+  const first=wb.querySelector("sheet"); if(!first)throw new Error("Excel 沒有工作表。");
+  const rid=first.getAttribute("r:id")||first.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships","id");
+  const rel=[...rels.querySelectorAll("Relationship")].find(x=>x.getAttribute("Id")===rid); if(!rel)throw new Error("無法讀取第一個工作表。");
+  let target=rel.getAttribute("Target")||"";target=target.replace(/^\//,"");if(!target.startsWith("xl/"))target="xl/"+target.replace(/^\.\//,"");
+  const sheet=zip.file(target);if(!sheet)throw new Error("找不到 Excel 第一個工作表內容。");
+  const xml=parser.parseFromString(await sheet.async("text"),"application/xml"),rows=[];
+  for(const r of xml.querySelectorAll("sheetData > row")){const vals=[];for(const c of r.querySelectorAll("c")){const ref=c.getAttribute("r")||"A1",letters=(ref.match(/[A-Z]+/i)||["A"])[0].toUpperCase();let idx=0;for(const ch of letters)idx=idx*26+(ch.charCodeAt(0)-64);idx--;const t=c.getAttribute("t"),v=c.querySelector("v")?.textContent??"";vals[idx]=t==="s"?(shared[Number(v)]??""):t==="inlineStr"?(c.querySelector("is t")?.textContent??""):v;}rows.push(vals.map(x=>x??""));}
+  return rows.filter(r=>r.some(x=>String(x).trim()));
+}
+function rowsToInventory(rows){
+  if(rows.length<2)throw new Error("清單至少需要標題列與一筆產品資料。");
+  const map=inventoryFieldMap(rows[0]);if(map.name===undefined)throw new Error("找不到「品名」欄位。");
+  return rows.slice(1).map(r=>({name:String(r[map.name]??"").trim(),unit:String(r[map.unit]??"").trim(),quantity:map.quantity===undefined?null:Number(r[map.quantity]),minQuantity:map.minQuantity===undefined?null:Number(r[map.minQuantity]),unitCost:map.unitCost===undefined?null:Number(r[map.unitCost]),category:String(r[map.category]??"").trim(),note:String(r[map.note]??"").trim()})).filter(x=>x.name).map(x=>({...x,quantity:Number.isFinite(x.quantity)?Math.max(0,x.quantity):null,minQuantity:Number.isFinite(x.minQuantity)?Math.max(0,x.minQuantity):0,unitCost:Number.isFinite(x.unitCost)?Math.max(0,x.unitCost):0}));
+}
+async function importInventoryFile(){
+  const input=$("#inventoryImportFile"),file=input?.files?.[0];if(!file)return message("#inventoryImportMessage","請先選擇 Excel 或 CSV 檔案。","error");
+  try{
+    message("#inventoryImportMessage","正在讀取並匯入產品清單…");
+    const lower=file.name.toLowerCase(),rows=lower.endsWith(".xlsx")?await parseXlsx(file):parseCsv(await file.text());
+    const items=rowsToInventory(rows);if(!items.length)throw new Error("清單中沒有可匯入的產品。");
+    const existing=new Map(opsInventory.map(i=>[String(i.name||"").trim().toLowerCase(),i]));let created=0,updated=0;
+    const batch=writeBatch(db);
+    for(const x of items){const found=existing.get(x.name.toLowerCase()),id=found?.id||crypto.randomUUID();const data={name:x.name,unit:x.unit||found?.unit||"個",minQuantity:(x.minQuantity??(Number(found?.minQuantity)||0)),unitCost:(x.unitCost??(Number(found?.unitCost)||0)),category:x.category||found?.category||"",note:x.note||found?.note||"",updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid};if(x.quantity!==null)data.quantity=x.quantity;else if(!found)data.quantity=0;if(found){updated++;batch.set(doc(db,"inventoryItems",id),data,{merge:true});}else{created++;batch.set(doc(db,"inventoryItems",id),{...data,createdBy:auth.currentUser.uid,createdAt:serverTimestamp()});}}
+    await batch.commit();input.value="";await loadInventoryManagement();message("#inventoryImportMessage",`匯入完成：新增 ${created} 項、更新 ${updated} 項。`,"success");
+  }catch(e){console.error(e);message("#inventoryImportMessage",e?.message||"匯入失敗，請確認檔案格式。","error");}
 }
 async function loadInventoryManagement(){
   if(!db)return;

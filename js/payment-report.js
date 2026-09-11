@@ -5,26 +5,24 @@ const bookingId=params.get('booking')||'';
 const money=n=>`NT$ ${Number(n||0).toLocaleString('zh-TW')}`;
 let booking=null;
 
-function showForm(revising=false){
-  $('#paymentReportForm').classList.remove('hidden');
-  $('#paymentSuccess').classList.add('hidden');
-  $('#paymentLocked').classList.add('hidden');
-  $('#paymentResult').textContent=revising?'請修正資料後重新送出；這是唯一一次自行修改機會。':'';
-  $('#paymentSubmit').disabled=false;
-  $('#paymentSubmit').textContent=revising?'送出修正資料':'送出匯款回報';
-}
-function showSubmitted(canRevise){
-  $('#paymentReportForm').classList.add('hidden');
+function setFormVisible(show){$('#paymentReportForm').classList.toggle('hidden',!show)}
+function showSuccess(text,canRevise=false){
   $('#paymentResult').textContent='';
-  $('#paymentLocked').classList.add('hidden');
   $('#paymentSuccess').classList.remove('hidden');
+  $('#paymentSuccessText').innerHTML=text;
   $('#paymentRevise').classList.toggle('hidden',!canRevise);
 }
-function showLocked(){
-  $('#paymentReportForm').classList.add('hidden');
-  $('#paymentSuccess').classList.add('hidden');
-  $('#paymentLocked').classList.remove('hidden');
-  $('#paymentResult').textContent='';
+function applyReportState(){
+  if(!booking)return;
+  if(booking.paymentReportHasReport){
+    setFormVisible(false);
+    if(booking.paymentReportLocked) showSuccess('這筆匯款回報已完成核帳，資料已鎖定。💚',false);
+    else if(booking.paymentReportCanRevise) showSuccess('已收到你的匯款回報 💚<br>如果剛剛資料填錯，可再修改 1 次。',true);
+    else showSuccess('已收到你的匯款回報 💚<br>修正次數已使用，如仍需更改請聯絡官方 LINE。',false);
+  }else{
+    $('#paymentSuccess').classList.add('hidden');
+    setFormVisible(true);
+  }
 }
 
 async function load(){
@@ -39,13 +37,18 @@ async function load(){
     if(booking.paymentReportPayerName) $('#payerName').value=booking.paymentReportPayerName;
     if(booking.paymentReportLast5) $('#payerLast5').value=booking.paymentReportLast5;
     $('#paymentLoading').classList.add('hidden'); $('#paymentContent').classList.remove('hidden');
-    if(booking.paymentReportLocked) showLocked();
-    else if(booking.paymentReportHasReport) showSubmitted(Boolean(booking.paymentReportCanRevise));
-    else showForm(false);
+    applyReportState();
   }catch(e){ $('#paymentLoading').textContent=`目前無法開啟匯款回報：${e.message||e}`; }
 }
 
-$('#paymentRevise').addEventListener('click',()=>showForm(true));
+$('#paymentRevise').addEventListener('click',()=>{
+  if(!booking?.paymentReportCanRevise)return;
+  $('#paymentSuccess').classList.add('hidden');
+  setFormVisible(true);
+  $('#paymentSubmit').textContent='送出修正資料';
+  $('#paymentResult').textContent='你有 1 次修正機會，送出後將不能再次自行修改。';
+  $('#payerName').focus();
+});
 
 $('#paymentReportForm').addEventListener('submit',async e=>{
   e.preventDefault(); const payerName=$('#payerName').value.trim(),last5=$('#payerLast5').value.trim();
@@ -55,12 +58,17 @@ $('#paymentReportForm').addEventListener('submit',async e=>{
   try{
     const r=await fetch('/api/line-payment-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session,bookingId,payerName,last5})});
     const j=await r.json(); if(!r.ok) throw new Error(j.error||'送出失敗');
-    booking={...(booking||{}),paymentReportPayerName:payerName,paymentReportLast5:last5,paymentReportHasReport:true,paymentReportCanRevise:Boolean(j.canRevise),paymentReportLocked:false,paymentReportRevisionCount:Number(j.revisionCount)||0};
-    showSubmitted(Boolean(j.canRevise));
+    booking.paymentReportHasReport=true;
+    booking.paymentReportPayerName=payerName;
+    booking.paymentReportLast5=last5;
+    booking.paymentReportRevisionCount=Number(j.revisionCount)||0;
+    booking.paymentReportCanRevise=Boolean(j.canRevise);
+    setFormVisible(false);
+    showSuccess(j.isRevision?'修正資料已送出 💚<br>這次修正已使用，如仍需更改請聯絡官方 LINE。':'已收到你的匯款回報 💚<br>如果剛剛資料填錯，可再修改 1 次。',Boolean(j.canRevise));
   }catch(err){
     const code=String(err.message||err);
-    if(code.includes('PAYMENT_REPORT_LOCKED')||code.includes('PAYMENT_REPORT_REVISION_USED')) showLocked();
-    else { $('#paymentResult').textContent=`送出失敗：${code}`; btn.disabled=false; }
+    const text=code==='PAYMENT_REPORT_LOCKED'?'這筆訂金已完成核帳，不能再修改。':code==='PAYMENT_REPORT_REVISION_USED'?'這筆回報已使用過修正機會，如需再改請聯絡官方 LINE。':`送出失敗：${code}`;
+    $('#paymentResult').textContent=text; btn.disabled=false;
   }
 });
 
