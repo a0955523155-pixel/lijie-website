@@ -1003,25 +1003,9 @@ function bookingLabel(b){return `${b.startDate||"—"}｜${b.guestName||"未填"
 function fillBookingSelects(){const options=['<option value="">不綁定訂單</option>',...opsBookings.map(b=>`<option value="${esc(b.id)}">${esc(bookingLabel(b))}</option>`)].join("");["#expenseBooking"].forEach(sel=>{if($(sel))$(sel).innerHTML=options;});if($("#opsPaymentBooking"))$("#opsPaymentBooking").innerHTML=['<option value="">請選訂單</option>',...opsBookings.map(b=>`<option value="${esc(b.id)}">${esc(bookingLabel(b))}</option>`)].join("");}
 function fillInventorySelect(){if($("#stockItem"))$("#stockItem").innerHTML=['<option value="">請選備品</option>',...opsInventory.map(i=>`<option value="${esc(i.id)}">${esc(i.name)}（${Number(i.quantity)||0} ${esc(i.unit||"")}）</option>`)].join("");}
 async function readCollection(name){const snap=await getDocs(collection(db,name));return snap.docs.map(d=>({id:d.id,...d.data()}));}
-async function backfillMissingCancellationRefunds(){
-  if(!db)return false;
-  const existing=new Set(opsPayments.filter(x=>x.type==="refund"&&x.bookingId&&(x.cancellationRefund===true||String(x.note||"").includes("取消退款"))).map(x=>x.bookingId));
-  const missing=opsBookings.filter(b=>b.status==="cancelled"&&Number(b.cancellationRefundAmount||0)>0&&!existing.has(b.id));
-  if(!missing.length)return false;
-  const batch=writeBatch(db);
-  for(const b of missing){
-    const refundId=crypto.randomUUID();
-    const reason=b.cancellationReason||b.cancellationRequestReason||"舊訂單取消退款";
-    const note=[`取消退款｜${reason}`,b.cancellationDepositNote||"",`系統補登舊取消退款`].filter(Boolean).join("｜");
-    batch.set(doc(db,"paymentTransactions",refundId),{bookingId:b.id,type:"refund",amount:Number(b.cancellationRefundAmount||0),method:b.cancellationRefundMethod||"轉帳",date:String(b.cancelledAt?.toDate?.()?.toLocaleDateString("en-CA")||new Date().toLocaleDateString("en-CA")),last5:"",note,cancellationRefund:true,reconciledFromBooking:true,isTest:Boolean(b.isTest),createdBy:auth.currentUser?.uid||"system",createdAt:serverTimestamp()});
-  }
-  await batch.commit();
-  return true;
-}
 async function loadOperations(){
   if(!db)return; setOperationsDefaultDates();
   [opsBookings,opsPayments,opsExpenses]=await Promise.all([readCollection("bookings"),readCollection("paymentTransactions"),readCollection("expenseTransactions")]);
-  if(await backfillMissingCancellationRefunds()) opsPayments=await readCollection("paymentTransactions");
   opsBookings.sort((a,b)=>String(a.startDate||"9999-99-99").localeCompare(String(b.startDate||"9999-99-99"))); opsPayments.sort((a,b)=>String(b.date||b.createdAt||"").localeCompare(String(a.date||a.createdAt||""))); opsExpenses.sort((a,b)=>String(b.date||b.createdAt||"").localeCompare(String(a.date||a.createdAt||""))); opsInventory.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"zh-Hant"));
   fillBookingSelects();fillInventorySelect();
   if($("#orderArrivalFilter")&&!$("#orderArrivalFilter").value&&orderArrivalMode==="date") setNearestArrivalFilter();

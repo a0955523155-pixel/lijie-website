@@ -2,8 +2,8 @@ import { test,expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 const sdk=await readFile(new URL('./firebase-stub.js',import.meta.url),'utf8');
 const syntheticBooking={id:'B-SYNTHETIC-VERY-LONG-ORDER-ID-123456789',guestName:'隔離測試旅客',startDate:'2026-11-01',endDate:'2026-11-03',people:12,status:'pending',totalAmount:12000,depositRequired:3000,paidAmount:0,paymentReportStatus:'pending',paymentReportPayerName:'隔離付款人',paymentReportLast5:'12345',paymentReportAmount:3000,paymentReportedAt:'synthetic-report',phone:'0900000000',email:'synthetic-very-long-address@example.invalid',notes:'這是合成資料，測試手機長文字以及鍵盤操作。'.repeat(6),cancellationRequestStatus:'pending',cancellationRequestReason:'合成取消原因',refundRequestStatus:'pending',refundRequestReason:'合成退款原因'};
-async function isolate(page,{failCalendar=false}={}){
-  await page.addInitScript(({b,failCalendar})=>window.__fake={bookings:[b],paymentTransactions:[],expenseTransactions:[],inventoryItems:[],availability:[],writes:[],failCalendar,failWrites:false,slowWrites:false},{b:syntheticBooking,failCalendar});
+async function isolate(page,{failCalendar=false,booking=syntheticBooking}={}){
+  await page.addInitScript(({b,failCalendar})=>window.__fake={bookings:[b],paymentTransactions:[],expenseTransactions:[],inventoryItems:[],availability:[],writes:[],failCalendar,failWrites:false,slowWrites:false},{b:booking,failCalendar});
   await page.route('**/*',async route=>{
     const url=new URL(route.request().url());
     if(url.host==='www.gstatic.com')return route.fulfill({contentType:'text/javascript',body:sdk});
@@ -19,6 +19,14 @@ async function operations(page){
   await page.getByRole('button',{name:'營運管理',exact:true}).click();await page.locator('#orderShowAll').click();
   await expect(page.locator('.ops-order')).toHaveCount(1);
 }
+test('opening and refreshing legacy cancelled orders never backfills or changes finance records',async({page})=>{
+  const booking={...syntheticBooking,status:'cancelled',paidAmount:3000,cancellationRefundAmount:1500,cancellationReason:'合成舊取消訂單'};
+  await isolate(page,{booking});await operations(page);
+  await page.locator('#refreshOperations').click();
+  await expect(page.locator('.ops-order')).toHaveCount(1);
+  const data=await page.evaluate(()=>({bookings:window.__fake.bookings,payments:window.__fake.paymentTransactions,expenses:window.__fake.expenseTransactions,availability:window.__fake.availability,writes:window.__fake.writes.filter(x=>['bookings','paymentTransactions','expenseTransactions','availability'].includes(x.ref.collection))}));
+  expect(data).toEqual({bookings:[booking],payments:[],expenses:[],availability:[],writes:[]});
+});
 test('mobile and desktop order/details/calendar/review/refund layouts fit; keyboard focus and touch targets',async({page})=>{
   await isolate(page);const errors=[];page.on('pageerror',e=>errors.push(e.message));await operations(page);
   for(const width of [320,375,390,768,1440]){
