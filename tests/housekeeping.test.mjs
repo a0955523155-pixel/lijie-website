@@ -109,6 +109,6 @@ test('completed, cancelled and rescheduled jobs become stale without sending',as
 test('parallel notification runs send at most once; an ambiguous Gmail failure is never auto-retried',async()=>{
   seed();fake.set(SETTINGS_PATH,activeSettings);const job=newConfirmationJobs(stay,activeSettings,now).find(x=>x.kind==='checkout');fake.set(`housekeepingNotifications/${job.id}`,job);let sent=0;
   await Promise.all([1,2].map(()=>runHousekeepingReminders({now,mailerReady:true,deliver:async()=>{sent++;await new Promise(r=>setTimeout(r,1));}})));assert.equal(sent,1);
-  fake.set(`housekeepingNotifications/${job.id}`,job);let attempts=0;for(let i=0;i<2;i++)await runHousekeepingReminders({now,mailerReady:true,deliver:async()=>{attempts++;throw new Error('SYNTHETIC_NETWORK_RESULT_UNKNOWN');}});
+  fake.reset();seed();fake.set(SETTINGS_PATH,activeSettings);fake.set(`housekeepingNotifications/${job.id}`,job);let attempts=0;for(let i=0;i<2;i++)await runHousekeepingReminders({now,mailerReady:true,deliver:async()=>{attempts++;throw new Error('SYNTHETIC_NETWORK_RESULT_UNKNOWN');}});
   assert.equal(attempts,1);assert.equal(fake.docs.get(`housekeepingNotifications/${job.id}`).status,'delivery_uncertain');
 });

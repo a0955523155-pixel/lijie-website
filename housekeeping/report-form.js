@@ -1,5 +1,5 @@
 const MAX_BYTES=500*1024;
-const errors={PHOTO_REQUIRED_FOR_THIS_STAY:"請先成功上傳這筆住宿的客廳照片。",INVALID_PHOTO:"照片無法使用，請改用 JPEG、PNG 或 WebP。",CHECKOUT_DATE_CHANGED:"住宿日期已變更，請重新整理後回報。",CHECKOUT_NOT_DUE:"尚未到退房日期。",BOOKING_NOT_CONFIRMED:"這筆住宿尚未確認或已取消。",REQUEST_ID_REUSED:"照片已變更，請重新選取後再試。"};
+const errors={REMINDERS_DISABLED:"提醒停用中，尚不能重新排入寄送。",NOTIFICATION_STILL_IN_FLIGHT:"先前寄送可能仍在處理，請至少等候 15 分鐘並核對寄件備份。",NOTIFICATION_NO_LONGER_APPLICABLE:"住宿已改期、取消或工作已完成，不能重寄舊提醒。",NOTIFICATION_REVIEW_CHANGED:"這筆寄送紀錄已變更，請重新整理後核對。",PHOTO_REQUIRED_FOR_THIS_STAY:"請先成功上傳這筆住宿的客廳照片。",INVALID_PHOTO:"照片無法使用，請改用 JPEG、PNG 或 WebP。",CHECKOUT_DATE_CHANGED:"住宿日期已變更，請重新整理後回報。",CHECKOUT_NOT_DUE:"尚未到退房日期。",BOOKING_NOT_CONFIRMED:"這筆住宿尚未確認或已取消。",REQUEST_ID_REUSED:"照片已變更，請重新選取後再試。"};
 export async function privateRequest(path,token,body){
   let response;try{response=await fetch(path,{method:body?"POST":"GET",cache:"no-store",headers:{Authorization:`Bearer ${await token()}`,...(body?{"Content-Type":"application/json"}:{})},...(body?{body:JSON.stringify(body)}:{})});}catch{throw new Error("連線中斷，內容已保留，請再試一次。");}
   if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(errors[data.error]||"資料未能儲存，請保留畫面再試一次。");}

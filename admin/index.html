@@ -94,6 +94,9 @@
 </div>
 <div class="selected-day-overview" id="selectedDayOverview"></div><div class="ops-orders" id="operationsOrders"></div>
 <details class="admin-maintenance"><summary>資料保留說明</summary><p>正式新舊訂單與付款紀錄均保留，批次清除已停用。</p><button class="danger" id="clearLegacyOrders" type="button" disabled hidden>清除所有舊訂單資料</button><p class="message" id="legacyDataMessage"></p></details></div>
+<form class="ops-card hidden" id="rescheduleForm" data-ops-section="orders" style="margin-bottom:18px">
+<h3>確認住宿改期</h3><p id="rescheduleOriginal" class="muted"></p><p class="muted">原訂單金額及已收款保留；如需調整，請按既有帳務流程處理。</p><input id="rescheduleBookingId" type="hidden"><input id="rescheduleExpectedStart" type="hidden"><input id="rescheduleExpectedEnd" type="hidden"><div class="ops-grid"><label>新入住日期<input id="rescheduleStart" type="date" required></label><label>新退房日期<input id="rescheduleEnd" type="date" required></label></div><div class="ops-order-actions"><button class="primary" type="submit">確認並儲存改期</button><button class="secondary" id="closeReschedule" type="button">返回訂單</button></div><p id="rescheduleMessage" class="message" aria-live="polite"></p>
+</form>
 <form class="ops-card hidden" id="cancellationForm" data-ops-section="orders" style="margin-bottom:18px">
 <h3>客戶取消預約 SOP</h3>
 <p class="muted">客戶提出取消時，先留下原因與訂金處理方式，再確認取消。日期會釋出，但原訂單、收款與取消紀錄都會保留。</p>
@@ -196,8 +199,9 @@
 </div>
 <section class="ops-card housekeeping-records"><div class="ops-title"><div><h3>退房整備完成紀錄</h3><p>保留完成時間、回報者與私有客廳照片。</p></div></div><div class="housekeeping-record-toolbar"><label>退房月份<input id="housekeepingReportMonth" type="month"></label><button id="refreshHousekeepingReports" class="secondary" type="button">重新整理</button></div><div id="housekeepingReports" class="housekeeping-report-list"></div></section>
 <section class="ops-card housekeeping-reminder-settings"><h3>房務 Gmail 提醒</h3><p id="housekeepingReminderStatus" class="muted">提醒尚未啟用，收件人與時間待確認。</p><p class="muted">登入帳號與提醒收件人分開設定。通知附房務工作台連結；入住提醒只請房務備妥鑰匙，若有密碼則回傳官方 LINE。</p><form id="housekeepingReminderForm"><div class="ops-grid"><label>房務姓名<input id="housekeepingContactName" maxlength="80" autocomplete="name"></label><label>提醒收件信箱<input id="housekeepingReminderEmail" type="email" autocomplete="email"></label><label>入住當天提醒時間（台灣）<input id="housekeepingArrivalTime" type="time"></label><label>退房當天提醒時間（台灣）<input id="housekeepingCheckoutTime" type="time"></label></div><button class="primary" type="submit">儲存設定（保持停用）</button><button id="activateHousekeepingReminders" class="secondary hidden" type="button">啟用後續工作提醒</button><p id="housekeepingReminderMessage" class="message" aria-live="polite"></p></form></section>
-<div class="ops-section housekeeping-guide"><div class="ops-title"><div><h3>手機使用方式</h3><p>建議把工作台加入手機主畫面，房務每天直接點圖示即可查看當月住宿與登記庫存。</p></div></div>
-<ol><li>用手機開啟房務工作台。</li><li>使用房務 Email 與 Firebase Authentication 中設定的密碼登入。</li><li>登入後預設顯示本月住宿日曆；點日期看當天住宿名單。</li><li>切到「庫存管理」即可登記進貨或領用。</li></ol>
+<section class="ops-card housekeeping-records"><h3>提醒寄送與人工核對</h3><p>寄送結果待確認時，先核對寄件備份與房務是否收到。重新排入可能造成重複信，且不會立即寄送；提醒停用時不能重排。</p><p id="housekeepingNotificationMessage" class="message" aria-live="polite"></p><div id="housekeepingNotifications" class="housekeeping-report-list"></div></section>
+<div class="ops-section housekeeping-guide"><div class="ops-title"><div><h3>手機使用方式</h3><p>建議把工作台加入手機主畫面，房務每天直接點圖示即可查看當月住宿與登記庫存。工作台連結不能取代登入。</p></div></div>
+<ol><li>用手機開啟 https://www.5-1bbs.com/housekeeping/。</li><li>使用既有房務 Email 與設定的密碼登入；密碼由管理者原有方式提供，不在連結中。</li><li>點退房日期及對應訂單，確認清潔完成、拍一張客廳整潔照片，再按「完成回報」。</li><li>看到「退房整備完成」才算回報成功；失敗請保留畫面重試。切到「庫存管理」可登記進貨或領用。</li></ol>
 </div>
 </section>
 

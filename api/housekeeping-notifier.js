@@ -1,5 +1,6 @@
+import crypto from "node:crypto";
 import {bookingTransaction,getPrivateRecord,listCollectionRecords} from "./firestore-admin.js";
-import {SETTINGS_PATH,stayKey,housekeepingMail} from "./housekeeping-notification-plan.js";
+import {SETTINGS_PATH,stayKey,housekeepingMail,notificationEventKey} from "./housekeeping-notification-plan.js";
 import {reportId} from "./housekeeping-records.js";
 import {gmailReady,sendMail} from "./gmail-mailer.js";
 
@@ -11,18 +12,20 @@ export async function runHousekeepingReminders({now=new Date(),deliver=sendMail,
   const jobs=(await listCollectionRecords("housekeepingNotifications")).filter(x=>x.status==="pending"&&x.dueAt<=now.toISOString()).sort((a,b)=>a.dueAt.localeCompare(b.dueAt)).slice(0,20);let sent=0;
   for(const job of jobs){
     const claim=await bookingTransaction(async tx=>{
-      const current=await tx.get(`housekeepingNotifications/${job.id}`);if(current?.status!=="pending")return null;
+      const current=await tx.get(`housekeepingNotifications/${job.id}`);if(current?.status!=="pending"||current.dueAt>now.toISOString())return null;
       const config=await tx.get(SETTINGS_PATH);if(!config?.enabled)return null;
       const booking=await tx.get(`bookings/${job.bookingId}`);
       const complete=job.kind==="checkout"?await tx.get(`housekeepingReports/${reportId(job.bookingId,job.endDate,job.startDate)}`):null;
       const today=now.toLocaleDateString("en-CA",{timeZone:"Asia/Taipei"}),day=job.kind==="checkout"?job.endDate:job.startDate;
       if(!booking||booking.isTest||booking.status!=="confirmed"||stayKey({id:job.bookingId,...booking})!==job.revision||config.activationId!==job.activationId||complete?.status==="completed"||day<today){tx.set(`housekeepingNotifications/${job.id}`,{status:"stale",closedAt:now.toISOString()},true);return null;}
-      tx.set(`housekeepingNotifications/${job.id}`,{status:"sending",attemptedAt:now.toISOString()},true);return {booking,config};
+      const eventPath=`housekeepingNotificationEvents/${notificationEventKey(job)}`,event=await tx.get(eventPath);
+      if(event&&["sent","manually_verified","sending","delivery_uncertain"].includes(event.status)){tx.set(`housekeepingNotifications/${job.id}`,{status:["sent","manually_verified"].includes(event.status)?"suppressed":"held_for_review",previousJobId:event.notificationId},true);return null;}
+      const attemptId=crypto.randomUUID(),attempt={status:"sending",attemptedAt:now.toISOString(),attemptId};tx.set(`housekeepingNotifications/${job.id}`,attempt,true);tx.set(eventPath,{...attempt,notificationId:job.id},true);return {booking,config,attemptId,eventPath};
     });
     if(!claim)continue;
     let status="delivery_uncertain";
     try{await deliver(housekeepingMail(job,{id:job.bookingId,...claim.booking},claim.config));status="sent";sent++;}catch{/* Never retry an ambiguous send and risk duplicate staff emails. */}
-    await bookingTransaction(async tx=>{const current=await tx.get(`housekeepingNotifications/${job.id}`);if(current?.status==="sending")tx.set(`housekeepingNotifications/${job.id}`,{status,finishedAt:now.toISOString()},true);});
+    await bookingTransaction(async tx=>{const current=await tx.get(`housekeepingNotifications/${job.id}`),event=await tx.get(claim.eventPath),patch={status,finishedAt:now.toISOString()};if(current?.status==="sending"&&current.attemptId===claim.attemptId)tx.set(`housekeepingNotifications/${job.id}`,patch,true);if(event?.status==="sending"&&event.attemptId===claim.attemptId)tx.set(claim.eventPath,patch,true);});
   }
   return {enabled:true,sent};
 }

@@ -1,7 +1,7 @@
 import { autoSeasonMap, bookingWindowMaxDate } from "./holiday-market.js";
 import crypto from "node:crypto";
 import { paymentReportPatch } from "./payment-report-state.js";
-import {newConfirmationJobs,SETTINGS_PATH} from "./housekeeping-notification-plan.js";
+import {newConfirmationJobs,SETTINGS_PATH,stayKey,replaceStayReminderJobs} from "./housekeeping-notification-plan.js";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SCOPE = "https://www.googleapis.com/auth/datastore";
@@ -232,9 +232,16 @@ export async function setBookingStatus(id,status){
     const rows=b.isTest?[]:await readStay(tx,b);
     if(status==="confirmed")checkStay(rows,id);
     const alreadyConfirmed=status==="confirmed"&&b.status==="confirmed";
-    const notificationJobs=status==="confirmed"&&!alreadyConfirmed&&!b.isTest?newConfirmationJobs({id,...b,status:"confirmed"},await tx.get(SETTINGS_PATH)):[];
+    const settings=status==="confirmed"&&!alreadyConfirmed&&!b.isTest?await tx.get(SETTINGS_PATH):null;
+    const notificationJobs=newConfirmationJobs({id,...b,status},settings);
     const existingJobs=await Promise.all(notificationJobs.map(job=>tx.get(`housekeepingNotifications/${job.id}`)));
     const patch={status,updatedAt:nowIso()};
+    if(notificationJobs.length)patch.housekeepingNotificationActivationId=settings.activationId;
+    if(status==="cancelled"){
+      const revision=stayKey({id,...b});
+      const jobs=await Promise.all(["confirmed","arrival","checkout"].map(kind=>tx.get(`housekeepingNotifications/HN${revision}-${kind}`)));
+      jobs.forEach((job,index)=>{if(job)tx.set(`housekeepingNotifications/HN${revision}-${["confirmed","arrival","checkout"][index]}`,{...(job.status==="pending"?{status:"stale"}:{}),supersededAt:nowIso()},true);});
+    }
     if(status==="confirmed")patch.confirmedAt=b.confirmedAt||nowIso();
     if(status==="cancelled")patch.cancelledAt=nowIso();
     notificationJobs.forEach((job,index)=>{if(!existingJobs[index])tx.set(`housekeepingNotifications/${job.id}`,job);});
@@ -243,6 +250,28 @@ export async function setBookingStatus(id,status){
       else if(state?.bookingId===id)tx.delete(`availability/${day}`);
     }
     tx.set(path,patch,true);return {id,...b,...patch,alreadyConfirmed};
+  });
+}
+export async function rescheduleConfirmedBooking(id,input,actor,now=new Date()){
+  if(!/^[A-Za-z0-9_-]{1,120}$/.test(id))throw new Error("INVALID_ID");
+  const {startDate,endDate,expectedStartDate,expectedEndDate}=input;
+  for(const day of [startDate,endDate]){const date=new Date(`${day}T00:00:00Z`);if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==day)throw new Error("INVALID_DATES");}
+  const days=stayDays(startDate,endDate);if(!days.length)throw new Error("INVALID_DATES");
+  const fields={};for(const key of ["guestName","phone","email","deposit","notes"]){if(key in input)fields[key]=String(input[key]).slice(0,key==="notes"?1000:200);}
+  if("people" in input){const people=Number(input.people);if(!Number.isInteger(people)||people<1||people>12)throw new Error("INVALID_PEOPLE");fields.people=people;}
+  const operation=crypto.createHash("sha256").update(JSON.stringify({id,startDate,endDate,expectedStartDate,expectedEndDate,fields})).digest("hex");
+  return bookingTransaction(async tx=>{
+    const b=await tx.get(`bookings/${id}`);if(!b)throw new Error("BOOKING_NOT_FOUND");if(b.status!=="confirmed")throw new Error("BOOKING_NOT_CONFIRMED");
+    if(b.lastRescheduleOperation===operation)return {id,...b,duplicate:true};
+    if(b.startDate!==expectedStartDate||b.endDate!==expectedEndDate)throw new Error("BOOKING_DATE_CHANGED");
+    const changed=b.startDate!==startDate||b.endDate!==endDate;
+    const oldDays=b.isTest?[]:stayDays(b.startDate,b.endDate),newDays=b.isTest?[]:days,all=[...new Set([...oldDays,...newDays])];
+    const locks=await Promise.all(all.map(day=>tx.get(`availability/${day}`)));
+    checkStay(all.map((day,index)=>({day,state:locks[index]})).filter(x=>newDays.includes(x.day)),id);
+    const patch={...fields,startDate,endDate,updatedAt:now.toISOString(),rescheduledBy:actor.uid,lastRescheduleOperation:operation};
+    if(changed){patch.housekeepingRevision=(Number(b.housekeepingRevision)||0)+1;await replaceStayReminderJobs(tx,{id,...b},{id,...b,...patch},await tx.get(SETTINGS_PATH),now);}
+    for(let i=0;i<all.length;i++){const day=all[i];if(newDays.includes(day))tx.set(`availability/${day}`,{status:"booked",bookingId:id,updatedAt:now.toISOString()});else if(locks[i]?.bookingId===id)tx.delete(`availability/${day}`);}
+    tx.set(`bookings/${id}`,patch,true);return {id,...b,...patch,duplicate:false};
   });
 }
 export async function createPendingBooking(id,data){
