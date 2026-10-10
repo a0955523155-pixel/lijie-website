@@ -1,6 +1,7 @@
 import { autoSeasonMap, bookingWindowMaxDate } from "./holiday-market.js";
 import crypto from "node:crypto";
 import { paymentReportPatch } from "./payment-report-state.js";
+import {newConfirmationJobs,SETTINGS_PATH} from "./housekeeping-notification-plan.js";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SCOPE = "https://www.googleapis.com/auth/datastore";
@@ -104,6 +105,26 @@ export async function getBooking(id){
   if(r.status===404) return null;
   if(!r.ok) throw new Error(`FIRESTORE_BOOKING_READ_FAILED ${r.status} ${await r.text()}`);
   const j=await r.json(); return { id, ...fromFields(j.fields||{}) };
+}
+
+// Server-only operational records. Browser rules remain closed; callers must
+// authorize the existing staff/admin identity before requesting these records.
+export async function getPrivateRecord(path){
+  const r=await authedFetch(`${base()}/${path}`);
+  if(r.status===404)return null;
+  if(!r.ok)throw new Error(`FIRESTORE_RECORD_READ_FAILED ${r.status}`);
+  return fromFields((await r.json()).fields||{});
+}
+export async function listCollectionRecords(collection){
+  const rows=[],seen=new Set();let pageToken="";
+  do{
+    const params=new URLSearchParams({pageSize:"500"});if(pageToken)params.set("pageToken",pageToken);
+    const r=await authedFetch(`${base()}/${collection}?${params}`);
+    if(!r.ok)throw new Error(`FIRESTORE_RECORD_LIST_FAILED ${r.status}`);
+    const data=await r.json();rows.push(...(data.documents||[]).map(d=>({id:docIdFromName(d.name),...fromFields(d.fields||{})})));
+    pageToken=data.nextPageToken||"";if(pageToken&&seen.has(pageToken))throw new Error("FIRESTORE_REPEATED_PAGE_TOKEN");seen.add(pageToken);
+  }while(pageToken);
+  return rows;
 }
 
 
@@ -211,9 +232,12 @@ export async function setBookingStatus(id,status){
     const rows=b.isTest?[]:await readStay(tx,b);
     if(status==="confirmed")checkStay(rows,id);
     const alreadyConfirmed=status==="confirmed"&&b.status==="confirmed";
+    const notificationJobs=status==="confirmed"&&!alreadyConfirmed&&!b.isTest?newConfirmationJobs({id,...b,status:"confirmed"},await tx.get(SETTINGS_PATH)):[];
+    const existingJobs=await Promise.all(notificationJobs.map(job=>tx.get(`housekeepingNotifications/${job.id}`)));
     const patch={status,updatedAt:nowIso()};
     if(status==="confirmed")patch.confirmedAt=b.confirmedAt||nowIso();
     if(status==="cancelled")patch.cancelledAt=nowIso();
+    notificationJobs.forEach((job,index)=>{if(!existingJobs[index])tx.set(`housekeepingNotifications/${job.id}`,job);});
     for(const {day,state} of rows){
       if(status==="confirmed")tx.set(`availability/${day}`,{status:"booked",bookingId:id,updatedAt:nowIso()});
       else if(state?.bookingId===id)tx.delete(`availability/${day}`);

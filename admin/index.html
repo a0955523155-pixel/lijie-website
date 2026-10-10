@@ -33,6 +33,7 @@
 <div><p class="eyebrow">CONTENT STUDIO</p><h1>俐姐的家</h1><p class="muted" id="accountEmail"></p></div>
 <div class="top-actions"><a class="secondary" href="../" rel="noopener noreferrer" target="_blank">查看官網</a><button class="secondary" id="logoutButton" type="button">登出</button></div>
 </header>
+<label class="workspace-menu">功能選單<select id="workspaceMenu"><optgroup label="營運與房務"><option value="operations">訂單與帳務</option><option value="housekeeping">房務回報與提醒</option><option value="inventory">庫存管理</option><option value="reports">報表中心</option></optgroup><optgroup label="網站內容"><option value="photos">照片管理</option><option value="library">圖片素材庫</option><option value="copy">文字與資訊</option><option value="publish">預覽與發布</option></optgroup><optgroup label="價格"><option value="pricing">價格設定</option></optgroup></select></label>
 <nav aria-label="後台分類" class="tabs">
 <button class="tab active" data-tab="photos" type="button">照片管理</button>
 <button class="tab" data-tab="library" type="button">圖片素材庫</button>
@@ -75,10 +76,11 @@
 <div class="library-grid" id="libraryGrid"></div>
 </section>
 
-<section class="panel hidden" id="operationsPanel">
-<div class="panel-heading"><div><p class="eyebrow">OPERATIONS</p><h2>營運管理</h2><p>訂單確認、收款、退款、支出與取消集中在這裡管理；官方 LINE 僅作為客戶預約、查詢、匯款回報與取消申請窗口。</p></div><button class="secondary" id="refreshOperations" type="button">重新整理</button></div>
+<section class="panel hidden" id="operationsPanel" data-ops-mode="orders">
+<div class="panel-heading"><div><p class="eyebrow">OPERATIONS</p><h2>營運管理</h2><p>點日期查看入住、住宿與退房；帳務與支出可由選單切換。</p></div><button class="secondary" id="refreshOperations" type="button">重新整理</button></div>
 
-<div class="ops-section"><div class="ops-title"><div><h3>訂單進度</h3><p>預設依入住日只顯示該日訂單，不會一次列出全部。收款後會自動更新「待收訂金／部分付款／已結清」。</p></div></div>
+<label class="ops-mobile-menu">工作項目<select id="opsWorkspaceMenu"><option value="orders">訂單與日曆</option><option value="payments">收款／退款</option><option value="expenses">支出紀錄</option></select></label>
+<div class="ops-section" data-ops-section="orders"><div class="ops-title"><div><h3>住宿日曆</h3><p>點日期，下方看完整名單與工作。</p></div></div>
 <div class="ops-filter-bar arrival-filter-wrap">
 <div class="arrival-calendar" id="arrivalCalendar">
 <div class="arrival-calendar-head"><button aria-label="上一個月" class="secondary" id="arrivalPrevMonth" type="button">‹</button><strong id="arrivalMonthLabel"></strong><button aria-label="下一個月" class="secondary" id="arrivalNextMonth" type="button">›</button></div>
@@ -86,12 +88,13 @@
 <div class="arrival-calendar-grid" id="arrivalCalendarGrid"></div>
 </div>
 <input id="orderArrivalFilter" type="hidden"/>
-<div class="ops-order-actions"><button class="secondary" id="orderFilterToday" type="button">今天</button><button class="secondary" id="orderFilterNearest" type="button">最近入住</button><button class="secondary" id="orderShowAll" type="button">顯示全部</button></div>
+<label class="date-view-menu">日期檢視<select id="orderDateView"><option value="selected">點選日曆日期</option><option value="today">今天</option><option value="nearest">最近入住</option><option value="all">全部訂單（含歷史）</option></select></label>
+<div class="ops-order-actions date-quick-actions"><button class="secondary" id="orderFilterToday" type="button">今天</button><button class="secondary" id="orderFilterNearest" type="button">最近入住</button><button class="secondary" id="orderShowAll" type="button">顯示全部</button></div>
 <span class="muted" id="orderFilterSummary"></span>
 </div>
-<div class="ops-orders" id="operationsOrders"></div>
-<div class="old-data-tools"><div><strong>舊資料整理</strong><p class="muted">如果目前這些都是舊版／測試留下的訂單，可一次清除「所有訂單與其綁定的收退款、支出及日期占用」。正式啟用後不要隨意使用。</p></div><button class="danger" id="clearLegacyOrders" type="button">清除所有舊訂單資料</button><p class="message" id="legacyDataMessage"></p></div></div>
-<form class="ops-card hidden" id="cancellationForm" style="margin-bottom:18px">
+<div class="selected-day-overview" id="selectedDayOverview"></div><div class="ops-orders" id="operationsOrders"></div>
+<details class="admin-maintenance"><summary>資料保留說明</summary><p>正式新舊訂單與付款紀錄均保留，批次清除已停用。</p><button class="danger" id="clearLegacyOrders" type="button" disabled hidden>清除所有舊訂單資料</button><p class="message" id="legacyDataMessage"></p></details></div>
+<form class="ops-card hidden" id="cancellationForm" data-ops-section="orders" style="margin-bottom:18px">
 <h3>客戶取消預約 SOP</h3>
 <p class="muted">客戶提出取消時，先留下原因與訂金處理方式，再確認取消。日期會釋出，但原訂單、收款與取消紀錄都會保留。</p>
 <input id="cancelBookingId" type="hidden"/>
@@ -109,16 +112,16 @@
 <p class="message" id="cancellationMessage"></p>
 </form>
 <div class="ops-two">
-<form class="ops-card" id="paymentForm"><h3>新增收款／退款紀錄</h3><label>綁定訂單<select id="opsPaymentBooking" required=""></select></label><div class="ops-grid"><label>類型<select id="opsPaymentType"><option value="payment">收款</option><option value="refund">退款</option></select></label><label>金額<input id="opsPaymentAmount" min="1" required="" step="1" type="number"/></label><label>方式<select id="opsPaymentMethod"><option>轉帳</option><option>現金</option></select></label><label>日期<input id="opsPaymentDate" required="" type="date"/></label></div><label>匯款帳號末五碼／來源<input id="opsPaymentLast5" maxlength="30" placeholder="例如 12345"/></label><label>備註<textarea id="opsPaymentNote" maxlength="300" rows="2"></textarea></label><button class="primary" type="submit">新增紀錄</button><p class="message" id="opsPaymentMessage"></p></form>
-<form class="ops-card" id="expenseForm"><h3>新增支出</h3><label>綁定訂單（可不選）<select id="expenseBooking"></select></label><div class="ops-grid"><label>分類<select id="expenseCategory"><option>清潔</option><option>備品</option><option>維修</option><option>水電</option><option>平台／手續費</option><option>其他</option></select></label><label>金額<input id="expenseAmount" min="1" required="" step="1" type="number"/></label><label>付款方式<select id="expenseMethod"><option>轉帳</option><option>現金</option><option>信用卡</option><option>其他</option></select></label><label>日期<input id="expenseDate" required="" type="date"/></label></div><label>備註<textarea id="expenseNote" maxlength="300" rows="2"></textarea></label><button class="primary" type="submit">新增支出</button><p class="message" id="expenseMessage"></p></form>
+<form class="ops-card" id="paymentForm" data-ops-section="payments"><h3>新增收款／退款紀錄</h3><label>綁定訂單<select id="opsPaymentBooking" required=""></select></label><div class="ops-grid"><label>類型<select id="opsPaymentType"><option value="payment">收款</option><option value="refund">退款</option></select></label><label>金額<input id="opsPaymentAmount" min="1" required="" step="1" type="number"/></label><label>方式<select id="opsPaymentMethod"><option>轉帳</option><option>現金</option></select></label><label>日期<input id="opsPaymentDate" required="" type="date"/></label></div><label>匯款帳號末五碼／來源<input id="opsPaymentLast5" maxlength="30" placeholder="例如 12345"/></label><label>備註<textarea id="opsPaymentNote" maxlength="300" rows="2"></textarea></label><button class="primary" type="submit">新增紀錄</button><p class="message" id="opsPaymentMessage"></p></form>
+<form class="ops-card" id="expenseForm" data-ops-section="expenses"><h3>新增支出</h3><label>綁定訂單（可不選）<select id="expenseBooking"></select></label><div class="ops-grid"><label>分類<select id="expenseCategory"><option>清潔</option><option>備品</option><option>維修</option><option>水電</option><option>平台／手續費</option><option>其他</option></select></label><label>金額<input id="expenseAmount" min="1" required="" step="1" type="number"/></label><label>付款方式<select id="expenseMethod"><option>轉帳</option><option>現金</option><option>信用卡</option><option>其他</option></select></label><label>日期<input id="expenseDate" required="" type="date"/></label></div><label>備註<textarea id="expenseNote" maxlength="300" rows="2"></textarea></label><button class="primary" type="submit">新增支出</button><p class="message" id="expenseMessage"></p></form>
 </div>
 
 <div class="ops-two ops-recent-wrap">
-  <section class="ops-card">
+  <section class="ops-card" data-ops-section="payments">
     <div class="ops-title"><div><h3>近期收款／退款紀錄</h3><p>新增、取消退款或核對訂金後，會立即同步顯示最近紀錄。</p></div></div>
     <div class="ops-history" id="recentPaymentHistory"></div>
   </section>
-  <section class="ops-card">
+  <section class="ops-card" data-ops-section="expenses">
     <div class="ops-title"><div><h3>近期支出紀錄</h3><p>顯示最近支出，方便新增後立即核對。</p></div></div>
     <div class="ops-history" id="recentExpenseHistory"></div>
   </section>
@@ -171,7 +174,7 @@
 <div class="ops-section"><div class="ops-title"><div><h3>備品庫存表</h3><p>顯示目前庫存與安全庫存；低於安全庫存會標示提醒。</p></div></div><div id="inventoryList" class="inventory-list"></div></div>
 </section>
 <section class="panel hidden" id="housekeepingPanel">
-<div class="panel-heading"><div><p class="eyebrow">HOUSEKEEPING ACCESS</p><h2>房務管理</h2><p>房務人員使用獨立的手機工作台，只能查看住宿日曆與操作庫存，不會進入完整管理後台。</p></div><a class="secondary" href="/housekeeping/" target="_blank" rel="noopener">開啟手機工作台</a></div>
+<div class="panel-heading"><div><p class="eyebrow">HOUSEKEEPING ACCESS</p><h2>房務管理</h2><p>查看房務完成紀錄與確認照片；收件人及時間確認後，再啟用工作提醒。</p></div><a class="secondary" href="/housekeeping/" target="_blank" rel="noopener">開啟手機工作台</a></div>
 <div class="housekeeping-admin-grid">
   <section class="ops-card housekeeping-account-card">
     <div class="housekeeping-icon">房</div>
@@ -185,11 +188,14 @@
     <h3>房務可使用功能</h3>
     <div class="permission-list">
       <div><strong>✓ 本月住宿日曆</strong><span>看姓名、人數、入住與退房日期、確認狀態。</span></div>
+      <div><strong>✓ 退房整備回報</strong><span>整理完成、拍客廳照片、按完成回報。照片僅授權人員可看。</span></div>
       <div><strong>✓ 庫存管理</strong><span>查看庫存、低庫存提醒、登記進貨與領用、新增備品。</span></div>
-      <div class="permission-deny"><strong>— 不提供</strong><span>房價、電話、Email、收退款、支出、報表、網站設定及管理員權限。</span></div>
+      <div class="permission-deny"><strong>— 不提供</strong><span>房價、Email、收退款、支出、報表、網站設定及管理員權限。</span></div>
     </div>
   </section>
 </div>
+<section class="ops-card housekeeping-records"><div class="ops-title"><div><h3>退房整備完成紀錄</h3><p>保留完成時間、回報者與私有客廳照片。</p></div></div><div class="housekeeping-record-toolbar"><label>退房月份<input id="housekeepingReportMonth" type="month"></label><button id="refreshHousekeepingReports" class="secondary" type="button">重新整理</button></div><div id="housekeepingReports" class="housekeeping-report-list"></div></section>
+<section class="ops-card housekeeping-reminder-settings"><h3>房務 Gmail 提醒</h3><p id="housekeepingReminderStatus" class="muted">提醒尚未啟用，收件人與時間待確認。</p><p class="muted">登入帳號與提醒收件人分開設定。通知附房務工作台連結；入住提醒只請房務備妥鑰匙，若有密碼則回傳官方 LINE。</p><form id="housekeepingReminderForm"><div class="ops-grid"><label>房務姓名<input id="housekeepingContactName" maxlength="80" autocomplete="name"></label><label>提醒收件信箱<input id="housekeepingReminderEmail" type="email" autocomplete="email"></label><label>入住當天提醒時間（台灣）<input id="housekeepingArrivalTime" type="time"></label><label>退房當天提醒時間（台灣）<input id="housekeepingCheckoutTime" type="time"></label></div><button class="primary" type="submit">儲存設定（保持停用）</button><button id="activateHousekeepingReminders" class="secondary hidden" type="button">啟用後續工作提醒</button><p id="housekeepingReminderMessage" class="message" aria-live="polite"></p></form></section>
 <div class="ops-section housekeeping-guide"><div class="ops-title"><div><h3>手機使用方式</h3><p>建議把工作台加入手機主畫面，房務每天直接點圖示即可查看當月住宿與登記庫存。</p></div></div>
 <ol><li>用手機開啟房務工作台。</li><li>使用房務 Email 與 Firebase Authentication 中設定的密碼登入。</li><li>登入後預設顯示本月住宿日曆；點日期看當天住宿名單。</li><li>切到「庫存管理」即可登記進貨或領用。</li></ol>
 </div>

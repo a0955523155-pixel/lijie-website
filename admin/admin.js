@@ -1,4 +1,5 @@
 import { runBusyAction } from "./action-state.js";
+import {installHousekeepingAdmin} from "./housekeeping-panel.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, query, where, documentId, orderBy, limit, getDocs, runTransaction, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
@@ -12,6 +13,7 @@ const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 let auth;
 let db;
 let storage;
+let housekeepingAdmin;
 let draft = clone(DEFAULT_CONTENT);
 let draggedIndex = null;
 let selectedFiles = [];
@@ -505,6 +507,7 @@ async function ensureAdmin(user) {
   await loadDraft();
   clearBookingEditor();
   setOperationsDefaultDates();
+  if(matchMedia("(max-width:760px)").matches&&!new URLSearchParams(location.search).get("tab"))switchAdminWorkspace("operations");
   if(document.querySelector('.tab[data-tab="operations"]')?.classList.contains("active")) await loadOperations();
 }
 
@@ -849,7 +852,20 @@ async function clearAllTestData(){
   message("#testModeMessage","測試訂單與相關測試帳務已全部清除。","success");await loadOperations();
 }
 
+function switchAdminWorkspace(name){
+  const names=["photos","library","operations","reports","inventory","housekeeping","pricing","copy","publish"];if(!names.includes(name))return;
+  document.querySelectorAll(".tab").forEach(tab=>tab.classList.toggle("active",tab.dataset.tab===name));
+  names.forEach(panel=>$(`#${panel}Panel`).classList.toggle("hidden",panel!==name));if($("#workspaceMenu"))$("#workspaceMenu").value=name;
+  if(name==="operations")loadOperations().catch(console.error);
+  if(name==="reports")loadReports().catch(console.error);
+  if(name==="inventory")loadInventoryManagement().catch(console.error);
+  if(name==="pricing")loadPricing();if(name==="library")loadLibrary();if(name==="housekeeping")housekeepingAdmin?.load();
+}
 function bindEvents() {
+  housekeepingAdmin=installHousekeepingAdmin(()=>auth.currentUser.getIdToken());
+  $("#workspaceMenu")?.addEventListener("change",e=>switchAdminWorkspace(e.target.value));
+  $("#opsWorkspaceMenu")?.addEventListener("change",e=>{$("#operationsPanel").dataset.opsMode=e.target.value;});
+  $("#orderDateView")?.addEventListener("change",e=>{const target={today:"orderFilterToday",nearest:"orderFilterNearest",all:"orderShowAll"}[e.target.value];if(target)$("#"+target)?.click();});
   $("#loginForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     message("#loginMessage", "正在驗證…");
@@ -857,15 +873,7 @@ function bindEvents() {
     catch { message("#loginMessage", "登入失敗，請確認信箱與密碼。", "error"); }
   });
   $("#logoutButton").addEventListener("click", async () => { await signOut(auth); location.reload(); });
-  document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab === button));
-    ["photos", "library", "operations", "reports", "inventory", "housekeeping", "pricing", "copy", "publish"].forEach((name) => $(`#${name}Panel`).classList.toggle("hidden", name !== button.dataset.tab));
-    if (button.dataset.tab === "operations") loadOperations().catch((e)=>console.error(e));
-    if (button.dataset.tab === "reports") loadReports().catch((e)=>console.error(e));
-    if (button.dataset.tab === "inventory") loadInventoryManagement().catch((e)=>console.error(e));
-    if (button.dataset.tab === "pricing") loadPricing();
-    if (button.dataset.tab === "library") loadLibrary();
-  }));
+  document.querySelectorAll(".tab").forEach(button=>button.addEventListener("click",()=>switchAdminWorkspace(button.dataset.tab)));
   $("#openHousekeepingPortal")?.addEventListener("click",()=>window.open("/housekeeping/","_blank","noopener"));
   $("#copyHousekeepingUrl")?.addEventListener("click",async()=>{
     const url=new URL("/housekeeping/",location.origin).href;
@@ -1217,7 +1225,7 @@ function setNearestArrivalFilter(){
 function filteredOrdersForDisplay(){
   if(orderArrivalMode==="all")return [...opsBookings];
   const date=$("#orderArrivalFilter")?.value||"";
-  return date?opsBookings.filter(b=>b.startDate===date):[];
+  return date?opsBookings.filter(b=>b.status!=="cancelled"&&b.startDate<=date&&b.endDate>=date):[];
 }
 function ymdLocal(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${day}`;}
 function bookingOccupiesNight(b,date){
@@ -1238,7 +1246,7 @@ function bookingDaySummary(date){
   if(confirmed)parts.push(`${confirmed} 已確認`);
   if(depositReady)parts.push(`${depositReady} 待確認`);
   else if(pending)parts.push(`${pending} 待訂金`);
-  return {count:stayRows.length||arrivals.length||departures.length,text:parts.join("｜"),cls:confirmed&&confirmed===stayRows.length&&stayRows.length?"done":"warn",stay:stayRows.length>0,departure:departures.length>0};
+  return {count:new Set([...stayRows,...arrivals,...departures].map(b=>b.id)).size,text:parts.join("｜"),cls:confirmed&&confirmed===stayRows.length&&stayRows.length?"done":"warn",stay:stayRows.length>0,departure:departures.length>0};
 }
 function renderArrivalCalendar(){
   const grid=$("#arrivalCalendarGrid"),label=$("#arrivalMonthLabel"); if(!grid||!label)return;
@@ -1248,15 +1256,17 @@ function renderArrivalCalendar(){
   for(let d=1;d<=days;d++){
     const dt=new Date(y,m,d),date=ymdLocal(dt),sum=bookingDaySummary(date);
     const cls=["arrival-day",sum.count?"has-orders":"",sum.stay?"is-stay-night":"",sum.departure?"is-departure":"",date===selected?"is-selected":"",date===today?"is-today":""].filter(Boolean).join(" ");
-    cells.push(`<button class="${cls}" type="button" data-arrival-date="${date}"><span class="arrival-day-num">${d}</span><span class="arrival-day-note ${sum.cls}">${esc(sum.text)}</span></button>`);
+    const short=count=>count>9?"9+":String(count),arrivals=opsBookings.filter(b=>b.status!=="cancelled"&&b.startDate===date).length,departures=opsBookings.filter(b=>b.status!=="cancelled"&&b.endDate===date).length;
+    const tag=arrivals&&departures?`${short(sum.count)}組`:departures?`退${short(departures)}`:arrivals?`入${short(arrivals)}`:sum.count?`${short(sum.count)}組`:"—";
+    cells.push(`<button class="${cls}" type="button" data-arrival-date="${date}" aria-pressed="${date===selected}" aria-label="${date}：${esc(sum.text)}"><span class="arrival-day-num">${d}</span><span class="arrival-day-note ${sum.cls}">${tag}</span></button>`);
   }
   grid.innerHTML=cells.join("");
-  grid.querySelectorAll("[data-arrival-date]").forEach(btn=>btn.addEventListener("click",()=>{const date=btn.dataset.arrivalDate;$("#orderArrivalFilter").value=date;orderArrivalMode="date";renderOperations();}));
+  grid.querySelectorAll("[data-arrival-date]").forEach(btn=>btn.addEventListener("click",()=>{const date=btn.dataset.arrivalDate;$("#orderArrivalFilter").value=date;orderArrivalMode="date";if($("#orderDateView"))$("#orderDateView").value="selected";renderOperations();}));
 }
 function syncPaymentBookingOptions(){
   const sel=$("#opsPaymentBooking"); if(!sel)return;
   const date=$("#orderArrivalFilter")?.value||"";
-  const rows=(orderArrivalMode==="all"?opsBookings:opsBookings.filter(b=>b.startDate===date)).filter(b=>b.status!=="cancelled");
+  const rows=filteredOrdersForDisplay().filter(b=>b.status!=="cancelled");
   const current=sel.value;
   sel.innerHTML='<option value="">請選擇</option>'+rows.map(b=>`<option value="${esc(b.id)}">${esc(b.startDate||"—")}｜${esc(b.guestName||"未填")}｜${esc(b.id)}</option>`).join("");
   if(rows.some(b=>b.id===current))sel.value=current; else if(rows.length===1)sel.value=rows[0].id;
@@ -1286,9 +1296,11 @@ function renderRecentOperationsHistory(){
 function renderOperations(){
   // 日曆優先渲染，避免單筆訂單資料異常時整個月曆一起消失。
   renderArrivalCalendar();
+  const selectedDate=$("#orderArrivalFilter")?.value,overview=$("#selectedDayOverview");
+  if(overview){overview.hidden=orderArrivalMode==="all";overview.textContent=selectedDate?`${selectedDate.replaceAll("-","/")}・${bookingDaySummary(selectedDate).text}`:"點選日期查看工作與名單";}
   const formalBookings=opsBookings.filter(b=>!b.isTest),formalIds=new Set(formalBookings.map(b=>b.id));
   const confirmed=formalBookings.filter(b=>b.status==="confirmed");const received=opsPayments.filter(x=>!x.isTest&&(!x.bookingId||formalIds.has(x.bookingId))).reduce((s,x)=>s+(x.type==="refund"?-1:1)*(Number(x.amount)||0),0);const balance=confirmed.reduce((s,b)=>s+Math.max(0,(Number(b.totalAmount??b.quotedTotal)||0)-paidFor(b.id)),0);const expenses=opsExpenses.filter(x=>!x.isTest&&(!x.bookingId||formalIds.has(x.bookingId))).reduce((s,x)=>s+(Number(x.amount)||0),0);
-  const displayOrders=filteredOrdersForDisplay(); const orders=$("#operationsOrders"); const filterDate=$("#orderArrivalFilter")?.value||""; if($("#orderFilterSummary"))$("#orderFilterSummary").textContent=orderArrivalMode==="all"?`顯示全部 ${opsBookings.length} 筆`:`入住日 ${filterDate||"—"}・${displayOrders.length} 筆`; orders.innerHTML=displayOrders.length?displayOrders.map(b=>{const paid=paidFor(b.id),total=Number(b.totalAmount??b.quotedTotal)||0,bal=Math.max(0,total-paid),fs=financeStatusFor(b,paid),cls=fs==="已結清"?"done":fs==="已取消"?"cancel":"warn";return `<article class="ops-order ${b.isTest?"test-order":""}"><div class="ops-order-head"><div><strong>${esc(b.guestName||"未填")}｜${esc(b.id)}${b.isTest?'<span class="test-badge">TEST</span>':''}</strong><div class="ops-order-meta"><span>${esc(b.startDate||"—")} → ${esc(b.endDate||"—")}</span><span>${Number(b.people)||"—"} 人</span><span>${esc(b.phone||"")}</span><span>${esc(b.email||"")}</span></div>${serviceRequestNotice(b)}${b.paymentReportStatus==="pending"?`<div class="ops-request-alert payment-report-alert"><strong>客戶已回報訂金｜待核帳</strong><span>付款人：${esc(b.paymentReportPayerName||"未填")}｜末五碼：${esc(b.paymentReportLast5||"—")}｜回報金額：${twd(b.paymentReportAmount||b.depositRequired||3000)}</span></div>`:""}</div><span class="status-pill ${cls}">${esc(b.status==="confirmed"?fs:b.status==="cancelled"?"已取消":"等待後台確認")}</span></div><div class="ops-order-money"><span>訂單總額<br><strong>${twd(total)}</strong></span><span>訂金<br><strong>${Number(b.depositRequired)>0?twd(b.depositRequired):"未設定"}</strong></span><span>已收<br><strong>${twd(paid)}</strong></span><span>未收<br><strong>${twd(bal)}</strong></span></div><details class="ops-order-details"><summary>訂單詳情與備註</summary><dl><dt>訂單編號</dt><dd>${esc(b.id)}</dd><dt>聯絡電話</dt><dd>${esc(b.phone||"未填")}</dd><dt>Email</dt><dd>${esc(b.email||"未填")}</dd><dt>需求</dt><dd>${esc(b.purpose||"未填")}</dd><dt>備註</dt><dd>${esc(b.notes||"無")}</dd></dl></details><div class="ops-order-actions"><button class="secondary" type="button" data-total="${esc(b.id)}">調整總額</button>${b.paymentReportStatus==="pending"&&paid<Number(b.depositRequired||3000)?`<button class="primary" type="button" data-verify-deposit="${esc(b.id)}">確認訂金入帳</button>`:""}${b.status==="pending"&&paid>=Number(b.depositRequired||3000)?`<button class="primary" type="button" data-confirm-booking="${esc(b.id)}">確認預約</button>`:""}${b.status!=="cancelled"?`<button class="danger" type="button" data-cancel="${esc(b.id)}">後台取消預約</button>`:""}</div></article>`}).join(""):`<p class='muted'>${orderArrivalMode==="all"?"目前沒有訂單。":"這個入住日目前沒有訂單。"}</p>`;
+  const displayOrders=filteredOrdersForDisplay(); const orders=$("#operationsOrders"); const filterDate=$("#orderArrivalFilter")?.value||""; if($("#orderFilterSummary"))$("#orderFilterSummary").textContent=orderArrivalMode==="all"?`顯示全部 ${opsBookings.length} 筆`:`日期 ${filterDate||"—"}・${displayOrders.length} 筆`; orders.innerHTML=displayOrders.length?displayOrders.map(b=>{const paid=paidFor(b.id),total=Number(b.totalAmount??b.quotedTotal)||0,bal=Math.max(0,total-paid),fs=financeStatusFor(b,paid),cls=fs==="已結清"?"done":fs==="已取消"?"cancel":"warn";return `<article class="ops-order ${b.isTest?"test-order":""}"><div class="ops-order-head"><div><strong>${esc(b.guestName||"未填")}｜${esc(b.id)}${b.isTest?'<span class="test-badge">TEST</span>':''}</strong><div class="ops-order-meta"><span>${esc(b.startDate||"—")} → ${esc(b.endDate||"—")}</span><span>${Number(b.people)||"—"} 人</span><span>${esc(b.phone||"")}</span><span>${esc(b.email||"")}</span></div>${serviceRequestNotice(b)}${b.paymentReportStatus==="pending"?`<div class="ops-request-alert payment-report-alert"><strong>客戶已回報訂金｜待核帳</strong><span>付款人：${esc(b.paymentReportPayerName||"未填")}｜末五碼：${esc(b.paymentReportLast5||"—")}｜回報金額：${twd(b.paymentReportAmount||b.depositRequired||3000)}</span></div>`:""}</div><span class="status-pill ${cls}">${esc(b.status==="confirmed"?fs:b.status==="cancelled"?"已取消":"等待後台確認")}</span></div><div class="ops-order-money"><span>訂單總額<br><strong>${twd(total)}</strong></span><span>訂金<br><strong>${Number(b.depositRequired)>0?twd(b.depositRequired):"未設定"}</strong></span><span>已收<br><strong>${twd(paid)}</strong></span><span>未收<br><strong>${twd(bal)}</strong></span></div><details class="ops-order-details"><summary>訂單詳情與備註</summary><dl><dt>訂單編號</dt><dd>${esc(b.id)}</dd><dt>聯絡電話</dt><dd>${esc(b.phone||"未填")}</dd><dt>Email</dt><dd>${esc(b.email||"未填")}</dd><dt>需求</dt><dd>${esc(b.purpose||"未填")}</dd><dt>備註</dt><dd>${esc(b.notes||"無")}</dd></dl></details><div class="ops-order-actions"><button class="secondary" type="button" data-total="${esc(b.id)}">調整總額</button>${b.paymentReportStatus==="pending"&&paid<Number(b.depositRequired||3000)?`<button class="primary" type="button" data-verify-deposit="${esc(b.id)}">確認訂金入帳</button>`:""}${b.status==="pending"&&paid>=Number(b.depositRequired||3000)?`<button class="primary" type="button" data-confirm-booking="${esc(b.id)}">確認預約</button>`:""}${b.status!=="cancelled"?`<button class="danger" type="button" data-cancel="${esc(b.id)}">後台取消預約</button>`:""}</div></article>`}).join(""):`<p class='muted'>${orderArrivalMode==="all"?"目前沒有訂單。":"這個日期目前沒有住宿工作。"}</p>`;
   orders.querySelectorAll("[data-total]").forEach(btn=>btn.addEventListener("click",()=>editOrderTotal(btn.dataset.total)));orders.querySelectorAll("[data-verify-deposit]").forEach(btn=>btn.addEventListener("click",()=>verifyReportedDeposit(btn.dataset.verifyDeposit)));orders.querySelectorAll("[data-confirm-booking]").forEach(btn=>btn.addEventListener("click",()=>confirmBookingInAdmin(btn.dataset.confirmBooking)));orders.querySelectorAll("[data-cancel]").forEach(btn=>btn.addEventListener("click",()=>cancelOrderById(btn.dataset.cancel)));
   syncPaymentBookingOptions();
   renderRecentOperationsHistory();
@@ -1357,6 +1369,7 @@ async function perform_confirmCancellationSop(){
   if(!notify?.ok)alert("訂單已完成取消，但客戶 LINE／Email 通知未成功送出，請直接聯繫客戶確認。");
 }
 async function clearLegacyOrderData(){
+  if($("#clearLegacyOrders")?.disabled)return message("#legacyDataMessage","正式新舊訂單均保留，批次清除已停用。","error");
   if(!opsBookings.length)return message("#legacyDataMessage","目前沒有訂單資料。","success");
   const bookingIds=new Set(opsBookings.map(b=>b.id));
   const relatedPayments=opsPayments.filter(x=>x.bookingId&&bookingIds.has(x.bookingId));

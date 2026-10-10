@@ -16,7 +16,8 @@ async function isolate(page,{failCalendar=false,booking=syntheticBooking}={}){
 }
 async function operations(page){
   await page.goto('/admin/');await expect(page.locator('#dashboardView')).toBeVisible();
-  await page.getByRole('button',{name:'營運管理',exact:true}).click();await page.locator('#orderShowAll').click();
+  if(await page.locator('#workspaceMenu').isVisible())await page.locator('#workspaceMenu').selectOption('operations');else await page.getByRole('button',{name:'營運管理',exact:true}).click();
+  if(await page.locator('#orderDateView').isVisible())await page.locator('#orderDateView').selectOption('all');else await page.locator('#orderShowAll').click();
   await expect(page.locator('.ops-order')).toHaveCount(1);
 }
 test('opening and refreshing legacy cancelled orders never backfills or changes finance records',async({page})=>{
@@ -80,7 +81,7 @@ test('LINE calendar failure disables unknown days, retains guest data, and allow
 });
 test('mobile reports keep tables readable inside a scroll region without page overflow',async({page})=>{
   await isolate(page);await operations(page);await page.setViewportSize({width:320,height:812});
-  await page.getByRole('button',{name:'報表中心',exact:true}).click();await page.locator('#reportStartDate').fill('2026-11-01');await page.locator('#reportEndDate').fill('2026-11-30');await page.locator('#reportEndDate').dispatchEvent('change');await expect(page.locator('#financeOrdersReport table')).toBeVisible();
+  if(await page.locator('#workspaceMenu').isVisible())await page.locator('#workspaceMenu').selectOption('reports');else await page.getByRole('button',{name:'報表中心',exact:true}).click();await page.locator('#reportStartDate').fill('2026-11-01');await page.locator('#reportEndDate').fill('2026-11-30');await page.locator('#reportEndDate').dispatchEvent('change');await expect(page.locator('#financeOrdersReport table')).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
   const wrapper=page.locator('.report-table-wrap').first();expect(await wrapper.evaluate(e=>e.scrollWidth>e.clientWidth)).toBeTruthy();
 });
