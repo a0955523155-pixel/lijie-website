@@ -18,6 +18,6 @@ const html=await readFile('index.html','utf8');
 const structured=JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)[1]);
 if(structured.maximumAttendeeCapacity!==12)throw new Error('Incorrect capacity');
 await rm('dist',{recursive:true,force:true});await mkdir('dist');
-for(const dir of [...roots,'css','images'])await cp(dir,`dist/${dir}`,{recursive:true});
-for(const file of await readdir('.'))if(file.endsWith('.html')||['_headers','robots.txt','sitemap.xml','vercel.json','package.json'].includes(file))await cp(file,`dist/${file}`);
+for(const dir of ['admin','js','housekeeping','css','images'])await cp(dir,`dist/${dir}`,{recursive:true});
+for(const file of await readdir('.'))if(file.endsWith('.html')||['_headers','robots.txt','sitemap.xml'].includes(file))await cp(file,`dist/${file}`);
 console.log(`Static build complete: ${checked} JavaScript files validated; dist/ generated. No deployment performed.`);
