@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
-import { putBooking, firestoreReady, quoteStay, getPublicPricingSettings } from "./firestore-admin.js";
+import { createPendingBooking, firestoreReady, quoteStay, getPublicPricingSettings } from "./firestore-admin.js";
 import { gmailReady, sendMail, receivedEmailText, receivedEmailHtml, adminNotificationEmail, newBookingAdminMail } from "./gmail-mailer.js";
 import { COOKIE_NAME, parseCookies, verifyPayload as verifyCookiePayload, createBookingSession as createSecureSession } from "./line-auth-lib.js";
 
@@ -44,7 +44,6 @@ function resolveSession(req, explicit){
   }
   throw new Error("BOOKING_SESSION_REQUIRED");
 }
-function bookingId(){ return `B${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(3).toString("hex").toUpperCase()}`; }
 
 function parseDateKey(v){
   const s=clean(v,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
@@ -52,12 +51,12 @@ function parseDateKey(v){
   if(date.getUTCFullYear()!==y||date.getUTCMonth()!==m-1||date.getUTCDate()!==d) return null;
   return {s,date};
 }
-function normalizeBooking(input={}){
+export function normalizeBooking(input={}){
   const a=parseDateKey(input.checkIn), b=parseDateKey(input.checkOut);
   if(!a||!b||b.date<=a.date) throw new Error("INVALID_DATES");
   const nights=Math.round((b.date-a.date)/86400000); if(nights<1||nights>30) throw new Error("INVALID_NIGHTS");
-  const peopleRaw=Number.parseInt(String(input.people??""),10);
-  const people=Number.isFinite(peopleRaw)?Math.min(Math.max(peopleRaw,1),12):null;
+  const people=Number(input.people);
+  if(!Number.isInteger(people)||people<1||people>12)throw new Error("INVALID_PEOPLE");
   const name=clean(input.name,60); if(!name) throw new Error("NAME_REQUIRED");
   const email=clean(input.email,120).toLowerCase();
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("EMAIL_REQUIRED");
@@ -111,7 +110,7 @@ function messages(b,payUrl){
         infoRow("備註",b.notes||"沒有"),
         {type:"separator",margin:"md",color:"#E5E0D6"},
         {type:"text",text:"🌿 入住提醒",weight:"bold",size:"md",color:"#153C36",margin:"sm"},
-        {type:"text",text:`【付款資訊】\n固定訂金 NT$${Number(BOOKING_RULES.payment.depositAmount||3000).toLocaleString("zh-TW")}\n${BOOKING_RULES.payment.bankName}\n代號 ${BOOKING_RULES.payment.branchCode}\n戶名 ${BOOKING_RULES.payment.accountName}\n帳號 ${BOOKING_RULES.payment.accountNumber}\n\n匯款後請回官方 LINE 傳：\n匯款回報 末五碼 XXXXX 金額 3000\n\n客服核對入帳後才會登記正式收款。`,size:"sm",color:"#48534F",wrap:true,lineSpacing:"4px"},
+        {type:"text",text:`【付款資訊】\n固定訂金 NT$${Number(BOOKING_RULES.payment.depositAmount||3000).toLocaleString("zh-TW")}\n${BOOKING_RULES.payment.bankName}\n代號 ${BOOKING_RULES.payment.branchCode}\n戶名 ${BOOKING_RULES.payment.accountName}\n帳號 ${BOOKING_RULES.payment.accountNumber}\n\n匯款後請回官方 LINE 傳：\n匯款回報 付款人 姓名 末五碼 XXXXX 金額 3000\n\n客服核對入帳後才會登記正式收款。`,size:"sm",color:"#48534F",wrap:true,lineSpacing:"4px"},
         {type:"text",text:"此為預約申請；訂金核對入帳並由民宿後台確認後，預約才正式成立。",size:"xs",color:"#8B938F",wrap:true}
       ]},
       footer:{type:"box",layout:"vertical",paddingAll:"16px",spacing:"sm",contents:[
@@ -145,6 +144,7 @@ export default async function handler(req,res){
     const resolvedSession = resolveSession(req, explicit);
     const session = resolvedSession.payload;
     const booking=normalizeBooking(body.booking);
+    const requestFingerprint=crypto.createHash("sha256").update(JSON.stringify(booking)).digest("hex");
     const pricingSettings=await getPublicPricingSettings();
     const todayKey=new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Taipei"});
     if(booking.checkIn < todayKey || booking.checkOut > pricingSettings.maxBookableDate){
@@ -152,7 +152,9 @@ export default async function handler(req,res){
     }
     const quote=await quoteStay(booking.checkIn,booking.checkOut);
     if(quote){ booking.quotedTotal=quote.total; booking.quoteBreakdown=quote.details; booking.pricingUpdatedAt=quote.pricingUpdatedAt||null; }
-    const id=bookingId();
+    const requestKey=clean(body.requestId,80)||requestFingerprint;
+    if(requestKey&&!/^[a-zA-Z0-9-]{16,80}$/.test(requestKey))throw new Error("INVALID_REQUEST_ID");
+    const id=`B${crypto.createHash("sha256").update(`${session.uid}:${requestKey}`).digest("hex").slice(0,28).toUpperCase()}`;
     diag("AUTH_OK",{bookingId:id,userIdPrefix:String(session.uid).slice(0,10),sessionSource:resolvedSession.source});
     diag("BOOKING_VALID",{bookingId:id,checkIn:booking.checkIn,checkOut:booking.checkOut,nights:booking.nights,people:booking.people,source:booking.source});
     console.log("booking-secure-submit",{bookingId:id,userId:String(session.uid).slice(0,8)+"…",sessionSource:resolvedSession.source,checkIn:booking.checkIn,checkOut:booking.checkOut,people:booking.people});
@@ -162,7 +164,8 @@ export default async function handler(req,res){
       const e=new Error("FIRESTORE_NOT_CONFIGURED"); e.code="FIRESTORE_NOT_CONFIGURED"; throw e;
     }
     const now=new Date().toISOString();
-    await putBooking(id,{
+    const saved=await createPendingBooking(id,{
+      requestFingerprint,
       startDate:booking.checkIn,
       endDate:booking.checkOut,
       guestName:booking.name,
@@ -188,6 +191,7 @@ export default async function handler(req,res){
       createdAt:now,
       updatedAt:now
     });
+    if(saved.duplicate)return res.status(200).json({ok:true,saved:true,bookingId:id,duplicate:true});
     console.log("booking-firestore-saved",{bookingId:id});
     diag("FIRESTORE_SAVED",{bookingId:id});
     const savedBooking={id,startDate:booking.checkIn,endDate:booking.checkOut,guestName:booking.name,phone:booking.phone,email:booking.email||"",people:booking.people,quotedTotal:booking.quotedTotal||0,totalAmount:booking.quotedTotal||0,depositRequired:3000,status:"pending",isTest:false};
@@ -236,9 +240,9 @@ export default async function handler(req,res){
     console.error("booking secure submit error",e);
     const code=String(e?.message||"UNKNOWN_ERROR");
     if(e?.code==="FIRESTORE_NOT_CONFIGURED" || code.includes("FIRESTORE_")){
-      return res.status(503).json({ok:false,code:"FIRESTORE_SAVE_FAILED",error:"預約資料庫尚未完成伺服器設定，請確認 FIREBASE_SERVICE_ACCOUNT_JSON。"});
+      return res.status(503).json({ok:false,code:"FIRESTORE_SAVE_FAILED",error:"日期或預約資料暫時無法確認，請稍後重試；已填資料會保留。"});
     }
-    const status=code.includes("SESSION")?401:400;
+    const status=code.includes("SESSION")?401:code.includes("DATE_CONFLICT")||code==="REQUEST_ID_REUSED"?409:400;
     return res.status(status).json({ok:false,code,error:code});
   }
 }

@@ -30,7 +30,7 @@ export const DEFAULT_CONTENT = {
     { name: "戶外料理區", image: { url: "images/fac-bbq.jpg", alt: "戶外料理區", storagePath: "" } }
   ],
   rooms: [
-    { number: "01", alias: "一號雙人房", name: "雙人房", kicker: "ROOM 01 · DOUBLE", description: "2 人入住。房間編號與別名可在後台自行修改，實際房內配置以現場與預約確認為準。", image: { url: "images/room-double.jpg", alt: "俐姐的家一號雙人房", storagePath: "" } },
+    { number: "01", alias: "一號雙人房", name: "雙人房", kicker: "ROOM 01 · DOUBLE", description: "2 人入住。房間照片與實際入住安排，請透過官方 LINE 確認。", image: { url: "images/room-double.jpg", alt: "俐姐的家一號雙人房", storagePath: "" } },
     { number: "02", alias: "二號雙人房", name: "雙人房", kicker: "ROOM 02 · DOUBLE", description: "2 人入住。適合雙人旅行或朋友同行，房間照片與實際安排可透過官方 LINE 確認。", image: { url: "images/villa-room-2.jpg", alt: "俐姐的家二號雙人房", storagePath: "" } },
     { number: "03", alias: "三號雙人房", name: "雙人房", kicker: "ROOM 03 · DOUBLE", description: "2 人入住。保留舒適安靜的休息空間，適合雙人旅行或輕鬆度假。", image: { url: "images/villa-room-3.jpg", alt: "俐姐的家三號雙人房", storagePath: "" } },
     { number: "04", alias: "四號雙人房", name: "雙人房", kicker: "ROOM 04 · DOUBLE", description: "2 人入住。適合兩人使用，若有指定房間需求可在預約時直接告訴我們。", image: { url: "images/villa-room-4.jpg", alt: "俐姐的家四號雙人房", storagePath: "" } },

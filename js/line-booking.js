@@ -1,5 +1,6 @@
+import { createAvailabilityCache } from "./availability-state.js";
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
-import { getFirestore, collection, query, where, documentId, getDocs } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+import { getFirestore, collection, query, where, documentId, getDocsFromServer } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 import { firebaseConfig, isConfigured } from "./config.js";
 import { BOOKING_RULES } from "./booking-rules.js";
 
@@ -23,8 +24,10 @@ const pricingMonthCache = new Map();
 let bookingSession = null;
 let lineIdentityReady = false;
 const DRAFT_KEY = "lijie-line-booking-draft-v1";
-const stateCache = new Map();
-const loadedMonths = new Set();
+let renderVersion=0,selectionVersion=0;
+let requestId=crypto.randomUUID();
+const retry=document.createElement("button");retry.type="button";retry.textContent="重試日期狀況";retry.hidden=true;els.error.after(retry);
+retry.addEventListener("click",()=>{hideError();availability.clear();render();});
 let db = null;
 if (isConfigured()) {
   const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
@@ -80,22 +83,15 @@ function openOfficialLine(){
   window.location.href = "https://line.me/R/oaMessage/%40287ppyfa";
 }
 
-async function loadStates(first,last){
-  const monthKey = `${first.getFullYear()}-${String(first.getMonth()+1).padStart(2,"0")}`;
-  if (loadedMonths.has(monthKey)) {
-    const out = new Map();
-    for (const [k,v] of stateCache) if (k >= keyOf(first) && k <= keyOf(last)) out.set(k,v);
-    return out;
-  }
-  if (!db) { loadedMonths.add(monthKey); return new Map(); }
-  try {
-    const q = query(collection(db,"availability"), where(documentId(),">=",keyOf(first)), where(documentId(),"<=",keyOf(last)));
-    const snap = await getDocs(q);
-    const out = new Map(snap.docs.map(d=>[d.id,d.data().status||"available"]));
-    out.forEach((v,k)=>stateCache.set(k,v));
-    loadedMonths.add(monthKey);
-    return out;
-  } catch(e){ console.warn(e); return new Map(); }
+const availability=createAvailabilityCache(async mk=>{
+  if(!db)throw new Error("AVAILABILITY_NOT_CONFIGURED");
+  const [y,m]=mk.split("-").map(Number),first=new Date(y,m-1,1),last=new Date(y,m,0);
+  const q=query(collection(db,"availability"),where(documentId(),">=",keyOf(first)),where(documentId(),"<=",keyOf(last)));
+  const snap=await getDocsFromServer(q);
+  return new Map(snap.docs.map(d=>[d.id,d.data().status||"unknown"]));
+});
+async function loadStates(first,last,force=false){
+  return availability.load(keyOf(first).slice(0,7),{force});
 }
 
 
@@ -116,7 +112,7 @@ async function quoteRange(a,b){
   }catch(e){console.warn("range quote unavailable",e); return null;}
 }
 function isInRange(d){ if(!startDate) return false; const end=endDate||startDate; return d>=startDate&&d<=end; }
-function stateOf(d){ return stateCache.get(keyOf(d)) || monthStates.get(keyOf(d)) || "available"; }
+function stateOf(d){return availability.state(keyOf(d));}
 
 function drawCalendar(prices=new Map()){
   const first=new Date(cursor.getFullYear(),cursor.getMonth(),1);
@@ -128,33 +124,39 @@ function drawCalendar(prices=new Map()){
     if ((startDate&&keyOf(d)===keyOf(startDate))||(endDate&&keyOf(d)===keyOf(endDate))) b.classList.add("selected");
     const rateText=(!outside&&!past&&!beyond&&state==="available"&&rate?.price)?`<em>${moneyFmt.format(rate.price)}</em>`:"";
     const tag=(!outside&&!past&&!beyond&&state==="available"&&rate?.label&&!['平日','週五','週六'].includes(rate.label))?`<i>${rate.label.replace('連假','')}</i>`:"";
-    const status=beyond?"尚未開放":state==="available"?"可詢問":state==="booked"?"已預約":"暫停";
+    const status=beyond?"尚未開放":state==="available"?"可詢問":state==="booked"?"已預約":state==="unknown"?"無法確認":"暫停";
     b.innerHTML=`<span>${d.getDate()}</span>${rateText}${tag}<small>${status}</small>`;
     b.disabled=past||beyond||state!=="available"; if(!b.disabled)b.addEventListener("click",()=>pickDate(d)); els.cal.append(b);
   }
 }
 async function render(){
-  const first=new Date(cursor.getFullYear(),cursor.getMonth(),1), last=new Date(cursor.getFullYear(),cursor.getMonth()+1,0);
-  drawCalendar();
-  const [states,prices]=await Promise.all([loadStates(first,last),loadPricing(first)]); monthStates=states;
-  drawCalendar(prices);
+  const version=++renderVersion;
+  const first=new Date(cursor.getFullYear(),cursor.getMonth(),1),last=new Date(cursor.getFullYear(),cursor.getMonth()+1,0);
+  drawCalendar();retry.hidden=true;
+  try{
+    const [states,prices]=await Promise.all([loadStates(first,last),loadPricing(first)]);
+    if(version!==renderVersion)return;monthStates=states;drawCalendar(prices);
+  }catch(e){if(version!==renderVersion)return;drawCalendar();showError("日期狀況無法確認，請重試。已填資料會保留。");retry.hidden=false;}
   els.prev.disabled=cursor.getFullYear()===today.getFullYear()&&cursor.getMonth()===today.getMonth();
-  const nm=new Date(cursor.getFullYear(),cursor.getMonth()+1,1), max=maxBookableDate(); els.next.disabled=nm>new Date(max.getFullYear(),max.getMonth(),1);
+  const nm=new Date(cursor.getFullYear(),cursor.getMonth()+1,1),max=maxBookableDate();els.next.disabled=nm>new Date(max.getFullYear(),max.getMonth(),1);
 }
 
 async function rangeIsAvailable(a,b){
   const start=new Date(a), end=new Date(b); const months=[]; let c=new Date(start.getFullYear(),start.getMonth(),1);
   while(c<=end){months.push(new Date(c));c=new Date(c.getFullYear(),c.getMonth()+1,1)}
-  // 已載入的月份直接吃快取；只有跨到尚未載入月份才查 Firestore。
+  try{
   for(const m of months){
     const first=new Date(m.getFullYear(),m.getMonth(),1),last=new Date(m.getFullYear(),m.getMonth()+1,0);
-    await loadStates(first,last);
+    await loadStates(first,last,true);
   }
-  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){if((stateCache.get(keyOf(d))||"available")!=="available")return false;}
+  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){if(stateOf(d)!=="available")return false;}
   return true;
+  }catch(e){retry.hidden=false;return null;}
 }
 
 async function pickDate(d){
+  const version=++selectionVersion;
+  requestId=crypto.randomUUID();
   hideError();
   if(isBeyondWindow(d)){showError(`目前僅開放未來 ${pricingSettings.bookingWindowMonths||6} 個月。`);return;}
   if(!startDate||endDate){
@@ -177,9 +179,10 @@ async function pickDate(d){
   const lastNight=new Date(candidateEnd); lastNight.setDate(lastNight.getDate()-1);
   els.note.textContent = "正在確認住宿期間是否可預約…";
   const [ok,quote]=await Promise.all([rangeIsAvailable(startDate,lastNight),quoteRange(startDate,candidateEnd)]);
+  if(version!==selectionVersion)return;
   if(!ok){
     endDate=null; currentQuote=null;
-    showError("住宿期間有已預約或暫停開放的日期，請重新選擇退房日期。");
+    showError(ok===null?"日期狀況無法確認，請重試。":"住宿期間有已預約或暫停開放的日期，請重新選擇退房日期。");
   } else { currentQuote=quote; }
   updateSelection(); await render();
 }
@@ -240,6 +243,7 @@ function saveDraft(){
       people: els.people.value.trim(),
       purpose: els.purpose.value.trim(),
       notes: els.notes.value.trim(),
+      requestId,
       savedAt: Date.now()
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
@@ -259,6 +263,7 @@ function loadDraft(){
       const d = parseKey(draft.checkOut); if (d > startDate) endDate = d;
     }
     if (startDate) cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+    if(draft.requestId)requestId=draft.requestId;
     if (!els.name.value) els.name.value = draft.name || "";
     if (!els.phone.value) els.phone.value = draft.phone || "";
     if (!els.email.value) els.email.value = draft.email || "";
@@ -283,7 +288,7 @@ function updateSendMode(){
 }
 
 function refreshForm(){
-  const valid=!!(startDate&&endDate&&els.name.value.trim()); els.send.disabled=!valid || !(bookingSession||lineIdentityReady);
+  const valid=!!(startDate&&endDate&&els.name.value.trim()&&/^(?:[1-9]|1[0-2])$/.test(els.people.value)); els.send.disabled=!valid || !(bookingSession||lineIdentityReady);
   updateSendMode();
   if (valid) {
     els.status.textContent = Boolean(bookingSession||lineIdentityReady)
@@ -331,7 +336,7 @@ async function submitBookingToOfficialLine(){
   const response = await fetch("/api/line-booking-submit", {
     method: "POST",
     headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ session: bookingSession, booking: bookingPayload() }),
+    body: JSON.stringify({ session: bookingSession, requestId, booking: bookingPayload() }),
     cache: "no-store",
     credentials: "same-origin"
   });
@@ -357,6 +362,10 @@ async function sendMessage(){
   els.status.textContent="正在把預約申請送回官方 LINE…";
   try {
     saveDraft();
+    const lastNight=new Date(endDate);lastNight.setDate(lastNight.getDate()-1);
+    const available=await rangeIsAvailable(startDate,lastNight);
+    if(available===null)throw new Error("AVAILABILITY_UNCONFIRMED");
+    if(!available)throw new Error("BOOKING_DATE_CONFLICT");
     const result = await submitBookingToOfficialLine();
     clearDraft();
     if(result?.warning){
@@ -370,7 +379,13 @@ async function sendMessage(){
   } catch (e) {
     console.warn("booking submit failed", e);
     const reason=String(e?.code || e?.message || "UNKNOWN");
-    if (reason.includes("BOOKING_SESSION_REQUIRED")) {
+    if(reason.includes("AVAILABILITY_UNCONFIRMED")){
+      els.status.textContent="日期狀況無法確認，請重試。已填資料會保留。";retry.hidden=false;
+    }else if(reason.includes("BOOKING_DATE_CONFLICT")){
+      els.status.textContent="日期狀況已變更，請重新選擇日期。已填資料會保留。";availability.clear();await render();
+    }else if(reason==="REQUEST_ID_REUSED"){
+      els.status.textContent="此申請已保存，請先回官方 LINE 查詢訂單，再重新選擇日期建立新申請。";
+    }else if (reason.includes("BOOKING_SESSION_REQUIRED")) {
       els.status.textContent="這個頁面不是從官方 LINE 的安全預約入口開啟。請回官方 LINE，點圖文選單『立即預約』重新開始。";
     } else if (reason.includes("BOOKING_SESSION_EXPIRED")) {
       els.status.textContent="這組預約連結已過期。請回官方 LINE 再點一次『立即預約』取得新連結。";
@@ -390,11 +405,14 @@ async function sendMessage(){
       els.status.textContent=`送出未完成（${reason}）。已填日期與資料仍會保留，請重新整理後再送一次。`;
     }
     saveDraft();
-    setTimeout(refreshForm,1800);
+    els.send.disabled=!(startDate&&endDate&&els.name.value.trim()&&/^(?:[1-9]|1[0-2])$/.test(els.people.value));
+    updateSendMode();
   }
 }
 
 async function applyLineQuickSelection(){
+  const version=++selectionVersion;
+  requestId=crypto.randomUUID();
   hideError();
   const sKey=els.quickStart?.value||"", eKey=els.quickEnd?.value||"";
   if(els.quickGuests?.value) els.people.value=els.quickGuests.value;
@@ -407,20 +425,21 @@ async function applyLineQuickSelection(){
     if(eDate<=sDate||isBeyondWindow(eDate)){showError("退房日期需晚於入住日期，且需在開放期間內。");updateSelection();await render();return;}
     const lastNight=new Date(eDate); lastNight.setDate(lastNight.getDate()-1);
     const [ok,quote]=await Promise.all([rangeIsAvailable(sDate,lastNight),quoteRange(sDate,eDate)]);
-    if(!ok){showError("住宿期間有已預約或暫停開放的日期，請重新選擇。");updateSelection();await render();return;}
+    if(version!==selectionVersion)return;
+    if(!ok){showError(ok===null?"日期狀況無法確認，請重試。":"住宿期間有已預約或暫停開放的日期，請重新選擇。");updateSelection();await render();return;}
     endDate=eDate; currentQuote=quote;
   }
   updateSelection(); await render();
   els.note.textContent=endDate?`已帶入 ${nightsCount()} 晚。`:`已帶入入住日期，請再選退房日期。`;
 }
 if(els.quickApply) els.quickApply.addEventListener("click",applyLineQuickSelection);
-if(els.quickGuests) els.quickGuests.addEventListener("change",()=>{els.people.value=els.quickGuests.value;refreshForm();saveDraft();});
+if(els.quickGuests) els.quickGuests.addEventListener("change",()=>{requestId=crypto.randomUUID();els.people.value=els.quickGuests.value;refreshForm();saveDraft();});
 if(els.quickStart) els.quickStart.addEventListener("change",()=>{const k=els.quickStart.value;if(/^\d{4}-\d{2}-\d{2}$/.test(k)){const d=parseKey(k);cursor=new Date(d.getFullYear(),d.getMonth(),1);render();}});
 if(els.quickEnd) els.quickEnd.addEventListener("change",()=>{if(els.quickStart?.value) applyLineQuickSelection();});
 
 els.prev.addEventListener("click",()=>{if(els.prev.disabled)return;cursor=new Date(cursor.getFullYear(),cursor.getMonth()-1,1);render()});
 els.next.addEventListener("click",()=>{if(els.next.disabled)return;cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,1);render()});
-[els.name,els.phone,els.email,els.people,els.purpose,els.notes].forEach(e=>e.addEventListener("input",()=>{if(e===els.people&&els.quickGuests)els.quickGuests.value=els.people.value;refreshForm();saveDraft();}));
+[els.name,els.phone,els.email,els.people,els.purpose,els.notes].forEach(e=>e.addEventListener("input",()=>{requestId=crypto.randomUUID();if(e===els.people&&els.quickGuests)els.quickGuests.value=els.people.value;refreshForm();saveDraft();}));
 els.copy.addEventListener("click", copyMessage);
 let submitInFlight = false;
 async function triggerSend(e){
@@ -468,3 +487,6 @@ applyPresetDates();
 await render();
 updateSelection();
 if(lineIdentityReady||bookingSession) updateSendMode();
+
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){availability.clear();render();}});
+setInterval(()=>{if(!document.hidden)drawCalendar();},30_000);

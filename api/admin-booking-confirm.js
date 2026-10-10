@@ -60,9 +60,9 @@ export default async function handler(req,res){
   try{
     const admin=await requireAdmin(req); const body=typeof req.body==="string"?JSON.parse(req.body):(req.body||{}); const id=String(body.bookingId||"").trim();
     if(!id)throw new Error("BOOKING_ID_REQUIRED"); const current=await getBooking(id); if(!current)throw new Error("BOOKING_NOT_FOUND");
-    if(current.status==="cancelled")throw new Error("BOOKING_CANCELLED"); if(current.status==="confirmed")return res.status(200).json({ok:true,alreadyConfirmed:true});
-    const dep=Number(current.depositRequired||3000),paid=Number(current.paidAmount||current.amountReceived||0); if(paid<dep)throw new Error("DEPOSIT_NOT_PAID");
-    const updated=await setBookingStatus(id,"confirmed"); let emailSent=false,lineSent=false;
+    if(current.status==="cancelled")throw new Error("BOOKING_CANCELLED");
+    const dep=Number(current.depositRequired||3000),paid=Math.max(Number(current.paidAmount)||0,Number(current.amountReceived)||0); if(paid<dep)throw new Error("DEPOSIT_NOT_PAID");
+    const updated=await setBookingStatus(id,"confirmed"); if(updated.alreadyConfirmed)return res.status(200).json({ok:true,alreadyConfirmed:true}); let emailSent=false,lineSent=false;
     if(updated.email&&gmailReady())try{await sendMail({to:updated.email,subject:updated.isTest?"俐姐的家｜【測試】預約流程已完成":"俐姐的家｜您的預約已確認",text:confirmedEmailText(updated),html:confirmedEmailHtml(updated)});emailSent=true}catch(e){console.warn("confirm email failed",e)}
     if(updated.lineUserId)try{lineSent=await pushLine(updated.lineUserId,customerLineMessages(updated))}catch(e){console.warn("confirm customer LINE failed",e)}
     console.info("admin-booking-confirm",{bookingId:id,adminUid:admin.uid,emailSent,lineSent}); return res.status(200).json({ok:true,bookingId:id,emailSent,lineSent,isTest:Boolean(updated.isTest)});

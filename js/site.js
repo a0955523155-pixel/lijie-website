@@ -39,12 +39,12 @@ function applyContent(content) {
     if (url) slides[index].style.backgroundImage = `url("${url}")`;
   });
 
-  const factValues = [content.details?.capacity, content.details?.schedule, content.details?.parking];
+  const factValues = ["最多 12 人", content.details?.schedule, content.details?.parking];
   document.querySelectorAll(".facts .fact strong").forEach((node, index) => {
     if (factValues[index]) node.textContent = factValues[index];
   });
   const publicDetails = {
-    capacity: content.details?.capacity,
+    capacity: "最多 12 人",
     schedule: content.details?.schedule,
     hours: content.details?.hours,
     parking: content.details?.parking
@@ -79,6 +79,7 @@ function applyContent(content) {
     if (description && room.description) {
       const publicDescription = room.description
         .replace(/房間別名與介紹文字可由後台自行調整。?/g, "")
+        .replace(/房間編號與別名可在後台自行修改[，。]?/g, "")
         .replace(/\s{2,}/g, " ")
         .trim();
       description.textContent = publicDescription;

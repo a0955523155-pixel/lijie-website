@@ -1,0 +1,31 @@
+const state=()=>window.__fake;
+const ref=(collection,id)=>({collection,id});
+const rows=col=>state()[col]||(state()[col]=[]);
+const value=r=>r.collection==='admins'?{authorized:true}:rows(r.collection).find(x=>x.id===r.id);
+const snap=r=>({id:r.id,ref:r,exists:()=>Boolean(value(r)),data:()=>value(r)});
+const save=(r,data,options)=>{state().writes.push({ref:r,data});const list=rows(r.collection),i=list.findIndex(x=>x.id===r.id);const v={id:r.id,...(options?.merge&&i>=0?list[i]:{}),...data};if(i<0)list.push(v);else list[i]=v;};
+const check=async()=>{if(state().failWrites)throw new Error('SYNTHETIC_SAVE_FAILURE');if(state().slowWrites)await new Promise(r=>setTimeout(r,100));};
+export const initializeApp=()=>({});export const getApps=()=>[];export const getFirestore=()=>({});export const getStorage=()=>({});
+export const getAuth=()=>({currentUser:{uid:'synthetic-admin',email:'test@example.invalid',getIdToken:async()=> 'FAKE'}});
+export const onAuthStateChanged=(auth,cb)=>setTimeout(()=>cb(auth.currentUser),0);
+export const setPersistence=async()=>{};export const browserSessionPersistence={};
+export const signInWithEmailAndPassword=async()=>{};export const signOut=async()=>{};
+export const collection=(db,col)=>ref(col);export const doc=(db,col,id)=>typeof col==='string'?ref(col,id):ref(db.collection,crypto.randomUUID());
+export const getDoc=async r=>snap(r);
+export const where=(field,op,value)=>({field,op,value});export const documentId=()=> '__id';export const orderBy=()=>({});export const limit=()=>({});
+export const query=(col,...filters)=>({...col,filters});
+export const getDocs=async q=>{
+  if(q.collection==='bookings'&&state().failReadAfterPayment&&rows('paymentTransactions').length){state().failReadAfterPayment=false;throw new Error('SYNTHETIC_REFRESH_FAILURE');}
+  if(q.collection==='availability'&&state().failCalendar)throw new Error('SYNTHETIC_CALENDAR_OFFLINE');
+  let list=rows(q.collection);
+  for(const f of q.filters||[])if(f.field)list=list.filter(x=>{const v=f.field==='__id'?x.id:x[f.field];return f.op==='=='?v===f.value:f.op==='>='?v>=f.value:v<=f.value;});
+  const docs=list.map(x=>snap(ref(q.collection,x.id)));
+  return {docs,forEach:cb=>docs.forEach(cb),empty:!docs.length};
+};
+export const getDocsFromServer=getDocs;
+export const setDoc=async(r,v,o)=>{await check();save(r,v,o);};
+export const deleteDoc=async r=>{await check();state()[r.collection]=rows(r.collection).filter(x=>x.id!==r.id);};
+export const serverTimestamp=()=> 'synthetic-timestamp';
+export const writeBatch=()=>{const writes=[];return {set:(...args)=>writes.push(['set',args]),delete:r=>writes.push(['delete',[r]]),commit:async()=>{await check();for(const [kind,args]of writes)if(kind==='set')save(...args);else state()[args[0].collection]=rows(args[0].collection).filter(x=>x.id!==args[0].id);}};};
+export const runTransaction=async(db,fn)=>{const batch=writeBatch();const result=await fn({...batch,get:getDoc});await batch.commit();return result;};
+export const refStorage=()=>({});export { refStorage as ref };export const uploadBytes=async()=>{};export const getDownloadURL=async()=> '';

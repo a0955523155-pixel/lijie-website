@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { getBooking, putBooking } from './firestore-admin.js';
+import { getBooking, saveServiceRequest } from './firestore-admin.js';
 import { gmailReady, sendMail, adminNotificationEmail, cancellationRequestMail } from './gmail-mailer.js';
 
 function safeEqual(a,b){try{const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.length===y.length&&crypto.timingSafeEqual(x,y)}catch{return false}}
@@ -41,7 +41,7 @@ function cancellationSubmittedFlex(b,reason){
 }
 async function authorizedBooking(sessionToken,id){
   const s=verifySession(sessionToken); const b=await getBooking(id); if(!b)throw new Error('BOOKING_NOT_FOUND');
-  if(b.lineUserId&&b.lineUserId!==s.uid)throw new Error('BOOKING_LINE_MISMATCH');
+  if(b.lineUserId!==s.uid)throw new Error('BOOKING_LINE_MISMATCH');
   if(String(b.status||'')==='cancelled')throw new Error('BOOKING_ALREADY_CANCELLED');
   return {s,b};
 }
@@ -56,9 +56,8 @@ export default async function handler(req,res){
       const body=typeof req.body==='string'?JSON.parse(req.body):(req.body||{});
       const session=clean(body.session,4000),id=clean(body.bookingId,100),reason=clean(body.reason,500);
       if(!reason)throw new Error('REQUEST_REASON_REQUIRED');
-      const {b}=await authorizedBooking(session,id); const now=new Date().toISOString();
-      const updated={...b,cancellationRequestStatus:'pending',cancellationRequestedAt:now,cancellationRequestReason:reason,cancellationRequestedBy:'customer',updatedAt:now}; delete updated.id;
-      await putBooking(id,updated);
+      const {s,b}=await authorizedBooking(session,id); const now=new Date().toISOString();
+      const updated=await saveServiceRequest(id,s.uid,{cancellationRequestStatus:'pending',cancellationRequestedAt:now,cancellationRequestReason:reason,cancellationRequestedBy:'customer',updatedAt:now});
       if(gmailReady()){
         if(b.email){try{const m=cancellationRequestMail({id,...updated},reason,{admin:false});await sendMail({to:b.email,subject:m.subject,text:m.text,html:m.html});}catch(e){console.warn('customer cancellation email failed',e)}}
         const adminTo=adminNotificationEmail(); if(adminTo){try{const m=cancellationRequestMail({id,...updated},reason,{admin:true});await sendMail({to:adminTo,subject:m.subject,text:m.text,html:m.html});}catch(e){console.warn('admin cancellation email failed',e)}}

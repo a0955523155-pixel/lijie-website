@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
-import { getBooking, putBooking, listBookingsByLineUser } from "./firestore-admin.js";
+import { saveServiceRequest, listBookingsByLineUser, customerBookingsPage, savePaymentReport } from "./firestore-admin.js";
 import { gmailReady, sendMail, adminNotificationEmail, cancellationRequestMail, refundRequestMail, paymentReportAdminMail } from "./gmail-mailer.js";
 import { createBookingSession as createSecureSession } from "./line-auth-lib.js";
 
@@ -260,10 +260,10 @@ function keywordReply(text = "") {
       "• 匯款金額",
       "",
       "建議格式：",
-      "匯款回報 末五碼 12345 金額 3000",
+      "匯款回報 付款人 王小明 末五碼 12345 金額 3000",
       "",
       "若此 LINE 綁定不只一筆訂單，可再加上訂單編號。",
-      "例如：匯款回報 WABC1234 末五碼 12345 金額 3000",
+      "例如：匯款回報 WABC1234 付款人 王小明 末五碼 12345 金額 3000",
       "",
       "※ 回報後仍需由客服人員實際核對銀行入帳，回報本身不代表已完成收款。"
     ].join("\n") };
@@ -332,7 +332,7 @@ function keywordReply(text = "") {
       `帳號：${BOOKING_RULES.payment.accountNumber}`,
       "",
       "匯款完成後，請直接傳：",
-      "『匯款回報 末五碼 XXXXX 金額 3000』",
+      "『匯款回報 付款人 姓名 末五碼 XXXXX 金額 3000』",
       "客服人員核對實際入帳後，才會於後台登記正式收款。",
       "",
       `尾款：${BOOKING_RULES.payment.balanceMethods}`
@@ -347,32 +347,35 @@ function keywordReply(text = "") {
 }
 
 
-function parsePaymentReport(text=""){
+export function parsePaymentReport(text=""){
   const raw=String(text||"").trim();
   if(!/匯款回報|已匯款|匯款完成|我匯款了|付款完成/.test(raw)) return null;
-  const idMatch=raw.match(/(?:TEST-)?[WB][A-Z0-9]{6,}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
-  const last5Match=raw.match(/(?:末五碼|後五碼|末5碼|後5碼)?\s*[:：]?\s*(\d{5})(?!\d)/);
-  const amountMatch=raw.match(/(?:金額|匯款|付款)\s*[:：]?\s*(?:NT\$|\$)?\s*([0-9][0-9,]{2,})/i);
-  return {id:idMatch?.[0]||"",last5:last5Match?.[1]||"",amount:amountMatch?Number(amountMatch[1].replace(/,/g,"")):0};
+  const idMatch=raw.split(/付款人/)[0].match(/(?:TEST-)?[WB][A-Z0-9]{6,}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
+  const last5Match=raw.match(/(?:末五碼|後五碼|末5碼|後5碼)\s*[:：]?\s*(\d{5})(?!\d)/);
+  const amountMatch=raw.match(/(?:金額|匯款|付款)\s*[:：]?\s*(?:NT\$|\$)?\s*([0-9][0-9,]{2,}(?:\.\d+)?)/i);
+  const payer=raw.match(/付款人\s*[:：]?\s*(.+?)(?=\s*(?:末五碼|後五碼|金額)|$)/);
+  return {id:idMatch?.[0]||"",payerName:payer?.[1]?.trim()||"",last5:last5Match?.[1]||"",amount:amountMatch?Number(amountMatch[1].replace(/,/g,"")):0};
 }
-async function submitPaymentReport(info,uid){
-  let b=null,id=String(info.id||"").trim();
-  if(id){ b=await getBooking(id); if(!b)throw new Error("BOOKING_NOT_FOUND"); }
-  else{
-    const orders=await listBookingsByLineUser(uid,8);
-    b=orders.find(x=>String(x.status||"")!=="cancelled")||orders[0]||null;
-    if(!b)throw new Error("BOOKING_NOT_FOUND"); id=b.id;
+export async function submitPaymentReport(info,uid,eventId){
+  let id=String(info.id||"").trim();
+  if(!id){
+    const orders=(await listBookingsByLineUser(uid)).filter(b=>b.status!=="cancelled");
+    if(!orders.length)throw new Error("BOOKING_NOT_FOUND");
+    if(orders.length!==1)throw new Error("BOOKING_SELECTION_REQUIRED");
+    id=orders[0].id;
   }
-  if(b.lineUserId&&uid&&b.lineUserId!==uid)throw new Error("BOOKING_LINE_MISMATCH");
-  if(!b.lineUserId&&uid){b.lineUserId=uid;b.lineBoundAt=new Date().toISOString();}
-  if(!/^\d{5}$/.test(info.last5||""))throw new Error("PAYMENT_LAST5_REQUIRED");
-  if(!Number.isFinite(info.amount)||info.amount<=0)throw new Error("PAYMENT_AMOUNT_REQUIRED");
-  const now=new Date().toISOString();
-  Object.assign(b,{paymentReportStatus:"pending",paymentReportLast5:info.last5,paymentReportAmount:Number(info.amount),paymentReportedAt:now,paymentReportSource:"official-line",updatedAt:now});
-  const save={...b};delete save.id;await putBooking(id,save);
+  const saved=await savePaymentReport(id,{...info,uid,source:"official-line-text",eventId});
   const adminTo=adminNotificationEmail();
-  if(gmailReady()&&adminTo){try{const m=paymentReportAdminMail({id,...b});await sendMail({to:adminTo,subject:m.subject,text:m.text,html:m.html});}catch(e){console.warn("payment report admin email failed",e)}}
-  return {id,...b};
+  if(!saved.duplicate&&gmailReady()&&adminTo){try{const m=paymentReportAdminMail(saved);await sendMail({to:adminTo,subject:m.subject,text:m.text,html:m.html});}catch(e){console.warn("payment report admin email failed",e)}}
+  return saved;
+}
+async function replyOrderPage(event,uid,token,command,page=1){
+  const result=await customerBookingsPage(uid,{page,activeOnly:command!=="查詢訂單"});
+  const next=result.page<result.pages?`\n查看更多請傳「${command} ${result.page+1}」`:"";
+  const navigation=[];
+  if(result.page>1)navigation.push({type:"action",action:{type:"message",label:"上一頁",text:`${command} ${result.page-1}`}});
+  if(result.page<result.pages)navigation.push({type:"action",action:{type:"message",label:"查看更多",text:`${command} ${result.page+1}`}});
+  await replyLine(event.replyToken,[{type:"text",...(navigation.length?{quickReply:{items:navigation}}:{}),text:result.total?`您的訂單｜第 ${result.page}/${result.pages} 頁，共 ${result.total} 筆。\n申請仍待核帳及民宿確認；匯款回報請選擇自己的訂單。${next}`:"目前沒有可查詢的訂單，請傳「立即預約」。"},...result.items.map(b=>customerOrderFlex(b,{paymentUrl:paymentReportUrlFor(uid,b.id),cancelUrl:cancelRequestUrlFor(uid,b.id)}))],token);
 }
 
 function parseServiceRequest(text){
@@ -387,14 +390,10 @@ function parseServiceRequest(text){
   return {type:refund?"refund":"cancel",id,reason};
 }
 async function submitServiceRequest(reqInfo,uid){
-  const b=await getBooking(reqInfo.id); if(!b)throw new Error("BOOKING_NOT_FOUND");
-  if(b.lineUserId&&uid&&b.lineUserId!==uid)throw new Error("BOOKING_LINE_MISMATCH");
-  if(!b.lineUserId&&uid){b.lineUserId=uid;b.lineBoundAt=new Date().toISOString();}
   if(!reqInfo.reason)throw new Error("REQUEST_REASON_REQUIRED");
   const now=new Date().toISOString();
-  if(reqInfo.type==="cancel") Object.assign(b,{cancellationRequestStatus:"pending",cancellationRequestedAt:now,cancellationRequestReason:reqInfo.reason,cancellationRequestedBy:"customer",updatedAt:now});
-  else Object.assign(b,{refundRequestStatus:"pending",refundRequestedAt:now,refundRequestReason:reqInfo.reason,refundRequestedBy:"customer",updatedAt:now});
-  const save={...b};delete save.id;await putBooking(reqInfo.id,save);
+  const patch=reqInfo.type==="cancel"?{cancellationRequestStatus:"pending",cancellationRequestedAt:now,cancellationRequestReason:reqInfo.reason,cancellationRequestedBy:"customer",updatedAt:now}:{refundRequestStatus:"pending",refundRequestedAt:now,refundRequestReason:reqInfo.reason,refundRequestedBy:"customer",updatedAt:now};
+  const b=await saveServiceRequest(reqInfo.id,uid,patch);
   if(gmailReady()){
     const fn=reqInfo.type==="cancel"?cancellationRequestMail:refundRequestMail;
     if(b.email){try{const m=fn({id:reqInfo.id,...b},reqInfo.reason,{admin:false});await sendMail({to:b.email,subject:m.subject,text:m.text,html:m.html});}catch(e){console.warn("customer service request email failed",e)}}
@@ -455,44 +454,37 @@ export default async function handler(req, res) {
       const customerInput=String(event.message.text||"").trim();
       const uid=String(event.source?.userId||"").trim();
 
-      if(/取消訂單|取消預約|取消訂房|取消預定|取消預訂|我要取消|我想取消|想取消|退訂|取消住宿|不住了|行程取消/.test(customerInput.replace(/\s+/g,"")) && !parseServiceRequest(customerInput)){
-        try{
-          const orders=await listBookingsByLineUser(uid,8);
-          const active=orders.filter(b=>String(b.status||"")!=="cancelled");
-          const info={type:"flex",altText:"俐姐的家｜取消預約須知",contents:{type:"bubble",size:"mega",header:{type:"box",layout:"vertical",backgroundColor:"#173A35",paddingAll:"20px",contents:[{type:"text",text:"LIJIE'S HOME",color:"#CDBD92",size:"xs",weight:"bold"},{type:"text",text:"需要取消預約嗎？",color:"#FFFFFF",size:"xl",weight:"bold"},{type:"text",text:"行程有變沒關係，謝謝您提前告訴我們 🌿",color:"#D7E4DF",size:"sm",wrap:true}]},body:{type:"box",layout:"vertical",paddingAll:"20px",spacing:"md",contents:[{type:"text",text:"取消預約須知",weight:"bold",size:"lg",color:"#173A35"},{type:"text",text:"• 送出申請不代表訂單立即取消，會由俐姐核對後正式處理。\n• 取消原因需填寫並保留處理紀錄。\n• 已支付訂金的保留或退款方式，會依該筆訂單與實際情況確認。\n• 正式取消完成後，住宿日期才會重新釋出。",size:"sm",wrap:true,color:"#52605B",lineSpacing:"5px"},{type:"text",text:"下方已幫您帶入目前的預約訂單，直接點選要取消的那一筆即可，不用再輸入訂單編號。",size:"sm",wrap:true,color:"#2F6F62",weight:"bold"}]}}};
-          if(!active.length){await replyLine(event.replyToken,[info,{type:"text",text:"目前這個 LINE 帳號沒有可取消的預約。若需要協助，直接留言給俐姐就可以囉。"}],token);}
-          else{await replyLine(event.replyToken,[info,...active.slice(0,4).map(b=>customerOrderFlex(b,{paymentUrl:paymentReportUrlFor(uid,b.id),cancelUrl:cancelRequestUrlFor(uid,b.id)}))],token);}
-        }catch(e){await replyLine(event.replyToken,"目前無法開啟取消預約，麻煩稍後再試一次；若仍有問題，直接留言給俐姐，我們會協助您。",token);}
+      const pageCommand=customerInput.match(/^(查詢訂單|匯款回報|取消預約)(?:\s+(\d+))?$/);
+      if(pageCommand){
+        try{await replyOrderPage(event,uid,token,pageCommand[1],Number(pageCommand[2])||1);}
+        catch(e){console.error("customer order page failed",e);await replyLine(event.replyToken,"目前無法讀取訂單，請稍後重試。",token);}
         continue;
       }
-
-      if(/^匯款回報$/.test(customerInput.replace(/\s+/g,""))){
+      if(/取消訂單|取消預約|取消訂房|取消預定|取消預訂|我要取消|我想取消|想取消|退訂|取消住宿|不住了|行程取消/.test(customerInput.replace(/\s+/g,"")) && !parseServiceRequest(customerInput)){
         try{
-          const orders=await listBookingsByLineUser(uid,8);
-          const active=orders.filter(b=>String(b.status||"")!=="cancelled");
-          if(!active.length){
-            await replyLine(event.replyToken,"目前沒有可回報匯款的預約訂單。若要開始預約，請傳『立即預約』。",token);
-          }else{
-            await replyLine(event.replyToken,[{type:"text",text:"匯款完成了嗎？辛苦你了 💚\n點下面自己的訂單，再補『付款人姓名＋末五碼』就可以囉。"},...active.slice(0,4).map(b=>customerOrderFlex(b,{paymentUrl:paymentReportUrlFor(uid,b.id),cancelUrl:cancelRequestUrlFor(uid,b.id)}))],token);
-          }
-        }catch(e){await replyLine(event.replyToken,"目前無法開啟匯款回報，請稍後再試。",token);}
+          await replyOrderPage(event,uid,token,"取消預約");
+        }catch(e){await replyLine(event.replyToken,"目前無法開啟取消預約，麻煩稍後再試一次；若仍有問題，直接留言給俐姐，我們會協助您。",token);}
         continue;
       }
 
       const paymentReport=parsePaymentReport(customerInput);
       if(paymentReport){
-        if(!paymentReport.last5||!paymentReport.amount){
+        if(!paymentReport.payerName||!paymentReport.last5||!paymentReport.amount){
           await replyLine(event.replyToken,[
-            "【匯款回報】\n請提供『末五碼＋金額』。\n\n建議格式：\n匯款回報 末五碼 12345 金額 3000\n\n若這個 LINE 綁定多筆訂單，請加上訂單編號。\n※ 回報後仍需客服人工核對入帳。",
+            "【匯款回報】\n請提供『付款人姓名＋末五碼＋金額』。\n\n建議格式：\n匯款回報 付款人 王小明 末五碼 12345 金額 3000\n\n若這個 LINE 綁定多筆訂單，請加上訂單編號。\n※ 回報後仍需客服人工核對入帳。",
             lineMainMenuMessage(bookingUrlFor(uid,secret))
           ],token);
           continue;
         }
         try{
-          const saved=await submitPaymentReport(paymentReport,uid);
+          const saved=await submitPaymentReport(paymentReport,uid,String(event.webhookEventId||event.message?.id||""));
+          if(saved.duplicate)continue;
           await replyLine(event.replyToken,`✅ 已收到匯款回報。\n\n訂單：${saved.id}\n末五碼：${paymentReport.last5}\n回報金額：NT$ ${Number(paymentReport.amount).toLocaleString("zh-TW")}\n\n目前狀態：待客服核對入帳。\n核對完成後，正式收款狀態會更新在訂單中。`,token);
         }catch(e){
           const m=String(e?.message||e);
+          if(m.includes("BOOKING_SELECTION_REQUIRED")){await replyOrderPage(event,uid,token,"匯款回報");continue;}
+          if(m.includes("PAYMENT_REPORT_LOCKED")||m.includes("PAYMENT_REPORT_REVISION_USED")){await replyLine(event.replyToken,"此匯款回報已核帳、訂單已取消，或已用完一次修正。請聯絡俐姐確認。",token);continue;}
+          if(m.includes("PAYMENT_AMOUNT_MISMATCH")){await replyLine(event.replyToken,"回報金額與訂單訂金不符，請點訂單的匯款回報表單，或聯絡俐姐確認。",token);continue;}
           await replyLine(event.replyToken,m.includes("BOOKING_NOT_FOUND")?"找不到可對應的訂單。請先傳『查詢訂單』，或在匯款回報中加上訂單編號。":m.includes("BOOKING_LINE_MISMATCH")?"這筆訂單已綁定其他 LINE 使用者，無法由目前帳號回報。":"目前無法儲存匯款回報，請稍後再試。",token);
         }
         continue;
@@ -512,21 +504,6 @@ export default async function handler(req, res) {
         continue;
       }
 
-
-      if(/^查詢訂單$/.test(customerInput.replace(/\s+/g,""))){
-        try{
-          const orders=await listBookingsByLineUser(uid,8);
-          if(!orders.length){
-            await replyLine(event.replyToken,"目前這個 LINE 帳號還沒有預約訂單。\n\n請傳『立即預約』開啟官方預約日曆建立訂單。",token);
-          }else{
-            await replyLine(event.replyToken,[{type:"text",text:`幫您找到 ${orders.length} 筆預約 💚\n入住日期、金額與目前狀態都整理在下面，直接查看就可以，不需要再輸入訂單編號。`},...orders.slice(0,4).map(b=>customerOrderFlex(b,{paymentUrl:paymentReportUrlFor(uid,b.id),cancelUrl:cancelRequestUrlFor(uid,b.id)}))],token);
-          }
-        }catch(e){
-          console.error("customer order query failed",e);
-          await replyLine(event.replyToken,"目前無法查詢訂單，請稍後再試。",token);
-        }
-        continue;
-      }
 
       const booking = parseBooking(event.message.text);
       if (booking) {

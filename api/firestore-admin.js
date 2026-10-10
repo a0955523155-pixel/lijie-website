@@ -1,5 +1,6 @@
 import { autoSeasonMap, bookingWindowMaxDate } from "./holiday-market.js";
 import crypto from "node:crypto";
+import { paymentReportPatch } from "./payment-report-state.js";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SCOPE = "https://www.googleapis.com/auth/datastore";
@@ -114,17 +115,24 @@ export async function listAllBookings(limit=500){
   const j=await r.json();
   return (j.documents||[]).map(d=>({id:docIdFromName(d.name),...fromFields(d.fields||{})}));
 }
-export async function listBookingsByLineUser(lineUserId,limit=8){
-  const uid=String(lineUserId||"").trim();
-  if(!uid) return [];
-  const c=credentials(); if(!c) throw new Error("FIRESTORE_NOT_CONFIGURED");
-  const url=`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(c.project_id)}/databases/(default)/documents:runQuery`;
-  const query={ structuredQuery:{ from:[{collectionId:"bookings"}], where:{fieldFilter:{field:{fieldPath:"lineUserId"},op:"EQUAL",value:{stringValue:uid}}}, limit:Math.min(Math.max(Number(limit)||8,1),20) } };
-  const r=await authedFetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(query)});
-  if(!r.ok) throw new Error(`FIRESTORE_LINE_BOOKING_QUERY_FAILED ${r.status} ${await r.text()}`);
-  const rows=await r.json();
-  return rows.filter(x=>x.document).map(x=>({id:docIdFromName(x.document.name),...fromFields(x.document.fields||{})}))
-    .sort((a,b)=>String(b.startDate||b.createdAt||"").localeCompare(String(a.startDate||a.createdAt||""))).slice(0,limit);
+// Read only this user's complete result before sorting, including legacy rows without
+// createdAt. A single equality query needs no new composite index.
+export async function listBookingsByLineUser(lineUserId,limit=Infinity){
+  const uid=String(lineUserId||"").trim(); if(!uid)return [];
+  const query={structuredQuery:{from:[{collectionId:"bookings"}],where:{fieldFilter:{field:{fieldPath:"lineUserId"},op:"EQUAL",value:{stringValue:uid}}}}};
+  const r=await authedFetch(`${base()}:runQuery`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(query)});
+  if(!r.ok)throw new Error(`FIRESTORE_LINE_BOOKING_QUERY_FAILED ${r.status} ${await r.text()}`);
+  const rows=(await r.json()).filter(x=>x.document).map(x=>({id:docIdFromName(x.document.name),...fromFields(x.document.fields||{})})).filter(x=>x.lineUserId===uid);
+  return sortCustomerBookings(rows).slice(0,limit);
+}
+export function sortCustomerBookings(rows,today=new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Taipei"})){
+  const rank=b=>b.status!=="cancelled"&&String(b.endDate||b.startDate||"")>=today?0:b.status==="pending"?1:2;
+  return [...rows].sort((a,b)=>rank(a)-rank(b)||(rank(a)===0?String(a.startDate||"").localeCompare(String(b.startDate||"")):String(b.createdAt||b.startDate||"").localeCompare(String(a.createdAt||a.startDate||"")))||String(a.id).localeCompare(String(b.id)));
+}
+export async function customerBookingsPage(uid,{page=1,size=3,activeOnly=false}={}){
+  const all=(await listBookingsByLineUser(uid)).filter(b=>!activeOnly||b.status!=="cancelled");
+  const pages=Math.max(1,Math.ceil(all.length/size)); page=Math.min(Math.max(1,Number(page)||1),pages);
+  return {items:all.slice((page-1)*size,page*size),page,pages,total:all.length};
 }
 
 export async function listPendingBookings(limit=4){
@@ -144,45 +152,105 @@ function dateRangeNights(ci,co){
   return out;
 }
 
+// REST transactions keep reads, date locks and state changes serializable. Retry
+// only ABORTED; a transport failure may already have committed and is retried by
+// the caller using the same booking/request/event identity.
+export async function bookingTransaction(work){
+  for(let attempt=0;attempt<5;attempt++){
+    let transaction;
+    try{
+      const begun=await authedFetch(`${base()}:beginTransaction`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({options:{readWrite:{}}})});
+      await assertFirestore(begun); transaction=(await begun.json()).transaction;
+      const writes=[];
+      const name=path=>`${base().replace("https://firestore.googleapis.com/v1/","")}/${path}`;
+      const tx={
+        async get(path){
+          const r=await authedFetch(`${base()}/${path}?transaction=${encodeURIComponent(transaction)}`);
+          if(r.status===404)return null; await assertFirestore(r);
+          const d=await r.json();return fromFields(d.fields||{});
+        },
+        set(path,data,merge=false){const w={update:{name:name(path),fields:toFields(data)}};if(merge)w.updateMask={fieldPaths:Object.keys(data)};writes.push(w);},
+        delete(path){writes.push({delete:name(path)});}
+      };
+      const result=await work(tx);
+      const r=await authedFetch(`${base()}:commit`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({transaction,writes})});
+      await assertFirestore(r);return result;
+    }catch(e){
+      if(transaction)await authedFetch(`${base()}:rollback`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({transaction})}).catch(()=>{});
+      if(e.code!=="ABORTED"||attempt===4)throw e;
+    }
+  }
+}
+async function assertFirestore(r){
+  if(r.ok)return;
+  const detail=await r.json().catch(()=>({})); const e=new Error(`FIRESTORE_TRANSACTION_FAILED ${r.status} ${detail.error?.status||""}`);e.code=detail.error?.status;throw e;
+}
+function stayDays(start,end){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end))throw new Error("INVALID_DATES");
+  const span=(new Date(`${end}T00:00:00Z`)-new Date(`${start}T00:00:00Z`))/86400000;
+  if(!Number.isInteger(span)||span<1||span>90)throw new Error("INVALID_DATES");
+  const days=dateRangeNights(start,end);
+  return days;
+}
+async function readStay(tx,b){
+  const days=stayDays(b.startDate,b.endDate),states=[];
+  for(const day of days)states.push(await tx.get(`availability/${day}`));
+  return days.map((day,i)=>({day,state:states[i]}));
+}
+function checkStay(rows,id=""){
+  for(const {day,state} of rows){
+    if(state && state.status!=="available" && !(id&&state.status==="booked"&&state.bookingId===id))throw new Error(`BOOKING_DATE_CONFLICT ${day}`);
+  }
+}
 export async function setBookingStatus(id,status){
-  const b=await getBooking(id); if(!b) throw new Error("BOOKING_NOT_FOUND");
-  const updated={...b,status,updatedAt:nowIso()};
-  delete updated.id;
-  if(status==="confirmed") updated.confirmedAt=nowIso();
-  if(status==="cancelled") updated.cancelledAt=nowIso();
-  await putBooking(id,updated);
-  const days=dateRangeNights(b.startDate,b.endDate);
-  if(status==="confirmed" && !b.isTest){
-    // 正式訂單才鎖住宿日期；測試訂單不影響官網可預約狀態。
-    // 先檢查所有住宿晚數，避免確認新訂單時覆蓋另一筆已確認預約。
-    for(const day of days){
-      const existing=await authedFetch(`${base()}/availability/${day}`);
-      if(existing.status===404) continue;
-      if(!existing.ok) throw new Error(`FIRESTORE_AVAILABILITY_READ_FAILED ${existing.status} ${await existing.text()}`);
-      const j=await existing.json(); const d=fromFields(j.fields||{});
-      if(d.status==="booked" && d.bookingId && d.bookingId!==id){
-        throw new Error(`BOOKING_DATE_CONFLICT ${day} ${d.bookingId}`);
-      }
+  if(!['confirmed','cancelled','pending'].includes(status))throw new Error("INVALID_STATUS");
+  return bookingTransaction(async tx=>{
+    const path=`bookings/${encodeURIComponent(id)}`,b=await tx.get(path);if(!b)throw new Error("BOOKING_NOT_FOUND");
+    if(status==="confirmed"&&b.status==="cancelled")throw new Error("BOOKING_CANCELLED");
+    if(status==="confirmed"&&Math.max(Number(b.paidAmount)||0,Number(b.amountReceived)||0)<Number(b.depositRequired||3000))throw new Error("DEPOSIT_NOT_PAID");
+    const rows=b.isTest?[]:await readStay(tx,b);
+    if(status==="confirmed")checkStay(rows,id);
+    const alreadyConfirmed=status==="confirmed"&&b.status==="confirmed";
+    const patch={status,updatedAt:nowIso()};
+    if(status==="confirmed")patch.confirmedAt=b.confirmedAt||nowIso();
+    if(status==="cancelled")patch.cancelledAt=nowIso();
+    for(const {day,state} of rows){
+      if(status==="confirmed")tx.set(`availability/${day}`,{status:"booked",bookingId:id,updatedAt:nowIso()});
+      else if(state?.bookingId===id)tx.delete(`availability/${day}`);
     }
-    for(const day of days){
-      const r=await authedFetch(`${base()}/availability/${day}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({fields:toFields({status:"booked",bookingId:id,updatedAt:nowIso()})})});
-      if(!r.ok) throw new Error(`FIRESTORE_AVAILABILITY_SAVE_FAILED ${r.status} ${await r.text()}`);
+    tx.set(path,patch,true);return {id,...b,...patch,alreadyConfirmed};
+  });
+}
+export async function createPendingBooking(id,data){
+  return bookingTransaction(async tx=>{
+    const path=`bookings/${encodeURIComponent(id)}`,existing=await tx.get(path);
+    if(existing){
+      if(existing.lineUserId!==data.lineUserId)throw new Error("BOOKING_LINE_MISMATCH");
+      if(existing.requestFingerprint&&existing.requestFingerprint!==data.requestFingerprint)throw new Error("REQUEST_ID_REUSED");
+      return {id,...existing,duplicate:true};
     }
-  }
-  if(status==="cancelled" && !b.isTest){
-    for(const day of days){
-      const url=`${base()}/availability/${day}`;
-      const existing=await authedFetch(url);
-      if(existing.status===404) continue;
-      if(!existing.ok) throw new Error(`FIRESTORE_AVAILABILITY_READ_FAILED ${existing.status} ${await existing.text()}`);
-      const j=await existing.json(); const d=fromFields(j.fields||{});
-      if(d.bookingId===id){
-        const del=await authedFetch(url,{method:"DELETE"});
-        if(!del.ok && del.status!==404) throw new Error(`FIRESTORE_AVAILABILITY_DELETE_FAILED ${del.status} ${await del.text()}`);
-      }
-    }
-  }
-  return {id,...updated};
+    checkStay(await readStay(tx,data));
+    tx.set(path,data);return {id,...data,duplicate:false};
+  });
+}
+export async function savePaymentReport(id,info){
+  return bookingTransaction(async tx=>{
+    const path=`bookings/${encodeURIComponent(id)}`,b=await tx.get(path);if(!b)throw new Error("BOOKING_NOT_FOUND");
+    const patch=paymentReportPatch(b,info,nowIso());
+    if(patch)tx.set(path,patch,true);
+    return {id,...b,...patch,duplicate:!patch||!patch.paymentReportedAt};
+  });
+}
+
+// Customer service requests must not replace a stale copy of finance/status fields.
+export async function saveServiceRequest(id,uid,patch){
+  return bookingTransaction(async tx=>{
+    const path=`bookings/${encodeURIComponent(id)}`,b=await tx.get(path);
+    if(!b)throw new Error("BOOKING_NOT_FOUND");
+    if(!uid||b.lineUserId!==uid)throw new Error("BOOKING_LINE_MISMATCH");
+    if(patch.cancellationRequestStatus&&b.status==="cancelled")throw new Error("BOOKING_ALREADY_CANCELLED");
+    tx.set(path,patch,true);return {id,...b,...patch};
+  });
 }
 
 export async function getPricingConfig(){

@@ -2,5 +2,13 @@
   "name": "lijie-website-admin",
   "private": true,
   "type": "module",
-  "version": "6.95.0"
+  "version": "6.95.0",
+  "devDependencies": {
+    "@playwright/test": "^1.64.0"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "playwright test",
+    "build": "node scripts/build.mjs"
+  }
 }
