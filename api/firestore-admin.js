@@ -253,6 +253,15 @@ export async function saveServiceRequest(id,uid,patch){
   });
 }
 
+export async function recordCustomerNotification(id,notificationId,event){
+  return bookingTransaction(async tx=>{
+    const path=`bookings/${encodeURIComponent(id)}`,b=await tx.get(path);
+    if(!b)throw new Error("BOOKING_NOT_FOUND");
+    const patch={lastCustomerNotificationId:notificationId,lastCustomerNotificationEvent:event,lastCustomerNotificationAt:nowIso(),updatedAt:nowIso()};
+    tx.set(path,patch,true);return {id,...b,...patch};
+  });
+}
+
 export async function getPricingConfig(){
   const r=await authedFetch(`${base()}/settings/pricing`);
   if(r.status===404) return null;

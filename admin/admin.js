@@ -650,7 +650,7 @@ async function perform_saveBookingDates(event) {
 }
 
 async function cancelSelectedBooking() {
-  const key = adminSelectedDate || $("#bookingStart").value;
+  const key = adminSelectedDate || $("#bookingStart")?.value;
   if (!key) return message("#bookingMessage", "請先在左側日曆點選一個已預約日期。", "error");
   message("#bookingMessage", "正在讀取預約資料…");
   try {
@@ -661,7 +661,11 @@ async function cancelSelectedBooking() {
     const bookingId = daySnap.data()?.bookingId || "";
     if (!bookingId) {
       if (!confirm(`確定要將 ${key} 恢復為可詢問嗎？這筆日期沒有綁定預約編號。`)) return;
-      await deleteDoc(doc(db, "availability", key));
+      await runTransaction(db,async tx=>{
+        const current=await tx.get(doc(db,"availability",key));
+        if(current.data()?.status!=="booked"||current.data()?.bookingId)throw new Error("日期已變更，請重新整理後再處理。");
+        tx.delete(current.ref);
+      });
       await renderAdminCalendar();
       return message("#bookingMessage", `${key} 已恢復可詢問。`, "success");
     }
@@ -670,17 +674,18 @@ async function cancelSelectedBooking() {
     const booking = bookingSnap.exists() ? bookingSnap.data() : {};
     const label = booking?.guestName ? `（${booking.guestName}）` : "";
     if (!confirm(`確定取消這筆預約${label}？\n系統會一次釋出所有綁定日期。`)) return;
-    const q = query(collection(db, "availability"), where("bookingId", "==", bookingId));
-    const days = await getDocs(q);
-    const batch = writeBatch(db);
-    days.forEach((snap) => batch.delete(snap.ref));
-    if (bookingSnap.exists()) {
-      batch.set(bookingRef, { status:"cancelled", cancelledAt:serverTimestamp(), updatedAt:serverTimestamp() }, { merge:true });
-    }
-    await batch.commit();
+    const released=await runTransaction(db,async tx=>{
+      const current=await tx.get(bookingRef);
+      if(!current.exists())throw new Error("找不到訂單，請重新整理後再處理。");
+      const value=current.data(),dates=value.isTest?[]:eachStayNight(value.startDate,value.endDate),locks=[];
+      for(const day of dates)locks.push(await tx.get(doc(db,"availability",day)));
+      let count=0;for(const lock of locks)if(lock.data()?.bookingId===bookingId){tx.delete(lock.ref);count++;}
+      tx.set(bookingRef,{status:"cancelled",cancelledAt:serverTimestamp(),updatedAt:serverTimestamp()},{merge:true});
+      return count;
+    });
     adminSelectedDate = key;
     await renderAdminCalendar();
-    message("#bookingMessage", `預約已取消，${days.size} 天已恢復可詢問。`, "success");
+    message("#bookingMessage", `預約已取消，${released} 天已恢復可詢問。`, "success");
   } catch (error) {
     console.error("cancel booking failed", error);
     message("#bookingMessage", error?.message || "取消預約失敗。", "error");

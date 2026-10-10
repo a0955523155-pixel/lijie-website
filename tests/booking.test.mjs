@@ -10,6 +10,7 @@ const {default:payment}=await import('../api/line-payment-report.js');
 const {default:webhook,submitPaymentReport}=await import('../api/line-webhook.js');
 const {default:confirm}=await import('../api/admin-booking-confirm.js');
 const {default:cancelRequest}=await import('../api/line-cancel-request.js');
+const {default:notify}=await import('../api/admin-customer-notify.js');
 const booking=(extra={})=>({startDate:'2026-11-01',endDate:'2026-11-03',status:'pending',lineUserId:'U-A',paidAmount:3000,depositRequired:3000,...extra});
 test.beforeEach(()=>{fake.reset();process.env.LINE_CHANNEL_ACCESS_TOKEN='';});
 test('parallel confirmations: one winner, loser remains pending and all nights share one lock',async()=>{
@@ -147,4 +148,15 @@ test('form rejects six last-five digits instead of silently truncating',async()=
   fake.set('bookings/A',booking({paidAmount:0}));
   const result=await invoke(payment,{session:session('U-A'),bookingId:'A',payerName:'Synthetic',last5:'123456'});
   assert.equal(result.data.error,'PAYMENT_LAST5_REQUIRED');assert.equal(fake.docs.get('bookings/A').paymentReportStatus,undefined);
+});
+test('notification recording cannot overwrite a confirmation or resurrect a concurrent cancellation',async()=>{
+  for(const status of ['confirmed','cancelled']){
+    fake.reset();fake.set('admins/synthetic-admin',{});fake.set('bookings/A',booking());
+    process.env.LINE_CHANNEL_ACCESS_TOKEN='SYNTHETIC';
+    fake.onLinePush=()=>fs.setBookingStatus('A',status);
+    const result=await invoke(notify,{bookingId:'A',event:'refund_completed',notificationId:`synthetic-${status}`},{headers:{authorization:'Bearer fake'}});
+    assert.equal(result.data.ok,true);assert.equal(fake.docs.get('bookings/A').status,status);
+    assert.equal(fake.docs.get('bookings/A').lastCustomerNotificationId,`synthetic-${status}`);
+    assert.equal(fake.docs.has('availability/2026-11-01'),status==='confirmed');
+  }
 });

@@ -7,7 +7,7 @@ export function installFakeFirestore(){
   process.env.LINE_CHANNEL_ACCESS_TOKEN='';
   for(const key of ['GMAIL_CLIENT_ID','GMAIL_CLIENT_SECRET','GMAIL_REFRESH_TOKEN','GMAIL_SENDER_EMAIL','ADMIN_NOTIFICATION_EMAIL'])process.env[key]='';
   const docs=new Map(),versions=new Map(),transactions=new Map(),calls=[],replies=[];
-  let sequence=0,failCommit=false,abortOnce=false,failRead=false;
+  let sequence=0,failCommit=false,abortOnce=false,failRead=false,onLinePush=null;
   const enc=v=>v===null?{nullValue:null}:typeof v==='string'?{stringValue:v}:typeof v==='boolean'?{booleanValue:v}:typeof v==='number'?{integerValue:String(v)}:Array.isArray(v)?{arrayValue:{values:v.map(enc)}}:{mapValue:{fields:fields(v)}};
   const fields=v=>Object.fromEntries(Object.entries(v).map(([k,v])=>[k,enc(v)]));
   const dec=v=>'stringValue'in v?v.stringValue:'integerValue'in v?Number(v.integerValue):'booleanValue'in v?v.booleanValue:'nullValue'in v?null:'arrayValue'in v?(v.arrayValue.values||[]).map(dec):Object.fromEntries(Object.entries(v.mapValue.fields).map(([k,v])=>[k,dec(v)]));
@@ -20,6 +20,7 @@ export function installFakeFirestore(){
     if(url.host==='oauth2.googleapis.com')return response({access_token:'FAKE_ONLY',expires_in:3600});
     if(url.host==='identitytoolkit.googleapis.com')return response({users:[{localId:'synthetic-admin'}]});
     if(url.host==='api.line.me'&&url.pathname.endsWith('/reply')){replies.push(body);return response({});}
+    if(url.host==='api.line.me'&&url.pathname.endsWith('/push')&&onLinePush){await onLinePush();return response({});}
     if(url.host!=='firestore.googleapis.com'||!url.pathname.includes('/projects/demo-lijie-isolated/'))throw new Error(`External network forbidden in test: ${url.host}`);
     if(url.pathname.endsWith(':beginTransaction')){const id=`t${++sequence}`;transactions.set(id,new Map());return response({transaction:id});}
     if(url.pathname.endsWith(':rollback')){transactions.delete(body.transaction);return response({});}
@@ -43,7 +44,7 @@ export function installFakeFirestore(){
     const tx=url.searchParams.get('transaction');if(tx)transactions.get(tx).set(key,versions.get(key)||0);
     return docs.has(key)?response(document(key,docs.get(key))):response({error:{status:'NOT_FOUND'}},404);
   };
-  return {docs,calls,replies,set,reset(){docs.clear();versions.clear();transactions.clear();calls.length=0;replies.length=0;failCommit=false;abortOnce=false;failRead=false;},set failCommit(v){failCommit=v;},set abortOnce(v){abortOnce=v;},set failRead(v){failRead=v;}};
+  return {docs,calls,replies,set,reset(){docs.clear();versions.clear();transactions.clear();calls.length=0;replies.length=0;failCommit=false;abortOnce=false;failRead=false;onLinePush=null;},set failCommit(v){failCommit=v;},set abortOnce(v){abortOnce=v;},set failRead(v){failRead=v;},set onLinePush(v){onLinePush=v;}};
 }
 export function session(uid){const body=Buffer.from(JSON.stringify({uid,exp:Date.now()+3600000})).toString('base64url');return `${body}.${crypto.createHmac('sha256',process.env.BOOKING_SESSION_SECRET).update(body).digest('base64url')}`;}
 export async function invoke(handler,body,{method='POST',query={},headers={}}={}){

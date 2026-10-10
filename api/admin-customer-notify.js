@@ -1,5 +1,5 @@
 import { requireAdmin } from "./admin-auth.js";
-import { getBooking, putBooking } from "./firestore-admin.js";
+import { getBooking, recordCustomerNotification } from "./firestore-admin.js";
 import { gmailReady, sendMail, refundCompletedMail, cancellationCompletedMail } from "./gmail-mailer.js";
 
 function money(n){return `NT$ ${Math.max(0,Number(n)||0).toLocaleString("zh-TW")}`;}
@@ -29,7 +29,7 @@ export default async function handler(req,res){
     let lineSent=false,emailSent=false;
     if(b.lineUserId){try{lineSent=await pushLine(b.lineUserId,event==="refund_completed"?refundCard(b,{amount,method,date,reason}):cancelledCard(b,{refundAmount:amount,refundMethod:method,refundDate:date,reason,depositDisposition}));}catch(e){console.warn("customer notify LINE failed",e)}}
     if(b.email&&gmailReady()){try{const m=event==="refund_completed"?refundCompletedMail(b,{amount,method,date,reason}):cancellationCompletedMail(b,{refundAmount:amount,refundMethod:method,refundDate:date,reason,depositDisposition});await sendMail({to:b.email,subject:m.subject,text:m.text,html:m.html});emailSent=true;}catch(e){console.warn("customer notify email failed",e)}}
-    if(notificationId){const full={...b,lastCustomerNotificationId:notificationId,lastCustomerNotificationEvent:event,lastCustomerNotificationAt:new Date().toISOString(),updatedAt:new Date().toISOString()};delete full.id;await putBooking(bookingId,full);}
+    if(notificationId)await recordCustomerNotification(bookingId,notificationId,event);
     console.info("admin-customer-notify",{bookingId,event,adminUid:admin.uid,lineSent,emailSent});return res.status(200).json({ok:true,lineSent,emailSent});
   }catch(e){const code=String(e?.message||e);console.error("admin-customer-notify failed",code);return res.status(code.startsWith("ADMIN_")?401:400).json({ok:false,error:code});}
 }
