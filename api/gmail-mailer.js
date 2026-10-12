@@ -3,6 +3,18 @@ const TOKEN_URL="https://oauth2.googleapis.com/token";
 function cfg(){return{clientId:String(process.env.GMAIL_CLIENT_ID||"").trim(),clientSecret:String(process.env.GMAIL_CLIENT_SECRET||"").trim(),refreshToken:String(process.env.GMAIL_REFRESH_TOKEN||"").trim(),sender:String(process.env.GMAIL_SENDER_EMAIL||"").trim(),senderName:String(process.env.GMAIL_SENDER_NAME||"俐姐的家").trim()};}
 export function gmailReady(){const c=cfg();return Boolean(c.clientId&&c.clientSecret&&c.refreshToken&&c.sender);}
 export function adminNotificationEmail(){const c=cfg();return String(process.env.ADMIN_NOTIFICATION_EMAIL||c.sender||"").trim();}
+export function newBookingNotificationRecipients(){
+  const original=adminNotificationEmail(),recipients=original?[original]:[];
+  const raw=String(process.env.NEW_BOOKING_NOTIFICATION_EXTRA_EMAIL||""),extra=raw.trim();
+  if(!extra)return recipients;
+  const local=extra.split("@")[0];
+  if(/[\r\n]/.test(raw)||extra.length>254||!/^[A-Za-z0-9][A-Za-z0-9._%+-]{0,63}@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/.test(extra)||local.endsWith(".")||local.includes("..")){
+    console.warn("new booking extra notification address invalid; keeping original recipient");return recipients;
+  }
+  const existing=original.split(",").map(value=>(value.match(/<([^<>]+)>/)?.[1]||value).trim().toLowerCase());
+  if(!existing.includes(extra.toLowerCase()))recipients.push(extra);
+  return recipients;
+}
 async function access(){const c=cfg();if(!gmailReady())throw new Error("GMAIL_NOT_CONFIGURED");const r=await fetch(TOKEN_URL,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:c.clientId,client_secret:c.clientSecret,refresh_token:c.refreshToken,grant_type:"refresh_token"})});if(!r.ok)throw new Error(`GMAIL_TOKEN_FAILED ${r.status} ${await r.text()}`);return(await r.json()).access_token;}
 function clean(v){return String(v||"").replace(/[\r\n]+/g," ").trim();}
 function enc(v){return `=?UTF-8?B?${Buffer.from(String(v||""),"utf8").toString("base64")}?=`;}

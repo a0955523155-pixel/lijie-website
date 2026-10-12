@@ -16,7 +16,7 @@ const jobs=(status='pending')=>list().filter(j=>j.status===status);
 const read=()=>fake.docs.get(`bookings/${booking.id}`);
 function body(startDate='2026-10-12',endDate='2026-10-14',before=booking){return {startDate,endDate,expectedStartDate:before.startDate,expectedEndDate:before.endDate};}
 async function seed(enabled=true){fake.set(SETTINGS_PATH,{...active,enabled});fake.set(`bookings/${booking.id}`,booking);await setBookingStatus(booking.id,'confirmed');}
-test.beforeEach(()=>fake.reset());
+test.beforeEach(context=>{fake.reset();context.mock.timers.enable({apis:['Date'],now:now.getTime()});});
 test('confirmation, concurrent date change retries and cancellation keep locks, status and reminder jobs atomic',async()=>{
  await seed();const finance={paidAmount:read().paidAmount,totalAmount:read().totalAmount};
  const change=body();const [a,b]=await Promise.all([rescheduleConfirmedBooking(booking.id,change,actor,now),rescheduleConfirmedBooking(booking.id,change,actor,now)]);

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { BOOKING_RULES } from "../js/booking-rules.js";
 import { createPendingBooking, firestoreReady, quoteStay, getPublicPricingSettings } from "./firestore-admin.js";
-import { gmailReady, sendMail, receivedEmailText, receivedEmailHtml, adminNotificationEmail, newBookingAdminMail } from "./gmail-mailer.js";
+import { gmailReady, sendMail, receivedEmailText, receivedEmailHtml, newBookingNotificationRecipients, newBookingAdminMail } from "./gmail-mailer.js";
 import { COOKIE_NAME, parseCookies, verifyPayload as verifyCookiePayload, createBookingSession as createSecureSession } from "./line-auth-lib.js";
 
 function clean(value, max = 500) {
@@ -200,8 +200,7 @@ export default async function handler(req,res){
         try{ await sendMail({to:booking.email,subject:"俐姐的家｜已收到您的預約需求",text:receivedEmailText(savedBooking),html:receivedEmailHtml(savedBooking)}); }
         catch(e){ console.warn("booking received email failed",e); }
       }
-      const adminTo=adminNotificationEmail();
-      if(adminTo){
+      for(const adminTo of newBookingNotificationRecipients()){
         try{const m=newBookingAdminMail(savedBooking);await sendMail({to:adminTo,subject:m.subject,text:m.text,html:m.html});}
         catch(e){console.warn("booking admin notification email failed",e);}
       }
