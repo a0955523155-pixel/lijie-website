@@ -9,7 +9,7 @@ const {reviewHousekeepingNotification,notificationSummaries}=await import('../ap
 const adminHandler=(await import('../api/admin-housekeeping.js')).default;
 const rescheduleHandler=(await import('../api/admin-booking-reschedule.js')).default;
 const actor={uid:'synthetic-admin'},now=new Date('2026-10-10T00:00:00Z');
-const active={...reminderSettings({contactName:'合成房務',email:'synthetic@example.invalid',arrivalTime:'09:00',checkoutTime:'12:00'}),enabled:true,activationId:'ACTIVATION'};
+const active={...reminderSettings({contactName:'合成房務',email:'synthetic@example.invalid',arrivalTime:'09:00',checkoutTime:'12:00',preArrivalMinutes:60}),enabled:true,activationId:'ACTIVATION'};
 const booking={id:'SYNTHETIC-CHANGE',startDate:'2026-10-11',endDate:'2026-10-13',status:'pending',people:12,paidAmount:3000,depositRequired:3000,totalAmount:12000};
 const list=()=>[...fake.docs].filter(([p])=>p.startsWith('housekeepingNotifications/')).map(([p,b])=>({id:p.split('/')[1],...b}));
 const jobs=(status='pending')=>list().filter(j=>j.status===status);
@@ -20,21 +20,21 @@ test.beforeEach(context=>{fake.reset();context.mock.timers.enable({apis:['Date']
 test('confirmation, concurrent date change retries and cancellation keep locks, status and reminder jobs atomic',async()=>{
  await seed();const finance={paidAmount:read().paidAmount,totalAmount:read().totalAmount};
  const change=body();const [a,b]=await Promise.all([rescheduleConfirmedBooking(booking.id,change,actor,now),rescheduleConfirmedBooking(booking.id,change,actor,now)]);
- assert.equal(a.housekeepingRevision,b.housekeepingRevision);assert.equal(jobs().length,3);assert.equal(jobs('stale').length,3);assert.equal(read().status,'confirmed');
+ assert.equal(a.housekeepingRevision,b.housekeepingRevision);assert.equal(jobs().length,4);assert.equal(jobs('stale').length,4);assert.equal(read().status,'confirmed');
  assert.equal(fake.docs.has('availability/2026-10-11'),false);assert.equal(fake.docs.get('availability/2026-10-13').bookingId,booking.id);assert.deepEqual({paidAmount:read().paidAmount,totalAmount:read().totalAmount},finance);
  await setBookingStatus(booking.id,'cancelled');assert.equal(jobs().length,0);assert.equal(fake.docs.has('availability/2026-10-13'),false);
  let sends=0;await runHousekeepingReminders({now:new Date('2026-10-14T05:00:00Z'),mailerReady:true,deliver:async()=>sends++});assert.equal(sends,0);
 });
 test('conflicts, failed commits and cancelled state never apply a partial date or reminder change',async()=>{
  await seed();await assert.rejects(rescheduleConfirmedBooking(booking.id,body('2026-02-31','2026-03-04'),actor,now),/INVALID_DATES/);const before=structuredClone(fake.docs);fake.set('availability/2026-10-13',{status:'booked',bookingId:'OTHER'});
- await assert.rejects(rescheduleConfirmedBooking(booking.id,body(),actor,now),/DATE_CONFLICT/);assert.equal(read().startDate,booking.startDate);assert.equal(jobs().length,3);
+ await assert.rejects(rescheduleConfirmedBooking(booking.id,body(),actor,now),/DATE_CONFLICT/);assert.equal(read().startDate,booking.startDate);assert.equal(jobs().length,4);
  fake.set('availability/2026-10-13',{status:'available'});fake.failCommit=true;await assert.rejects(rescheduleConfirmedBooking(booking.id,body(),actor,now));assert.equal(read().startDate,booking.startDate);assert.equal(jobs('stale').length,0);
  fake.failCommit=false;await setBookingStatus(booking.id,'cancelled');await assert.rejects(rescheduleConfirmedBooking(booking.id,body(),actor,now),/NOT_CONFIRMED/);assert.equal(before.get(`bookings/${booking.id}`).totalAmount,read().totalAmount);
 });
 test('lost change reply retries are idempotent; no-op date edits create no jobs or revision',async()=>{
  await seed();fake.dropCommitResponse=true;await assert.rejects(rescheduleConfirmedBooking(booking.id,body(),actor,now),/REPLY_LOST/);
- const retry=await rescheduleConfirmedBooking(booking.id,body(),actor,now);assert.equal(retry.duplicate,true);assert.equal(jobs().length,3);
- const current=read(),revision=current.housekeepingRevision;await rescheduleConfirmedBooking(booking.id,{...body(current.startDate,current.endDate,current),notes:'合成備註'},actor,now);assert.equal(read().housekeepingRevision,revision);assert.equal(jobs().length,3);
+ const retry=await rescheduleConfirmedBooking(booking.id,body(),actor,now);assert.equal(retry.duplicate,true);assert.equal(jobs().length,4);
+ const current=read(),revision=current.housekeepingRevision;await rescheduleConfirmedBooking(booking.id,{...body(current.startDate,current.endDate,current),notes:'合成備註'},actor,now);assert.equal(read().housekeepingRevision,revision);assert.equal(jobs().length,4);
 });
 test('disabled confirmations and enabling later never backfill reminders when an old stay changes dates',async()=>{
  await seed(false);assert.equal(list().length,0);await rescheduleConfirmedBooking(booking.id,body(),actor,now);assert.equal(list().length,0);

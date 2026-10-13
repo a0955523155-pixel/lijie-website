@@ -6,7 +6,7 @@ export function installFakeFirestore(){
   process.env.BOOKING_SESSION_SECRET='isolated-test-session-secret';
   process.env.LINE_CHANNEL_SECRET='isolated-webhook-secret';
   process.env.LINE_CHANNEL_ACCESS_TOKEN='';
-  for(const key of ['GMAIL_CLIENT_ID','GMAIL_CLIENT_SECRET','GMAIL_REFRESH_TOKEN','GMAIL_SENDER_EMAIL','ADMIN_NOTIFICATION_EMAIL','NEW_BOOKING_NOTIFICATION_EXTRA_EMAIL'])process.env[key]='';
+  for(const key of ['GMAIL_CLIENT_ID','GMAIL_CLIENT_SECRET','GMAIL_REFRESH_TOKEN','GMAIL_SENDER_EMAIL','ADMIN_NOTIFICATION_EMAIL','NEW_BOOKING_NOTIFICATION_EXTRA_EMAIL','HOUSEKEEPING_NOTIFICATION_CONTACT_NAME','HOUSEKEEPING_NOTIFICATION_EMAIL'])process.env[key]='';
   const docs=new Map(),versions=new Map(),transactions=new Map(),calls=[],replies=[],gmailMessages=[];
   let sequence=0,failCommit=false,abortOnce=false,failRead=false,onLinePush=null,onGmailSend=null,authUser={localId:'synthetic-admin'},pageSize=500,dropCommitResponse=false;
   const enc=v=>v===null?{nullValue:null}:typeof v==='string'?{stringValue:v}:typeof v==='boolean'?{booleanValue:v}:typeof v==='number'?{integerValue:String(v)}:Array.isArray(v)?{arrayValue:{values:v.map(enc)}}:{mapValue:{fields:fields(v)}};

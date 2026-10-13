@@ -1,7 +1,7 @@
 import { autoSeasonMap, bookingWindowMaxDate } from "./holiday-market.js";
 import crypto from "node:crypto";
 import { paymentReportPatch } from "./payment-report-state.js";
-import {newConfirmationJobs,SETTINGS_PATH,stayKey,replaceStayReminderJobs} from "./housekeeping-notification-plan.js";
+import {newConfirmationJobs,SETTINGS_PATH,stayKey,replaceStayReminderJobs,NOTIFICATION_KINDS} from "./housekeeping-notification-plan.js";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SCOPE = "https://www.googleapis.com/auth/datastore";
@@ -239,8 +239,8 @@ export async function setBookingStatus(id,status){
     if(notificationJobs.length)patch.housekeepingNotificationActivationId=settings.activationId;
     if(status==="cancelled"){
       const revision=stayKey({id,...b});
-      const jobs=await Promise.all(["confirmed","arrival","checkout"].map(kind=>tx.get(`housekeepingNotifications/HN${revision}-${kind}`)));
-      jobs.forEach((job,index)=>{if(job)tx.set(`housekeepingNotifications/HN${revision}-${["confirmed","arrival","checkout"][index]}`,{...(job.status==="pending"?{status:"stale"}:{}),supersededAt:nowIso()},true);});
+      const jobs=await Promise.all(NOTIFICATION_KINDS.map(kind=>tx.get(`housekeepingNotifications/HN${revision}-${kind}`)));
+      jobs.forEach((job,index)=>{if(job)tx.set(`housekeepingNotifications/HN${revision}-${NOTIFICATION_KINDS[index]}`,{...(job.status==="pending"?{status:"stale"}:{}),supersededAt:nowIso()},true);});
     }
     if(status==="confirmed")patch.confirmedAt=b.confirmedAt||nowIso();
     if(status==="cancelled")patch.cancelledAt=nowIso();

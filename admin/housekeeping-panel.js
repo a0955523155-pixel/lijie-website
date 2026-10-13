@@ -3,9 +3,12 @@ export function installHousekeepingAdmin(token){
   const $=selector=>document.querySelector(selector);let settingsLoaded=false,lastState=null,disposers=[],generation=0;const reviewRequests=new Map();
   const form=$("#housekeepingReminderForm"),message=$("#housekeepingReminderMessage");
   if(!form)return {load:async()=>{}};
-  const fieldMap={contactName:"housekeepingContactName",email:"housekeepingReminderEmail",arrivalTime:"housekeepingArrivalTime",checkoutTime:"housekeepingCheckoutTime"};
+  const fieldMap={contactName:"housekeepingContactName",email:"housekeepingReminderEmail",arrivalTime:"housekeepingArrivalTime",checkoutTime:"housekeepingCheckoutTime",preArrivalMinutes:"housekeepingPreArrivalMinutes"};
   function showStatus(data){
-    lastState=data;$("#housekeepingReminderStatus").textContent=data.settings?.enabled?"工作提醒已啟用。":"提醒尚未啟用，請先確認房務姓名、收件信箱與通知時間。";
+    lastState=data;$("#housekeepingReminderStatus").textContent=data.schedulerConfigured&&data.gmailConfigured&&data.settings?.enabled&&data.settings?.ready?"工作提醒已啟用。":"提醒尚未啟用，請先確認房務姓名、收件信箱與通知時間。";
+    for(const id of ["housekeepingContactName","housekeepingReminderEmail"])$(`#${id}`).readOnly=data.settings?.contactManaged===true;
+    if(data.settings?.contactManaged)$("#housekeepingReminderStatus").textContent+=" 房務收件資料已由部署設定保存；這不會建立帳號或授予登入權限。";
+    if(data.settings?.preArrivalMinutes==null)$("#housekeepingReminderStatus").textContent+=" 入住前提醒的提前分鐘數尚待確認。";
     if(!data.schedulerConfigured)$("#housekeepingReminderStatus").textContent+=" 定時通知尚未接通。";
     $("#activateHousekeepingReminders").classList.toggle("hidden",!data.schedulerConfigured||!data.gmailConfigured||!data.settings?.ready||data.settings?.enabled===true);
   }
@@ -15,7 +18,7 @@ export function installHousekeepingAdmin(token){
     const labels={pending:"待排程寄送",sending:"寄送結果待確認",delivery_uncertain:"寄送結果待確認",held_for_review:"寄送結果待確認",sent:"已交給郵件服務（未驗證送達）",manually_verified:"人工核對已寄出",suppressed:"同日已處理，未自動重寄",stale:"已失效"};
     for(const job of jobs){
       const card=document.createElement("article");card.className="housekeeping-report-card";card.dataset.notification=job.id;
-      const title=document.createElement("h4");title.textContent=`${{confirmed:"確認通知",arrival:"入住提醒",checkout:"退房提醒"}[job.kind]||"工作提醒"}・${job.bookingId}`;
+      const title=document.createElement("h4");title.textContent=`${{confirmed:"確認通知",pre_arrival:"入住前提醒",arrival:"入住提醒",checkout:"退房提醒"}[job.kind]||"工作提醒"}・${job.bookingId}`;
       const dates=document.createElement("p");dates.textContent=`${job.startDate} 入住 → ${job.endDate} 退房`;
       const state=document.createElement("p");state.className="message";state.textContent=job.effectiveStale&&job.status==="pending"?"已失效":labels[job.status]||"狀態需核對";
       card.append(title,dates,state);
@@ -45,7 +48,7 @@ export function installHousekeepingAdmin(token){
       const response=await privateRequest(`/api/admin-housekeeping?month=${encodeURIComponent(month.value)}`,token),data=await response.json();
       if(current!==generation)return;
       if(!settingsLoaded){for(const [key,id]of Object.entries(fieldMap))$(`#${id}`).value=data.settings?.[key]||"";settingsLoaded=true;}
-      showStatus(data);renderNotifications(data.notifications,data.settings?.enabled===true);for(const dispose of disposers.splice(0))dispose();root.replaceChildren();
+      showStatus(data);renderNotifications(data.notifications,data.settings?.enabled===true&&data.settings?.ready===true);for(const dispose of disposers.splice(0))dispose();root.replaceChildren();
       if(!data.reports?.length){root.textContent="這個月份尚無整備完成紀錄。";return;}
       for(const report of data.reports){const card=document.createElement("article");card.className="housekeeping-report-card";const title=document.createElement("h4");title.textContent=`${report.checkoutDate} 退房・訂單 ${report.bookingId}`;const body=document.createElement("div");disposers.push(renderCompletedReport(body,report,token));card.append(title,body);root.append(card);}
     }catch(e){if(current!==generation)return;root.textContent="完成紀錄讀取失敗，請重新整理。";$("#housekeepingNotifications").textContent="提醒狀態無法確認，請重新整理。";message.textContent=e.message;message.className="message error";}

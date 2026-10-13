@@ -15,7 +15,7 @@ const photoBase64=(await readFile(new URL('./fixtures/synthetic-room.jpg',import
 const now=new Date('2026-10-10T04:00:00Z'),actor={uid:'synthetic-housekeeper',email:'51bbsadmin@gmail.com'};
 const stay={id:'SYNTHETIC-A',startDate:'2026-10-09',endDate:'2026-10-10',guestName:'合成旅客',status:'confirmed',people:1,paidAmount:3000,depositRequired:3000};
 const input={bookingId:stay.id,startDate:stay.startDate,checkoutDate:stay.endDate,requestId:'SYNTHETIC-REQUEST-001',photoBase64};
-const activeSettings={...reminderSettings({contactName:'合成房務',email:'synthetic@example.invalid',arrivalTime:'09:00',checkoutTime:'12:00'}),enabled:true,activationId:'SYNTHETIC-ACTIVATION'};
+const activeSettings={...reminderSettings({contactName:'合成房務',email:'synthetic@example.invalid',arrivalTime:'09:00',checkoutTime:'12:00',preArrivalMinutes:60}),enabled:true,activationId:'SYNTHETIC-ACTIVATION'};
 test.beforeEach(()=>{fake.reset();fake.authUser={localId:actor.uid,email:actor.email};process.env.CRON_SECRET='';process.env.HOUSEKEEPING_REMINDER_SCHEDULE_READY='';});
 function seed(){fake.set(`bookings/${stay.id}`,stay);}
 function count(collection){return [...fake.docs.keys()].filter(x=>x.startsWith(collection+'/')).length;}
@@ -80,14 +80,14 @@ test('calendar follows all pages, includes checkout on month first day, and retu
 test('notification settings do not infer recipient from login and cannot activate without a scheduler',async()=>{
   assert.equal(reminderSettings().email,'');assert.equal(reminderSettings().enabled,false);assert.throws(()=>reminderSettings({email:'a@example.invalid\nBcc:x'}),/INVALID_REMINDER_EMAIL/);
   fake.authUser={localId:'synthetic-admin',email:'admin@example.invalid'};fake.set('admins/synthetic-admin',{});
-  const result=await invoke(settingsHandler,{contactName:'合成房務',email:'synthetic@example.invalid',arrivalTime:'09:00',checkoutTime:'12:00'},{headers:{authorization:'Bearer FAKE'}});assert.equal(result.status,200);assert.equal(result.data.settings.enabled,false);
+  const result=await invoke(settingsHandler,{contactName:'合成房務',email:'synthetic@example.invalid',arrivalTime:'09:00',checkoutTime:'12:00',preArrivalMinutes:60},{headers:{authorization:'Bearer FAKE'}});assert.equal(result.status,200);assert.equal(result.data.settings.enabled,false);
   const activation=await invoke(settingsHandler,{...result.data.settings,activate:true},{headers:{authorization:'Bearer FAKE'}});assert.equal(activation.status,400);assert.equal(fake.docs.get(SETTINGS_PATH).enabled,false);
   assert.equal((await invoke(cronHandler,null,{method:'GET'})).status,503);
 });
 test('confirmed booking and its jobs commit together; rejected confirmation schedules nothing; retries never backfill',async()=>{
   const upcoming={...stay,id:'UPCOMING',status:'pending',startDate:'2026-11-01',endDate:'2026-11-03'};fake.set('bookings/UPCOMING',upcoming);fake.set(SETTINGS_PATH,activeSettings);fake.failCommit=true;
   await assert.rejects(setBookingStatus('UPCOMING','confirmed'));assert.equal(fake.docs.get('bookings/UPCOMING').status,'pending');assert.equal(count('housekeepingNotifications'),0);
-  fake.failCommit=false;await setBookingStatus('UPCOMING','confirmed');assert.equal(count('housekeepingNotifications'),3);await setBookingStatus('UPCOMING','confirmed');assert.equal(count('housekeepingNotifications'),3);
+  fake.failCommit=false;await setBookingStatus('UPCOMING','confirmed');assert.equal(count('housekeepingNotifications'),4);await setBookingStatus('UPCOMING','confirmed');assert.equal(count('housekeepingNotifications'),4);
   fake.reset();fake.set('bookings/UPCOMING',{...upcoming,status:'confirmed'});fake.set(SETTINGS_PATH,activeSettings);await setBookingStatus('UPCOMING','confirmed');assert.equal(count('housekeepingNotifications'),0);
 });
 test('unconfigured or disabled reminder worker never sends or scans history',async()=>{
