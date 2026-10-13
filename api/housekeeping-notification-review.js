@@ -1,12 +1,13 @@
 import {bookingTransaction,listCollectionRecords} from "./firestore-admin.js";
 import {SETTINGS_PATH,stayKey,notificationEventKey,notificationExpired,configuredReminderSettings} from "./housekeeping-notification-plan.js";
+import {notificationApplicable} from "./housekeeping-notifier.js";
 import {reportId} from "./housekeeping-records.js";
 const reviewable=new Set(["delivery_uncertain","sending","held_for_review"]);
 export async function notificationSummaries(month){
   const [jobs,bookings]=await Promise.all([listCollectionRecords("housekeepingNotifications"),listCollectionRecords("bookings")]);
   const byId=new Map(bookings.map(b=>[b.id,b]));
   return jobs.filter(j=>reviewable.has(j.status)||String(j.startDate).startsWith(month)||String(j.endDate).startsWith(month)).map(j=>{
-    const b=byId.get(j.bookingId),effectiveStale=!b||b.status!=="confirmed"||stayKey(b)!==j.revision||Boolean(j.supersededAt);
+    const b=byId.get(j.bookingId),effectiveStale=!b||b.status!==(j.kind==="cancelled"?"cancelled":"confirmed")||stayKey(b)!==j.revision||Boolean(j.supersededAt);
     const {id,bookingId,startDate,endDate,kind,status,dueAt,attemptId="",attemptedAt="",finishedAt="",reviewedAt="",reviewedBy="",previousJobId="",reviewCount=0}=j;
     return {id,bookingId,startDate,endDate,kind,status,dueAt,attemptId,attemptedAt,finishedAt,reviewedAt,reviewedBy,previousJobId,reviewCount,effectiveStale};
   }).sort((a,b)=>Number(reviewable.has(b.status))-Number(reviewable.has(a.status))||String(b.attemptedAt||b.dueAt).localeCompare(String(a.attemptedAt||a.dueAt)));
@@ -29,7 +30,7 @@ export async function reviewHousekeepingNotification(input,actor,now=new Date())
       const config=configuredReminderSettings(await tx.get(SETTINGS_PATH)||{}),b=await tx.get(`bookings/${job.bookingId}`);
       const completed=job.kind==="checkout"?await tx.get(`housekeepingReports/${reportId(job.bookingId,job.endDate,job.startDate)}`):null;
       if(!config?.enabled||!config.ready)throw new Error("REMINDERS_DISABLED");
-      if(!b||b.isTest||b.status!=="confirmed"||stayKey({id:job.bookingId,...b})!==job.revision||config.activationId!==job.activationId||job.supersededAt||completed?.status==="completed"||notificationExpired(job,now))throw new Error("NOTIFICATION_NO_LONGER_APPLICABLE");
+      if(!notificationApplicable(job,b,config,now,completed))throw new Error("NOTIFICATION_NO_LONGER_APPLICABLE");
       patch.status="pending";patch.dueAt=now.toISOString();patch.attemptId="";
     }
     history.push({action,requestId,actor:actor.uid,at:now.toISOString(),previousStatus:job.status,previousAttemptId:job.attemptId||"",possibleDuplicateAck:input.possibleDuplicateAck===true});patch.reviewHistory=history.slice(-50);

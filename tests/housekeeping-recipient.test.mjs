@@ -50,7 +50,7 @@ test('confirmed/preparation/arrival/checkout mail contains only work fields and 
 });
 test('configured recipient is applied to actual isolated worker output, simultaneous runners deduplicate preparation and reversal does not resend it',async()=>{
   configure();fake.set(SETTINGS_PATH,active);fake.set(`bookings/${stay.id}`,{...stay,status:'pending'});await setBookingStatus(stay.id,'confirmed');const mails=[];
-  const due=new Date('2026-10-11T07:00:00Z');await Promise.all([1,2].map(()=>runHousekeepingReminders({now:due,mailerReady:true,deliver:async mail=>mails.push(mail)})));assert.equal(mails.length,2);assert.ok(mails.every(m=>m.to==='configured-staff@example.invalid'));
+  const due=new Date('2026-10-11T07:00:00Z');await Promise.all([1,2].map(()=>runHousekeepingReminders({now:due,mailerReady:true,deliver:async mail=>mails.push(mail)})));assert.equal(mails.length,1);assert.match(mails[0].text,/合併/);assert.ok(mails.every(m=>m.to==='configured-staff@example.invalid'));
   const actor={uid:'synthetic-admin'};await rescheduleConfirmedBooking(stay.id,{expectedStartDate:stay.startDate,expectedEndDate:stay.endDate,startDate:'2026-10-13',endDate:'2026-10-15'},actor,due);
   await rescheduleConfirmedBooking(stay.id,{expectedStartDate:'2026-10-13',expectedEndDate:'2026-10-15',startDate:stay.startDate,endDate:stay.endDate},actor,due);
   assert.ok(rows().some(j=>j.kind==='pre_arrival'&&j.status==='suppressed'));await runHousekeepingReminders({now:due,mailerReady:true,deliver:async mail=>mails.push(mail)});assert.equal(mails.length,2);

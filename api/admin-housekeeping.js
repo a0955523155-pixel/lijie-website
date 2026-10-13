@@ -17,7 +17,7 @@ export default async function handler(req,res){
     }
     if(req.body?.action){const notification=await reviewHousekeepingNotification(req.body,actor);return res.status(200).json({ok:true,notification});}
     const settings=configuredReminderSettings(reminderSettings(req.body||{}));
-    if(req.body?.activate===true){if(!schedulerConfigured||!gmailReady()||!settings.ready)throw new Error("REMINDER_NOT_READY");settings.enabled=true;settings.activationId=crypto.randomUUID();settings.activatedAt=new Date().toISOString();}
+    if(req.body?.activate===true){if(settings.deploymentManaged)throw new Error("REMINDER_DEPLOYMENT_MANAGED");if(!schedulerConfigured||!gmailReady()||!settings.ready)throw new Error("REMINDER_NOT_READY");settings.enabled=true;settings.activationId=crypto.randomUUID();settings.activatedAt=new Date().toISOString();}
     await bookingTransaction(async tx=>{await tx.get(SETTINGS_PATH);tx.set(SETTINGS_PATH,{...settings,updatedBy:actor.uid,updatedAt:new Date().toISOString()});});
     return res.status(200).json({ok:true,settings,schedulerConfigured,gmailConfigured:gmailReady()});
   }catch(e){const code=String(e.message||e),status=/AUTH/.test(code)?401:/FORBIDDEN/.test(code)?403:/FIRESTORE/.test(code)?503:400;return res.status(status).json({ok:false,error:code});}

@@ -1,5 +1,5 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
+// Vercel programmatic configuration keeps schedules scoped to the production project.
+const baseConfig = {
   "outputDirectory": "dist",
   "cleanUrls": true,
   "trailingSlash": false,
@@ -128,4 +128,17 @@
       ]
     }
   ]
+};
+
+export function buildVercelConfig(env = process.env) {
+  const scheduleRequested = env.VERCEL_ENV === "production" &&
+    env.VERCEL_PROJECT_ID === "prj_90CqiFOypCpq6VBNT4G8UPvWEOda" &&
+    env.HOUSEKEEPING_REMINDER_CRON_ENABLED === "true";
+  // UTC 02/04/07 = Asia/Taipei 10:00 / 12:00 / 15:00.
+  const crons = scheduleRequested ? ["0 2 * * *", "0 4 * * *", "0 7 * * *"].map(schedule => ({
+    path: "/api/housekeeping-reminders", schedule,
+  })) : [];
+  return {...baseConfig, crons};
 }
+
+export const config = buildVercelConfig();

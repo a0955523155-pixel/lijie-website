@@ -695,6 +695,7 @@ async function cancelSelectedBooking() {
       tx.set(bookingRef,{status:"cancelled",cancelledAt:serverTimestamp(),updatedAt:serverTimestamp()},{merge:true});
       return count;
     });
+    await dispatchHousekeepingAfterCancellation(bookingId);
     adminSelectedDate = key;
     await renderAdminCalendar();
     message("#bookingMessage", `預約已取消，${released} 天已恢復可詢問。`, "success");
@@ -1503,3 +1504,7 @@ function saveBookingDates(event){event.preventDefault();return runBusyAction("sa
 function verifyReportedDeposit(id){return runBusyAction(`verifyReportedDeposit:${id}`,$("#operationsOrders"),()=>perform_verifyReportedDeposit(id),error=>alert(`操作失敗，請重試：${error.message||error}`));}
 
 function confirmBookingInAdmin(id){return runBusyAction(`confirmBookingInAdmin:${id}`,$("#operationsOrders"),()=>perform_confirmBookingInAdmin(id),error=>alert(`操作失敗，請重試：${error.message||error}`));}
+
+async function dispatchHousekeepingAfterCancellation(bookingId){
+  try{await fetch("/api/admin-housekeeping-dispatch",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${await auth.currentUser.getIdToken()}`},body:JSON.stringify({bookingId})});}catch{/* Durable reminder jobs are reconciled by the authenticated scheduler. */}
+}

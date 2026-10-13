@@ -41,7 +41,7 @@ test('disabled confirmations and enabling later never backfill reminders when an
  fake.set(SETTINGS_PATH,active);const current=read();await rescheduleConfirmedBooking(booking.id,body('2026-10-13','2026-10-15',current),actor,now);assert.equal(list().length,0);
 });
 test('same-day arrival changes, date reversals and already sent confirmation never send twice automatically',async()=>{
- await seed();let sent=0;await runHousekeepingReminders({now:new Date('2026-10-11T01:00:00Z'),mailerReady:true,deliver:async()=>sent++});assert.equal(sent,2);
+ await seed();let sent=0;await runHousekeepingReminders({now:new Date('2026-10-11T01:00:00Z'),mailerReady:true,deliver:async()=>sent++});assert.equal(sent,1);
  await rescheduleConfirmedBooking(booking.id,body('2026-10-11','2026-10-14'),actor,now);assert.equal(jobs('suppressed').filter(j=>j.kind==='arrival').length,1);assert.equal(jobs().some(j=>j.kind==='confirmed'),false);
  let current=read();await rescheduleConfirmedBooking(booking.id,body('2026-10-12','2026-10-14',current),actor,now);current=read();await rescheduleConfirmedBooking(booking.id,body('2026-10-11','2026-10-13',current),actor,now);
  await runHousekeepingReminders({now:new Date('2026-10-11T02:00:00Z'),mailerReady:true,deliver:async()=>sent++});assert.equal(sent,2);assert.ok(jobs('suppressed').filter(j=>j.kind==='arrival').length>=2);
@@ -49,7 +49,7 @@ test('same-day arrival changes, date reversals and already sent confirmation nev
 test('same-day ambiguous delivery is held for review after change instead of silently resent',async()=>{
  await seed();await runHousekeepingReminders({now:new Date('2026-10-11T01:00:00Z'),mailerReady:true,deliver:async()=>{throw new Error('SYNTHETIC_UNKNOWN');}});
  await rescheduleConfirmedBooking(booking.id,body('2026-10-11','2026-10-14'),actor,now);assert.equal(jobs('held_for_review').filter(j=>j.kind==='arrival').length,1);
- const summaries=await notificationSummaries('2026-10');assert.ok(summaries.some(j=>j.status==='delivery_uncertain'&&j.effectiveStale));let sends=0;await runHousekeepingReminders({now:new Date('2026-10-11T02:00:00Z'),mailerReady:true,deliver:async()=>sends++});assert.equal(sends,0);
+ const summaries=await notificationSummaries('2026-10');assert.ok(summaries.some(j=>j.status==='delivery_uncertain'&&j.effectiveStale));const changes=[];await runHousekeepingReminders({now:new Date('2026-10-11T02:00:00Z'),mailerReady:true,deliver:async mail=>changes.push(mail)});assert.equal(changes.length,1);assert.match(changes[0].subject,/日期已變更/);
 });
 test('manual review records operator and history without sending; lost response and repeated review are idempotent',async()=>{
  await seed();const job=jobs().find(j=>j.kind==='arrival');fake.set(`housekeepingNotifications/${job.id}`,{...job,status:'delivery_uncertain',attemptId:'TRY'});

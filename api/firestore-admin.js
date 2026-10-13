@@ -1,7 +1,7 @@
 import { autoSeasonMap, bookingWindowMaxDate } from "./holiday-market.js";
 import crypto from "node:crypto";
 import { paymentReportPatch } from "./payment-report-state.js";
-import {newConfirmationJobs,SETTINGS_PATH,stayKey,replaceStayReminderJobs,NOTIFICATION_KINDS} from "./housekeeping-notification-plan.js";
+import {newConfirmationJobs,SETTINGS_PATH,stayKey,replaceStayReminderJobs,NOTIFICATION_KINDS,planChangeNotice,configuredReminderSettings} from "./housekeeping-notification-plan.js";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SCOPE = "https://www.googleapis.com/auth/datastore";
@@ -232,15 +232,16 @@ export async function setBookingStatus(id,status){
     const rows=b.isTest?[]:await readStay(tx,b);
     if(status==="confirmed")checkStay(rows,id);
     const alreadyConfirmed=status==="confirmed"&&b.status==="confirmed";
-    const settings=status==="confirmed"&&!alreadyConfirmed&&!b.isTest?await tx.get(SETTINGS_PATH):null;
+    const settings=status==="confirmed"&&!alreadyConfirmed&&!b.isTest?configuredReminderSettings(await tx.get(SETTINGS_PATH)||{}):null;
     const notificationJobs=newConfirmationJobs({id,...b,status},settings);
     const existingJobs=await Promise.all(notificationJobs.map(job=>tx.get(`housekeepingNotifications/${job.id}`)));
     const patch={status,updatedAt:nowIso()};
     if(notificationJobs.length)patch.housekeepingNotificationActivationId=settings.activationId;
     if(status==="cancelled"){
+      await planChangeNotice(tx,{id,...b},{id,...b,status},await tx.get(SETTINGS_PATH),"cancelled",new Date());
       const revision=stayKey({id,...b});
-      const jobs=await Promise.all(NOTIFICATION_KINDS.map(kind=>tx.get(`housekeepingNotifications/HN${revision}-${kind}`)));
-      jobs.forEach((job,index)=>{if(job)tx.set(`housekeepingNotifications/HN${revision}-${NOTIFICATION_KINDS[index]}`,{...(job.status==="pending"?{status:"stale"}:{}),supersededAt:nowIso()},true);});
+      const jobs=await Promise.all(NOTIFICATION_KINDS.filter(kind=>kind!=="cancelled").map(kind=>tx.get(`housekeepingNotifications/HN${revision}-${kind}`)));
+      jobs.forEach((job,index)=>{if(job)tx.set(`housekeepingNotifications/HN${revision}-${NOTIFICATION_KINDS.filter(kind=>kind!=="cancelled")[index]}`,{...(job.status==="pending"?{status:"stale"}:{}),supersededAt:nowIso()},true);});
     }
     if(status==="confirmed")patch.confirmedAt=b.confirmedAt||nowIso();
     if(status==="cancelled")patch.cancelledAt=nowIso();

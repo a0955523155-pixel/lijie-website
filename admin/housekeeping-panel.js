@@ -7,10 +7,11 @@ export function installHousekeepingAdmin(token){
   function showStatus(data){
     lastState=data;$("#housekeepingReminderStatus").textContent=data.schedulerConfigured&&data.gmailConfigured&&data.settings?.enabled&&data.settings?.ready?"工作提醒已啟用。":"提醒尚未啟用，請先確認房務姓名、收件信箱與通知時間。";
     for(const id of ["housekeepingContactName","housekeepingReminderEmail"])$(`#${id}`).readOnly=data.settings?.contactManaged===true;
+    for(const id of ["housekeepingPreArrivalMinutes","housekeepingArrivalTime","housekeepingCheckoutTime"])$(`#${id}`).readOnly=data.settings?.timingManaged===true;
     if(data.settings?.contactManaged)$("#housekeepingReminderStatus").textContent+=" 房務收件資料已由部署設定保存；這不會建立帳號或授予登入權限。";
     if(data.settings?.preArrivalMinutes==null)$("#housekeepingReminderStatus").textContent+=" 入住前提醒的提前分鐘數尚待確認。";
     if(!data.schedulerConfigured)$("#housekeepingReminderStatus").textContent+=" 定時通知尚未接通。";
-    $("#activateHousekeepingReminders").classList.toggle("hidden",!data.schedulerConfigured||!data.gmailConfigured||!data.settings?.ready||data.settings?.enabled===true);
+    $("#activateHousekeepingReminders").classList.toggle("hidden",!data.schedulerConfigured||!data.gmailConfigured||data.settings?.deploymentManaged===true||!data.settings?.ready||data.settings?.enabled===true);
   }
   function renderNotifications(jobs,enabled){
     const root=$("#housekeepingNotifications");root.replaceChildren();
@@ -18,7 +19,7 @@ export function installHousekeepingAdmin(token){
     const labels={pending:"待排程寄送",sending:"寄送結果待確認",delivery_uncertain:"寄送結果待確認",held_for_review:"寄送結果待確認",sent:"已交給郵件服務（未驗證送達）",manually_verified:"人工核對已寄出",suppressed:"同日已處理，未自動重寄",stale:"已失效"};
     for(const job of jobs){
       const card=document.createElement("article");card.className="housekeeping-report-card";card.dataset.notification=job.id;
-      const title=document.createElement("h4");title.textContent=`${{confirmed:"確認通知",pre_arrival:"入住前提醒",arrival:"入住提醒",checkout:"退房提醒"}[job.kind]||"工作提醒"}・${job.bookingId}`;
+      const title=document.createElement("h4");title.textContent=`${{rescheduled:"改期通知",cancelled:"取消通知",confirmed:"確認通知",pre_arrival:"入住前提醒",arrival:"入住提醒",checkout:"退房提醒"}[job.kind]||"工作提醒"}・${job.bookingId}`;
       const dates=document.createElement("p");dates.textContent=`${job.startDate} 入住 → ${job.endDate} 退房`;
       const state=document.createElement("p");state.className="message";state.textContent=job.effectiveStale&&job.status==="pending"?"已失效":labels[job.status]||"狀態需核對";
       card.append(title,dates,state);

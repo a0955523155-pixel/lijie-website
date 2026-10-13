@@ -1,3 +1,4 @@
+import {triggerHousekeepingBooking} from "./housekeeping-notifier.js";
 import { requireAdmin } from "./admin-auth.js";
 import { getBooking, recordCustomerNotification } from "./firestore-admin.js";
 import { gmailReady, sendMail, refundCompletedMail, cancellationCompletedMail } from "./gmail-mailer.js";
@@ -24,6 +25,7 @@ export default async function handler(req,res){
     const admin=await requireAdmin(req);const body=typeof req.body==="string"?JSON.parse(req.body):(req.body||{});const bookingId=String(body.bookingId||"").trim(),event=String(body.event||"").trim();
     if(!bookingId)throw new Error("BOOKING_ID_REQUIRED");if(!["refund_completed","cancellation_completed"].includes(event))throw new Error("EVENT_INVALID");
     const b=await getBooking(bookingId);if(!b)throw new Error("BOOKING_NOT_FOUND");
+    if(event==="cancellation_completed"&&b.status==="cancelled")await triggerHousekeepingBooking(bookingId);
     const amount=Math.max(0,Number(body.amount??body.refundAmount)||0),method=String(body.method||body.refundMethod||"轉帳"),date=String(body.date||body.refundDate||new Date().toISOString().slice(0,10)),reason=String(body.reason||"").trim(),depositDisposition=String(body.depositDisposition||b.depositDispositionLabel||"").trim(),notificationId=String(body.notificationId||"").trim();
     if(notificationId&&b.lastCustomerNotificationId===notificationId)return res.status(200).json({ok:true,alreadySent:true});
     let lineSent=false,emailSent=false;

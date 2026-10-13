@@ -2,8 +2,9 @@ import crypto from "node:crypto";
 import {BOOKING_RULES} from "../js/booking-rules.js";
 export const SETTINGS_PATH="settings/housekeepingReminders";
 export const stayKey=b=>crypto.createHash("sha256").update(`${b.id}\0${b.startDate}\0${b.endDate}${b.housekeepingRevision?`\0${b.housekeepingRevision}`:""}`).digest("hex").slice(0,40);
-export const NOTIFICATION_KINDS=["confirmed","pre_arrival","arrival","checkout"];
-export const notificationDay=job=>job.kind==="pre_arrival"?new Date(job.scheduledFor||job.dueAt).toLocaleDateString("en-CA",{timeZone:"Asia/Taipei"}):job.kind==="checkout"?job.endDate:job.startDate;
+export const NOTIFICATION_KINDS=["confirmed","pre_arrival","arrival","checkout","rescheduled","cancelled"];
+export const isChangeNotice=job=>["rescheduled","cancelled"].includes(job.kind);
+export const notificationDay=job=>isChangeNotice(job)?job.endDate:job.kind==="pre_arrival"?new Date(job.scheduledFor||job.dueAt).toLocaleDateString("en-CA",{timeZone:"Asia/Taipei"}):job.kind==="checkout"?job.endDate:job.startDate;
 export function notificationExpired(job,now){
   return notificationDay(job)<now.toLocaleDateString("en-CA",{timeZone:"Asia/Taipei"})||
     (job.kind==="pre_arrival"&&now.getTime()>=new Date(`${job.startDate}T${BOOKING_RULES.checkInFrom}:00+08:00`).getTime());
@@ -12,10 +13,14 @@ export function notificationExpired(job,now){
 export function configuredReminderSettings(input={}){
   const contactName=String(process.env.HOUSEKEEPING_NOTIFICATION_CONTACT_NAME||"").trim();
   const email=String(process.env.HOUSEKEEPING_NOTIFICATION_EMAIL||"").trim();
-  const managed=Boolean(contactName&&email),values={...input,...(managed?{contactName,email}:{})};
-  return {...values,...reminderSettings(values),enabled:input.enabled===true,contactManaged:managed};
+  let timing={};const raw=process.env.HOUSEKEEPING_NOTIFICATION_TIMING||"";
+  if(raw){const v=JSON.parse(raw);timing={arrivalTime:v.arrivalTime,checkoutTime:v.checkoutTime,preArrivalMinutes:v.preArrivalMinutes};}
+  const managed=Boolean(contactName&&email),values={...input,...timing,...(managed?{contactName,email}:{})};
+  const controlled=process.env.HOUSEKEEPING_NOTIFICATIONS_ENABLED!==undefined;
+  const enabled=controlled?process.env.HOUSEKEEPING_NOTIFICATIONS_ENABLED==="true"&&Boolean(process.env.CRON_SECRET)&&process.env.HOUSEKEEPING_REMINDER_SCHEDULE_READY==="true":input.enabled===true;
+  return {...values,...reminderSettings(values),enabled,activationId:controlled?String(process.env.HOUSEKEEPING_NOTIFICATION_ACTIVATION_ID||""):input.activationId,contactManaged:managed,timingManaged:Boolean(raw),deploymentManaged:controlled};
 }
-export const notificationEventKey=j=>`HE${crypto.createHash("sha256").update(`${j.bookingId}\0${j.activationId}\0${j.kind}\0${notificationDay(j)}`).digest("hex").slice(0,40)}`;
+export const notificationEventKey=j=>`HE${crypto.createHash("sha256").update(`${j.bookingId}\0${j.activationId}\0${j.kind}\0${isChangeNotice(j)?j.revision:notificationDay(j)}`).digest("hex").slice(0,40)}`;
 export function reminderSettings(input={}){
   const contactName=String(input.contactName||"").trim().slice(0,80),email=String(input.email||"").trim(),arrivalTime=String(input.arrivalTime||""),checkoutTime=String(input.checkoutTime||"");
   if(email&&!/^[^\s@,;\r\n]+@[^\s@,;\r\n]+\.[^\s@,;\r\n]+$/.test(email))throw new Error("INVALID_REMINDER_EMAIL");
@@ -38,13 +43,15 @@ export function newConfirmationJobs(booking,settings,now=new Date()){
 }
 export function housekeepingMail(job,booking,settings){
   const day=job.kind==="checkout"?job.endDate:job.startDate,url=`https://www.5-1bbs.com/housekeeping/?date=${encodeURIComponent(day)}&booking=${encodeURIComponent(job.bookingId)}`;
-  const preparation="請在入住前備妥鑰匙；若有密碼鎖，請將密碼回傳官方 LINE @287ppyfa：https://line.me/R/ti/p/@287ppyfa 。";
-  const content={confirmed:["新預約已確認",`請確認後續房務安排。${preparation}`],pre_arrival:["入住前準備提醒",preparation],arrival:["今天有客戶入住",`請確認入住準備已完成。${preparation}`],checkout:["今天退房，請回報整備完成","請確認住客已退房再清潔。整理完成 → 至少拍一張客廳整潔照片 → 按完成回報。時間、照片與狀態會留在後台，回報完成後停止這次退房催報。"]}[job.kind];
+  const preparation="請確認鑰匙已備妥；若有密碼鎖，請將密碼回傳官方 LINE @287ppyfa：https://line.me/R/ti/p/@287ppyfa 。";
+  const content={rescheduled:["住宿日期已變更",`原入住 ${job.previousStartDate||"—"}，原退房 ${job.previousEndDate||"—"}；請依本信新日期重新安排。${preparation}`],cancelled:["住宿已取消", "這筆住宿已取消，請停止原訂單的入住與退房準備；其他訂單照常處理。"],confirmed:["新預約已確認",`請確認後續房務安排。${preparation}`],pre_arrival:["入住前準備提醒",preparation],arrival:["今天有客戶入住",`請確認今日入住準備；若前一組尚未退房，先備妥用品，確認退房後再進場清潔。${preparation}`],checkout:["今天退房，請回報整備完成","請確認住客已退房再清潔。整理完成 → 至少拍一張客廳整潔照片 → 按完成回報。時間、照片與狀態會留在後台，回報完成後停止這次退房催報。"]}[job.kind];
   if(!content)throw new Error("INVALID_REMINDER_KIND");
-  return {to:settings.email,subject:`俐姐的家｜${content[0]}`,text:`${settings.contactName}您好：\n${content[0]}\n訂單 ${job.bookingId}\n入住 ${booking.startDate} ${BOOKING_RULES.checkInFrom} 起｜退房 ${booking.endDate} ${BOOKING_RULES.checkOutBy} 前（Asia/Taipei）\n入住人數：${Number(booking.people)||0} 位\n${content[1]}\n房務工作台：${url}\n請使用已授權的房務帳號登入；收件信箱不會自動取得登入權限。`};
+  return {to:settings.email,subject:`俐姐的家｜${content[0]}`,text:`${settings.contactName}您好：\n${content[0]}\n訂單 ${job.bookingId}\n入住 ${booking.startDate} ${BOOKING_RULES.checkInFrom} 起｜退房 ${booking.endDate} ${BOOKING_RULES.checkOutBy} 前（Asia/Taipei）\n入住人數：${Number(booking.people)||0} 位\n${content[1]}${job.combinedKinds?.length>1?"\n本封已合併本次到期的準備提醒，無需重複處理。":""}\n房務工作台：${url}\n請使用已授權的房務帳號登入；收件信箱不會自動取得登入權限。`};
 }
 
 export async function replaceStayReminderJobs(tx,before,after,settings,now){
+  settings=configuredReminderSettings(settings||{});
+  await planChangeNotice(tx,before,after,settings,"rescheduled",now);
   const kinds=NOTIFICATION_KINDS,revision=stayKey(before);
   const old=await Promise.all(kinds.map(kind=>tx.get(`housekeepingNotifications/HN${revision}-${kind}`)));
   // Only stays enrolled by a new confirmation in this activation can reschedule.
@@ -66,4 +73,16 @@ export async function replaceStayReminderJobs(tx,before,after,settings,now){
     if(event){if(["sent","manually_verified"].includes(event.status))job.status="suppressed";else if(["sending","delivery_uncertain"].includes(event.status))job.status="held_for_review";job.previousJobId=event.notificationId;}
     tx.set(`housekeepingNotifications/${job.id}`,job);
   });
+}
+
+export async function planChangeNotice(tx,before,after,settings,kind,now=new Date()){
+  settings=configuredReminderSettings(settings||{});
+  if(!settings.enabled||!settings.ready||before.isTest||before.housekeepingNotificationActivationId!==settings.activationId)return;
+  const revision=stayKey(after),id=`HN${revision}-${kind}`,existing=await tx.get(`housekeepingNotifications/${id}`);
+  if(existing)return;
+  const audience=await tx.get(`housekeepingAudiences/${before.id}`);
+  const old=await Promise.all(NOTIFICATION_KINDS.map(k=>tx.get(`housekeepingNotifications/HN${stayKey(before)}-${k}`)));
+  const informed=audience?.activationId===settings.activationId||old.some(j=>["sent","sending","delivery_uncertain","manually_verified","held_for_review"].includes(j?.status));
+  if(!informed)return;
+  tx.set(`housekeepingNotifications/${id}`,{id,bookingId:after.id,startDate:after.startDate,endDate:after.endDate,previousStartDate:before.startDate,previousEndDate:before.endDate,revision,activationId:settings.activationId,kind,status:"pending",dueAt:now.toISOString(),createdAt:now.toISOString()});
 }
