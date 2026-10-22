@@ -118,3 +118,4 @@ button:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid #9b
 }
 
 [hidden]{display:none!important}
+.inventory-type-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}.inventory-type-tabs .active{background:var(--forest);color:white}.inventory-state-summary{overflow-wrap:anywhere}.inventory-row>*,#inventoryHistory>*{min-width:0;overflow-wrap:anywhere}#inventoryPanel [hidden]{display:none!important}#inventoryPanel input[readonly]{background:#eee}#inventoryPanel button{min-height:44px}#inventoryHistory .history-row{align-items:start}#inventoryPanel .ops-card{align-content:start}

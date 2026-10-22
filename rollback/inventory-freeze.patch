@@ -1,0 +1,39 @@
+diff --git a/admin/admin.js b/admin/admin.js
+--- a/admin/admin.js
++++ b/admin/admin.js
+@@ -1107,2 +1107,4 @@
+ async function saveInventoryEdit(event){
++  event.preventDefault();
++  return message('#inventoryEditMessage','庫存維護中，暫停寫入；目前僅供查閱。','error');
+   event.preventDefault();
+@@ -1152,2 +1154,3 @@
+ async function confirmInventoryDelete(){
++  return message('#inventoryDeleteMessage','庫存維護中，暫停刪除；歷史與數量均保留。','error');
+   if(inventoryDeleting||!deletingInventoryId)return;
+@@ -1213,2 +1216,3 @@
+ async function importInventoryFile(){
++  return message('#inventoryImportMessage','庫存維護中，暫停匯入。','error');
+   const input=$("#inventoryImportFile"),file=input?.files?.[0];if(!file)return message("#inventoryImportMessage","請先選擇 Excel 或 CSV 檔案。","error");
+@@ -1244,2 +1248,4 @@
+ async function saveInventoryItem(e){
++  e.preventDefault();
++  return message('#inventoryItemMessage','庫存維護中，暫停新增。','error');
+   e.preventDefault();return runBusyAction('inventoryCreate',e.target,async()=>{
+@@ -1257,2 +1263,4 @@
+ async function saveStockMovement(e){
++  e.preventDefault();
++  return message('#stockMessage','庫存維護中，暫停異動；目前僅供查閱。','error');
+   e.preventDefault();return runBusyAction('stockMovement',e.target,async()=>{
+diff --git a/housekeeping/housekeeping.js b/housekeeping/housekeeping.js
+--- a/housekeeping/housekeeping.js
++++ b/housekeeping/housekeeping.js
+@@ -54,2 +54,4 @@
+ async function saveMovement(e){
++  e.preventDefault();
++  return msg('#stockMessage','庫存維護中，暫停異動；目前僅供查閱。','error');
+   e.preventDefault();const item=inventory.find(i=>i.id===$('#stockItem').value);if(!item)throw new Error('請選已分類備品。');
+@@ -62,2 +64,4 @@
+ async function saveItem(e){
++  e.preventDefault();
++  return msg('#itemMessage','庫存維護中，暫停新增。','error');
+   e.preventDefault();const name=$('#itemName').value.trim(),unit=$('#itemUnit').value.trim(),quantity=nonnegative($('#itemQty').value),minQuantity=nonnegative($('#itemMin').value,'安全庫存');

@@ -1,4 +1,6 @@
 import { runBusyAction } from "./action-state.js";
+import {INVENTORY_TYPES,STATES,STATE_KEYS,inventoryType,nonnegative,classifyInventory,movementOptions,inventorySummary,lowInventory,inventoryError} from '../js/inventory-model.js';
+import {commitMovement,commitNewInventory,movementAttempt} from '../js/inventory-store.js';
 import {installHousekeepingAdmin} from "./housekeeping-panel.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
@@ -867,7 +869,7 @@ function switchAdminWorkspace(name){
   names.forEach(panel=>$(`#${panel}Panel`).classList.toggle("hidden",panel!==name));if($("#workspaceMenu"))$("#workspaceMenu").value=name;
   if(name==="operations")loadOperations().catch(console.error);
   if(name==="reports")loadReports().catch(console.error);
-  if(name==="inventory")loadInventoryManagement().catch(console.error);
+  if(name==="inventory")loadInventoryManagement().catch(e=>message('#inventoryItemMessage',inventoryError(e,'讀取'),'error'));
   if(name==="pricing")loadPricing();if(name==="library")loadLibrary();if(name==="housekeeping")housekeepingAdmin?.load();
 }
 function bindEvents() {
@@ -911,9 +913,15 @@ function bindEvents() {
   $("#addSpecialRate").addEventListener("click",()=>{pricingSpecialRanges.push(newSpecialRate());renderSpecialRates();});
   $("#refreshOperations")?.addEventListener("click",()=>loadOperations());
   $("#refreshReports")?.addEventListener("click",()=>loadReports());
-  $("#refreshInventory")?.addEventListener("click",()=>loadInventoryManagement());
+  $("#refreshInventory")?.addEventListener("click",()=>loadInventoryManagement().then(()=>message('#inventoryItemMessage','庫存清單已重新整理。','success')).catch(e=>message('#inventoryItemMessage',inventoryError(e,'讀取'),'error')));
+  document.querySelectorAll('[data-inventory-type]').forEach(button=>button.addEventListener('click',()=>{inventoryFilter=button.dataset.inventoryType;renderInventory();}));
+  $("#stockItem")?.addEventListener('change',fillMovementOptions);
+  syncTypeFields('');
+  $("#inventoryType")?.addEventListener('change',()=>syncTypeFields(''));
+  $("#editInventoryType")?.addEventListener('change',()=>syncTypeFields('edit'));
+  $("#inventoryDeleteDialog")?.addEventListener('cancel',e=>{if(inventoryDeleting)e.preventDefault();else closeInventoryDeleteDialog();});
   $("#downloadInventoryTemplate")?.addEventListener("click",downloadInventoryTemplate);
-  $("#importInventoryFile")?.addEventListener("click",importInventoryFile);
+  $("#importInventoryFile")?.addEventListener("click",()=>runBusyAction('inventoryImport',$('#inventoryPanel'),importInventoryFile,e=>message('#inventoryImportMessage',inventoryError(e),'error')));
   $("#inventoryItemForm")?.addEventListener("submit",saveInventoryItem);
   $("#inventoryEditForm")?.addEventListener("submit",saveInventoryEdit);
   $("#closeInventoryEdit")?.addEventListener("click",closeInventoryEditDialog);
@@ -1018,7 +1026,25 @@ function setOperationsDefaultDates(){const today=new Date().toLocaleDateString("
 function financeStatusFor(b,paid){const total=Number(b.totalAmount??b.quotedTotal??0)||0,dep=Number(b.depositRequired||0)||0;if(b.status==="cancelled")return"已取消";if(b.status!=="confirmed"){if(!(dep>0))return"待設定訂金";if(paid>=dep)return"訂金已收／待後台確認";return"待收訂金";}if(total>0&&paid>=total)return"已結清";if(paid>0)return"部分付款／待尾款";return"待收款";}
 function bookingLabel(b){return `${b.startDate||"—"}｜${b.guestName||"未填"}｜${b.id}`;}
 function fillBookingSelects(){const options=['<option value="">不綁定訂單</option>',...opsBookings.map(b=>`<option value="${esc(b.id)}">${esc(bookingLabel(b))}</option>`)].join("");["#expenseBooking"].forEach(sel=>{if($(sel))$(sel).innerHTML=options;});if($("#opsPaymentBooking"))$("#opsPaymentBooking").innerHTML=['<option value="">請選訂單</option>',...opsBookings.map(b=>`<option value="${esc(b.id)}">${esc(bookingLabel(b))}</option>`)].join("");}
-function fillInventorySelect(){if($("#stockItem"))$("#stockItem").innerHTML=['<option value="">請選備品</option>',...opsInventory.map(i=>`<option value="${esc(i.id)}">${esc(i.name)}（${Number(i.quantity)||0} ${esc(i.unit||"")}）</option>`)].join("");}
+function fillInventorySelect(){if($("#stockItem"))$("#stockItem").innerHTML=['<option value="">請選已分類備品</option>',...opsInventory.filter(i=>inventoryType(i)!=='unclassified').map(i=>`<option value="${esc(i.id)}">${esc(i.name)}（${INVENTORY_TYPES[inventoryType(i)]}・${Number(i.quantity)||0} ${esc(i.unit||"")}）</option>`)].join("");fillMovementOptions();}
+function fillMovementOptions(){
+  const item=opsInventory.find(i=>i.id===$('#stockItem')?.value);
+  $('#stockType').innerHTML=movementOptions(item||{}).map(x=>`<option value="${x.id}">${esc(x.label)}</option>`).join('');
+  $('#stockUnit').textContent=item?`數量單位：${item.unit}。${inventorySummary(item)}`:'先分類，再登記動作；單位不自動換算。';
+  $('#stockQty').step=inventoryType(item||{})==='consumable'?'0.01':'1';
+  $('#stockQty').min=inventoryType(item||{})==='consumable'?'0.01':'1';
+}
+let inventoryFilter='unclassified',inventoryDeleting=false,inventoryHistory=[];
+function syncTypeFields(prefix){
+  const edit=prefix==='edit',type=$(edit?'#editInventoryType':'#inventoryType').value;
+  const state=$(edit?'#editInventoryInitialState':'#inventoryInitialState');
+  const previous=state.value;state.innerHTML='<option value="">請選起始狀態</option>'+(STATE_KEYS[type]||[]).filter(k=>k!=='retired').map(k=>`<option value="${k}">${STATES[k]}</option>`).join('');
+  if([...state.options].some(x=>x.value===previous))state.value=previous;
+  state.closest('label').hidden=!STATE_KEYS[type]||(edit&&inventoryType(opsInventory.find(i=>i.id===editingInventoryId)||{})!=='unclassified');
+  state.required=!state.closest('label').hidden;
+  document.querySelectorAll(edit?'[data-edit-asset-field]':'[data-asset-field]').forEach(x=>x.hidden=type!=='asset');
+  $(edit?'#editInventoryMin':'#inventoryMin').closest('label').hidden=type!=='consumable';
+}
 async function readCollection(name){const snap=await getDocs(collection(db,name));return snap.docs.map(d=>({id:d.id,...d.data()}));}
 async function loadOperations(){
   if(!db)return; setOperationsDefaultDates();
@@ -1031,12 +1057,20 @@ async function loadOperations(){
 }
 function renderInventory(){
   const list=$("#inventoryList"); if(!list)return;
-  list.innerHTML=opsInventory.length?opsInventory.map(i=>{
-    const qty=Number(i.quantity)||0,min=Number(i.minQuantity)||0,isLow=qty<=min;
-    return `<div class="inventory-row ${isLow?"low":""}" data-inventory-id="${esc(i.id)}"><strong>${esc(i.name||"未命名備品")}</strong><span>庫存 ${qty} ${esc(i.unit||"")}</span><span>安全庫存 ${min} ${esc(i.unit||"")}</span><small>${isLow?"⚠ 低庫存":"庫存正常"}</small><div class="inventory-row-actions"><button type="button" class="secondary inventory-edit" data-id="${esc(i.id)}">編輯</button><button type="button" class="danger small inventory-delete" data-id="${esc(i.id)}">刪除</button></div></div>`;
-  }).join(""):"<p class='muted'>尚未建立備品。</p>";
+  document.querySelectorAll('[data-inventory-type]').forEach(b=>{const active=b.dataset.inventoryType===inventoryFilter;b.setAttribute('aria-pressed',String(active));b.classList.toggle('active',active);});
+  const items=opsInventory.filter(i=>inventoryType(i)===inventoryFilter);
+  list.innerHTML=items.length?items.map(i=>{
+    const qty=Number(i.quantity)||0,isLow=lowInventory(i),type=inventoryType(i);
+    return `<div class="inventory-row ${isLow?'low':''}" data-inventory-id="${esc(i.id)}"><strong>${esc(i.name||'未命名備品')}</strong><span>${type==='unclassified'?'原庫存':'現有總數'} ${qty} ${esc(i.unit||'')}</span><span class="inventory-state-summary">${esc(inventorySummary(i))}${type==='asset'?`<br>位置：${esc(i.location||'未填')}・購入：${esc(i.purchasedDate||'未填')}`:''}</span><small>${isLow?'⚠ 低庫存':INVENTORY_TYPES[type]||'待分類'}</small><div class="inventory-row-actions"><button type="button" class="secondary inventory-edit" data-id="${esc(i.id)}">${type==='unclassified'?'編輯／分類':'編輯'}</button><button type="button" class="danger small inventory-delete" data-id="${esc(i.id)}">刪除</button></div></div>`;
+  }).join(''):"<p class='muted'>此類型尚無備品。</p>";
+  $('#inventoryHistory').innerHTML=inventoryHistory.slice(0,40).map(i=>`<article class="history-row"><strong>${esc(i.itemName||i.itemId)}</strong><span>${esc(i.actionLabel||({in:'進貨',out:'領用／消耗'}[i.type||i.action])||'資料更新')} ${esc(i.quantity??'')} ${esc(i.unit||'（舊紀錄未記單位）')}</span><span>${esc(i.date||'')} ${esc(i.note||'')}</span><small>${esc(i.location||'')}${esc(metadataChanges(i))}</small></article>`).join('')||'<p class="muted">尚無異動紀錄。</p>';
   list.querySelectorAll(".inventory-edit").forEach(btn=>btn.addEventListener("click",()=>editInventoryItem(btn.dataset.id)));
   list.querySelectorAll(".inventory-delete").forEach(btn=>btn.addEventListener("click",()=>deleteInventoryItem(btn.dataset.id)));
+}
+function metadataChanges(history){
+  if(!history.beforeMetadata)return '';
+  const labels={name:'品名',unit:'單位',minQuantity:'安全庫存',unitCost:'單位成本',category:'分類',note:'備註',location:'位置／房間',purchasedDate:'購入日期'};
+  return Object.entries(history.afterMetadata||{}).filter(([key,value])=>history.beforeMetadata[key]!==value).map(([key,value])=>`${labels[key]||'資料'}：${history.beforeMetadata[key]??'未填'} → ${value||'未填'}`).join('；');
 }
 
 function closeInventoryEditDialog(){
@@ -1060,6 +1094,11 @@ async function editInventoryItem(id){
   $("#editInventoryCost").value = String(Number(item.unitCost) || 0);
   $("#editInventoryCategory").value = item.category || "";
   $("#editInventoryNote").value = item.note || "";
+  const type=inventoryType(item),typed=type!=='unclassified';
+  $('#editInventoryType').value=typed?type:'';$('#editInventoryType').disabled=typed;
+  $('#editInventoryQty').readOnly=true;$('#editInventoryUnit').readOnly=Boolean(item.unit);
+  $('#editInventoryLocation').value=item.location||'';$('#editInventoryPurchasedDate').value=item.purchasedDate||'';
+  syncTypeFields('edit');
   message("#inventoryEditMessage", "");
   dialog.showModal();
   setTimeout(() => $("#editInventoryName")?.focus(), 30);
@@ -1067,35 +1106,35 @@ async function editInventoryItem(id){
 
 async function saveInventoryEdit(event){
   event.preventDefault();
-  if(!editingInventoryId) return;
-  const name = $("#editInventoryName").value.trim();
-  const unit = $("#editInventoryUnit").value.trim();
-  const quantity = Number($("#editInventoryQty").value);
-  const min = Number($("#editInventoryMin").value);
-  const cost = Number($("#editInventoryCost").value);
-  const category = $("#editInventoryCategory").value.trim();
-  const note = $("#editInventoryNote").value.trim();
-  if(!name || !unit || quantity < 0 || min < 0 || cost < 0 || !Number.isFinite(quantity) || !Number.isFinite(min) || !Number.isFinite(cost)) {
-    return message("#inventoryEditMessage", "請完整填寫資料，且數值不可小於 0。", "error");
-  }
-  await setDoc(doc(db, "inventoryItems", editingInventoryId), {
-    name,
-    unit,
-    quantity,
-    minQuantity: min,
-    unitCost: cost,
-    category,
-    note,
-    updatedAt: serverTimestamp(),
-    updatedBy: auth.currentUser.uid
-  }, { merge: true });
-  const updatedName = name;
-  closeInventoryEditDialog();
-  await loadInventoryManagement();
-  message("#inventoryItemMessage", `已更新「${updatedName}」。`, "success");
+  return runBusyAction('inventoryEdit',event.target,async()=>{
+    const itemId=editingInventoryId;if(!itemId)return;
+    const displayed=opsInventory.find(i=>i.id===itemId);
+    const name=$('#editInventoryName').value.trim(),unit=$('#editInventoryUnit').value.trim();
+    const min=nonnegative($('#editInventoryMin').value,'安全庫存'),cost=nonnegative($('#editInventoryCost').value,'單位成本');
+    if(!name||!unit)throw new Error('請填寫品名與單位。');
+    const type=$('#editInventoryType').value,initialState=$('#editInventoryInitialState').value;
+    const metadata={name,unit,minQuantity:min,unitCost:cost,category:$('#editInventoryCategory').value.trim(),note:$('#editInventoryNote').value.trim()};
+    if(type==='asset'){metadata.location=$('#editInventoryLocation').value.trim();metadata.purchasedDate=$('#editInventoryPurchasedDate').value;}
+    const historyRef=doc(db,'inventoryTransactions',movementAttempt(event.target,{itemId,type,initialState,metadata}));
+    try{await runTransaction(db,async tx=>{
+      if((await tx.get(historyRef)).exists())return;
+      const ref=doc(db,'inventoryItems',itemId),snap=await tx.get(ref);if(!snap.exists())throw new Error('找不到備品。');
+      const item=snap.data(),existing=inventoryType(item);
+      if(item.unit&&unit!==item.unit)throw new Error('單位不可直接變更，請保留原單位；不同規格請另建備品。');
+      if(existing==='unclassified'&&type&&Number(item.quantity)!==Number(displayed?.quantity))throw new Error('數量已變更，請重新整理後核對起始狀態。');
+      if(existing!=='unclassified'&&(unit!==item.unit||type!==existing))throw new Error('類型與單位不可直接變更，請重新整理核對。');
+      const classified=existing==='unclassified'&&type?classifyInventory(item,type,initialState):{};
+      const beforeMetadata=Object.fromEntries(Object.keys(metadata).map(k=>[k,item[k]??null]));
+      tx.set(ref,{...metadata,...classified,updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid},{merge:true});
+      tx.set(historyRef,{itemId,itemName:name,type:'metadata',actionLabel:classified.inventoryType?'手動分類':'資料更新',inventoryType:classified.inventoryType||existing,beforeType:existing,unit,beforeQuantity:item.quantity??0,afterQuantity:item.quantity??0,beforeStates:item.stateCounts??null,afterStates:classified.stateCounts??item.stateCounts??null,beforeMetadata,afterMetadata:metadata,date:new Date().toLocaleDateString('en-CA'),createdBy:auth.currentUser.uid,createdAt:serverTimestamp()});
+    });}catch(error){if(!error.code||error.code==='permission-denied')delete event.target.inventoryAttempt;throw error;}
+    delete event.target.inventoryAttempt;if(type)inventoryFilter=type;closeInventoryEditDialog();
+    await refreshAfterInventorySave('#inventoryItemMessage','備品資料已更新。');
+  },e=>message('#inventoryEditMessage',inventoryError(e),'error'));
 }
 
 function closeInventoryDeleteDialog(){
+  if(inventoryDeleting)return;
   deletingInventoryId = "";
   const dialog = $("#inventoryDeleteDialog");
   if(dialog?.open) dialog.close();
@@ -1104,29 +1143,29 @@ function closeInventoryDeleteDialog(){
 function deleteInventoryItem(id){
   const item = opsInventory.find(x => x.id === id); if(!item)return;
   deletingInventoryId = id;
+  message("#inventoryDeleteMessage", "");
   const qty = Number(item.quantity) || 0;
   $("#inventoryDeleteText").textContent = `「${item.name || "此備品"}」目前庫存 ${qty} ${item.unit || ""}。刪除後將不再出現在庫存清單中。`;
   $("#inventoryDeleteDialog")?.showModal();
 }
 
 async function confirmInventoryDelete(){
-  if(!deletingInventoryId) return;
-  const item = opsInventory.find(x => x.id === deletingInventoryId);
-  if(!item) return closeInventoryDeleteDialog();
-  const id = deletingInventoryId;
-  const name = item.name || "備品";
-  const button = $("#confirmInventoryDelete");
-  if(button){ button.disabled = true; button.textContent = "刪除中…"; }
+  if(inventoryDeleting||!deletingInventoryId)return;
+  const item=opsInventory.find(x=>x.id===deletingInventoryId);if(!item)return closeInventoryDeleteDialog();
+  const id=deletingInventoryId,name=item.name||'備品';inventoryDeleting=true;
+  const button=$('#confirmInventoryDelete');button.textContent='刪除中…';
+  $('#inventoryDeleteDialog').querySelectorAll('button').forEach(b=>b.disabled=true);
   try{
-    await deleteDoc(doc(db,"inventoryItems",id));
-    closeInventoryDeleteDialog();
-    await loadInventoryManagement();
-    message("#inventoryItemMessage",`已刪除「${name}」。歷史進出庫紀錄仍保留。`,"success");
-  }catch(error){
-    console.error(error);
-    message("#inventoryItemMessage","刪除失敗，請確認 Firestore Rules 是否已發布。","error");
+    try{await deleteDoc(doc(db,'inventoryItems',id));}
+    catch(error){console.error(error);message('#inventoryDeleteMessage',inventoryError(error,'刪除'),'error');return;}
+    // Commit succeeded. Remove locally before refreshing; never resend deletion because a read failed.
+    deletingInventoryId='';$('#inventoryDeleteDialog').close();
+    opsInventory=opsInventory.filter(x=>x.id!==id);fillInventorySelect();renderInventory();
+    message('#inventoryItemMessage','已刪除「'+name+'」。歷史紀錄仍保留。','success');
+    try{await loadInventoryManagement();}
+    catch(error){message('#inventoryItemMessage','已刪除「'+name+'」，但清單刷新失敗（'+(error.code||'unknown')+'）。請按重新整理，無須再次刪除。','error');}
   }finally{
-    if(button){ button.disabled = false; button.textContent = "確認刪除"; }
+    inventoryDeleting=false;button.textContent='確認刪除';$('#inventoryDeleteDialog').querySelectorAll('button').forEach(b=>b.disabled=false);
   }
 }
 
@@ -1169,7 +1208,7 @@ async function parseXlsx(file){
 function rowsToInventory(rows){
   if(rows.length<2)throw new Error("清單至少需要標題列與一筆產品資料。");
   const map=inventoryFieldMap(rows[0]);if(map.name===undefined)throw new Error("找不到「品名」欄位。");
-  return rows.slice(1).map(r=>({name:String(r[map.name]??"").trim(),unit:String(r[map.unit]??"").trim(),quantity:map.quantity===undefined?null:Number(r[map.quantity]),minQuantity:map.minQuantity===undefined?null:Number(r[map.minQuantity]),unitCost:map.unitCost===undefined?null:Number(r[map.unitCost]),category:String(r[map.category]??"").trim(),note:String(r[map.note]??"").trim()})).filter(x=>x.name).map(x=>({...x,quantity:Number.isFinite(x.quantity)?Math.max(0,x.quantity):null,minQuantity:Number.isFinite(x.minQuantity)?Math.max(0,x.minQuantity):0,unitCost:Number.isFinite(x.unitCost)?Math.max(0,x.unitCost):0}));
+  return rows.slice(1).map(r=>({name:String(r[map.name]??"").trim(),unit:String(r[map.unit]??"").trim(),quantity:map.quantity===undefined?null:Number(r[map.quantity]),minQuantity:map.minQuantity===undefined?null:Number(r[map.minQuantity]),unitCost:map.unitCost===undefined?null:Number(r[map.unitCost]),category:String(r[map.category]??"").trim(),note:String(r[map.note]??"").trim()})).filter(x=>x.name).map(x=>({...x,quantity:x.quantity===null?null:nonnegative(x.quantity),minQuantity:x.minQuantity===null?0:nonnegative(x.minQuantity,'安全庫存'),unitCost:x.unitCost===null?0:nonnegative(x.unitCost,'單位成本')}));
 }
 async function importInventoryFile(){
   const input=$("#inventoryImportFile"),file=input?.files?.[0];if(!file)return message("#inventoryImportMessage","請先選擇 Excel 或 CSV 檔案。","error");
@@ -1177,33 +1216,53 @@ async function importInventoryFile(){
     message("#inventoryImportMessage","正在讀取並匯入產品清單…");
     const lower=file.name.toLowerCase(),rows=lower.endsWith(".xlsx")?await parseXlsx(file):parseCsv(await file.text());
     const items=rowsToInventory(rows);if(!items.length)throw new Error("清單中沒有可匯入的產品。");
-    const existing=new Map(opsInventory.map(i=>[String(i.name||"").trim().toLowerCase(),i]));let created=0,updated=0;
-    const batch=writeBatch(db);
-    for(const x of items){const found=existing.get(x.name.toLowerCase()),id=found?.id||crypto.randomUUID();const data={name:x.name,unit:x.unit||found?.unit||"個",minQuantity:(x.minQuantity??(Number(found?.minQuantity)||0)),unitCost:(x.unitCost??(Number(found?.unitCost)||0)),category:x.category||found?.category||"",note:x.note||found?.note||"",updatedAt:serverTimestamp(),updatedBy:auth.currentUser.uid};if(x.quantity!==null)data.quantity=x.quantity;else if(!found)data.quantity=0;if(found){updated++;batch.set(doc(db,"inventoryItems",id),data,{merge:true});}else{created++;batch.set(doc(db,"inventoryItems",id),{...data,createdBy:auth.currentUser.uid,createdAt:serverTimestamp()});}}
-    await batch.commit();input.value="";await loadInventoryManagement();message("#inventoryImportMessage",`匯入完成：新增 ${created} 項、更新 ${updated} 項。`,"success");
+    const names=new Set(opsInventory.map(i=>String(i.name||'').trim().toLowerCase()));
+    if(items.length>400)throw new Error('每次最多匯入 400 筆。');
+    for(const x of items){const key=x.name.toLowerCase();if(names.has(key))throw new Error('品名重複：'+x.name+'。整批未匯入，請使用編輯或異動登記。');names.add(key);}
+    const operationId=movementAttempt(input,items),refs=items.map((x,index)=>doc(db,'inventoryItems',operationId+'-'+index));
+    try{await runTransaction(db,async tx=>{
+      const snapshots=await Promise.all(refs.map(ref=>tx.get(ref)));
+      for(let index=0;index<items.length;index++)if(!snapshots[index].exists()){
+        const x=items[index];tx.set(refs[index],{...x,quantity:x.quantity??0,unit:x.unit||'個',createdBy:auth.currentUser.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
+      }
+    });}catch(error){if(!error.code||error.code==='permission-denied')delete input.inventoryAttempt;throw error;}
+    delete input.inventoryAttempt;input.value='';inventoryFilter='unclassified';
+    await refreshAfterInventorySave('#inventoryImportMessage','匯入完成：新增 '+items.length+' 項，請逐項核對分類。');
   }catch(e){console.error(e);message("#inventoryImportMessage",e?.message||"匯入失敗，請確認檔案格式。","error");}
 }
 async function loadInventoryManagement(){
   if(!db)return;
-  opsInventory=await readCollection("inventoryItems");
-  opsInventory.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"zh-Hant"));
-  fillInventorySelect(); renderInventory(); setOperationsDefaultDates();
+  const [items,historySnap]=await Promise.all([readCollection('inventoryItems'),getDocs(query(collection(db,'inventoryTransactions'),orderBy('createdAt','desc'),limit(40)))]);
+  opsInventory=items.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'zh-Hant'));
+  inventoryHistory=historySnap.docs.map(d=>({id:d.id,...d.data()}));
+  fillInventorySelect();renderInventory();setOperationsDefaultDates();
+}
+async function refreshAfterInventorySave(selector,text){
+  message(selector,text,'success');
+  try{await loadInventoryManagement();}catch(e){message(selector,text+' 清單刷新失敗，請重新整理，無須重送。('+ (e.code||'unknown')+')','error');}
 }
 async function saveInventoryItem(e){
-  e.preventDefault(); const name=$("#inventoryName").value.trim(),qty=Number($("#inventoryQty").value);
-  if(!name||qty<0)return message("#inventoryItemMessage","請填寫備品名稱與庫存。","error");
-  await setDoc(doc(db,"inventoryItems",crypto.randomUUID()),{name,unit:$("#inventoryUnit").value.trim(),quantity:qty,minQuantity:Number($("#inventoryMin").value)||0,unitCost:Number($("#inventoryCost").value)||0,createdBy:auth.currentUser.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
-  e.target.reset(); message("#inventoryItemMessage","備品已建立。","success"); await loadInventoryManagement();
+  e.preventDefault();return runBusyAction('inventoryCreate',e.target,async()=>{
+    const name=$('#inventoryName').value.trim(),unit=$('#inventoryUnit').value.trim(),quantity=nonnegative($('#inventoryQty').value);
+    if(!name||!unit)throw new Error('請填寫品名與單位。');
+    const type=$('#inventoryType').value,classified=classifyInventory({quantity},type,$('#inventoryInitialState').value);
+    const data={name,unit,quantity,...classified,minQuantity:nonnegative($('#inventoryMin').value,'安全庫存'),unitCost:nonnegative($('#inventoryCost').value,'單位成本')};
+    if(type==='asset'){data.location=$('#inventoryLocation').value.trim();data.purchasedDate=$('#inventoryPurchasedDate').value;}
+    const id=movementAttempt(e.target,data);
+    try{await commitNewInventory(db,auth.currentUser.uid,data,id);}catch(error){if(!error.code||error.code==='permission-denied')delete e.target.inventoryAttempt;throw error;}
+    delete e.target.inventoryAttempt;inventoryFilter=type;e.target.reset();syncTypeFields('');
+    await refreshAfterInventorySave('#inventoryItemMessage','備品已建立。');
+  },error=>message('#inventoryItemMessage',inventoryError(error),'error'));
 }
 async function saveStockMovement(e){
-  e.preventDefault(); const itemId=$("#stockItem").value,qty=Number($("#stockQty").value),type=$("#stockType").value;
-  if(!itemId||!(qty>0))return message("#stockMessage","請選備品並填寫數量。","error");
-  const refDoc=doc(db,"inventoryItems",itemId),snap=await getDoc(refDoc); if(!snap.exists())return message("#stockMessage","找不到備品。","error");
-  const item=snap.data(),before=Number(item.quantity)||0,after=type==="in"?before+qty:before-qty; if(after<0)return message("#stockMessage","庫存不足，不能扣成負數。","error");
-  const batch=writeBatch(db);
-  batch.set(refDoc,{quantity:after,updatedAt:serverTimestamp()},{merge:true});
-  batch.set(doc(db,"inventoryTransactions",crypto.randomUUID()),{itemId,itemName:item.name,type,quantity:qty,beforeQuantity:before,afterQuantity:after,date:$("#stockDate").value,note:$("#stockNote").value.trim(),createdBy:auth.currentUser.uid,createdAt:serverTimestamp()});
-  await batch.commit(); e.target.reset(); setOperationsDefaultDates(); message("#stockMessage","庫存已更新，進出庫紀錄已保存。","success"); await loadInventoryManagement();
+  e.preventDefault();return runBusyAction('stockMovement',e.target,async()=>{
+    const item=opsInventory.find(i=>i.id===$('#stockItem').value);if(!item)throw new Error('請選已分類備品。');
+    const input={itemId:item.id,unit:item.unit,action:$('#stockType').value,quantity:Number($('#stockQty').value),date:$('#stockDate').value,note:$('#stockNote').value.trim()};
+    const id=movementAttempt(e.target,input);
+    try{await commitMovement(db,auth.currentUser.uid,input,id);}catch(error){if(!error.code||error.code==='permission-denied')delete e.target.inventoryAttempt;throw error;}
+    delete e.target.inventoryAttempt;e.target.reset();setOperationsDefaultDates();fillMovementOptions();
+    await refreshAfterInventorySave('#stockMessage','庫存已更新，異動紀錄已保存。');
+  },error=>message('#stockMessage',inventoryError(error),'error'));
 }
 
 function paidFor(id){return opsPayments.filter(x=>x.bookingId===id).reduce((s,x)=>s+(x.type==="refund"?-1:1)*(Number(x.amount)||0),0);}
@@ -1469,10 +1528,10 @@ function renderFinanceReport(){
   if($("#financeExpensesReport"))$("#financeExpensesReport").innerHTML=reportTable(["日期","分類","訂單編號","金額","付款方式","備註"],expenseRows);
 }
 function renderInventoryReport(){
-  const rows=reportInventory.map(i=>{const qty=Number(i.quantity)||0,min=Number(i.minQuantity)||0,cost=Number(i.unitCost)||0;return [i.name||"",`${qty} ${i.unit||""}`,`${min} ${i.unit||""}`,twd(cost),twd(qty*cost),qty<=min?"低庫存":"正常"]});
-  const totalValue=reportInventory.reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.unitCost)||0),0),low=reportInventory.filter(i=>(Number(i.quantity)||0)<=(Number(i.minQuantity)||0)).length;
+  const rows=reportInventory.map(i=>{const qty=Number(i.quantity)||0,min=Number(i.minQuantity)||0,cost=Number(i.unitCost)||0;return [i.name||"",INVENTORY_TYPES[inventoryType(i)]||"待分類",`${qty} ${i.unit||""}`,inventoryType(i)==="consumable"?`${min} ${i.unit||""}`:"—",twd(cost),twd(qty*cost),lowInventory(i)?"低庫存":inventorySummary(i)]});
+  const totalValue=reportInventory.reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.unitCost)||0),0),low=reportInventory.filter(lowInventory).length;
   if($("#inventoryReportSummary"))$("#inventoryReportSummary").innerHTML=`<div class="report-stat"><span>備品種類</span><strong>${reportInventory.length} 項</strong></div><div class="report-stat"><span>低庫存</span><strong>${low} 項</strong></div><div class="report-stat"><span>庫存估值</span><strong>${twd(totalValue)}</strong></div>`;
-  if($("#inventoryReportTable"))$("#inventoryReportTable").innerHTML=reportTable(["品名","目前庫存","安全庫存","單位成本","庫存估值","狀態"],rows);
+  if($("#inventoryReportTable"))$("#inventoryReportTable").innerHTML=reportTable(["品名","類型","現有總數","安全庫存（消耗品）","單位成本","估值","狀態"],rows);
 }
 async function downloadFinanceExcel(){
   const start=$("#reportStartDate")?.value||"",end=$("#reportEndDate")?.value||"";
@@ -1490,8 +1549,8 @@ async function downloadFinanceExcel(){
   ]);}catch(e){ alert(`Excel 下載失敗：${e.message||e}`); }
 }
 async function downloadInventoryExcel(){
-  const rows=[["品名","目前庫存","單位","安全庫存","單位成本","庫存估值","狀態"],...reportInventory.map(i=>{const q=Number(i.quantity)||0,m=Number(i.minQuantity)||0,c=Number(i.unitCost)||0;return [i.name||"",q,i.unit||"",m,c,q*c,q<=m?"低庫存":"正常"]})];
-  try{ await saveXlsx("俐姐的家-庫存表.xlsx",[{name:"庫存表",rows,options:{headerRows:[0],currencyCols:[4,5],freezeRow:1,autoFilterRange:`A1:G${Math.max(1,rows.length)}`}}]); }catch(e){ alert(`Excel 下載失敗：${e.message||e}`); }
+  const rows=[["品名","類型","現有總數","單位","安全庫存（消耗品）","單位成本","庫存估值","狀態"],...reportInventory.map(i=>{const q=Number(i.quantity)||0,m=Number(i.minQuantity)||0,c=Number(i.unitCost)||0;return [i.name||"",INVENTORY_TYPES[inventoryType(i)]||"待分類",q,i.unit||"",inventoryType(i)==="consumable"?m:"",c,q*c,lowInventory(i)?"低庫存":inventorySummary(i)]})];
+  try{ await saveXlsx("俐姐的家-庫存表.xlsx",[{name:"庫存表",rows,options:{headerRows:[0],currencyCols:[5,6],freezeRow:1,autoFilterRange:`A1:H${Math.max(1,rows.length)}`}}]); }catch(e){ alert(`Excel 下載失敗：${e.message||e}`); }
 }
 
 function savePaymentRecord(event){event.preventDefault();return runBusyAction("savePaymentRecord",$("#paymentForm"),()=>perform_savePaymentRecord(event),error=>message("#opsPaymentMessage",`儲存失敗，輸入已保留：${error.message||error}`,"error"));}

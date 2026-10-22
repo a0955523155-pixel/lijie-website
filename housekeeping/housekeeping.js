@@ -1,7 +1,9 @@
+import {INVENTORY_TYPES,STATES,STATE_KEYS,inventoryType,classifyInventory,nonnegative,movementOptions,inventorySummary,lowInventory,inventoryError} from '/js/inventory-model.js';
+import {commitMovement,commitNewInventory,movementAttempt} from '/js/inventory-store.js';
 import {createHousekeepingReportForm,renderCompletedReport} from "./report-form.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import { getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged,setPersistence,browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
-import { getFirestore,collection,getDocs,doc,setDoc,serverTimestamp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+import { getFirestore,collection,getDocs } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 import { firebaseConfig,isConfigured } from "/js/config.js";
 const $=s=>document.querySelector(s);let auth,db,user,monthCursor=new Date(new Date().getFullYear(),new Date().getMonth(),1),bookings=[],inventory=[],calendarGeneration=0,calendarReady=false,selectedDay="";const STAFF_EMAIL="51bbsadmin@gmail.com",reportForms=new Map(),photoDisposers=[];
 function msg(sel,text,type=""){const el=$(sel);if(!el)return;el.textContent=text;el.className=`message ${type}`.trim()}
@@ -39,15 +41,42 @@ function renderDay(day){
 function escapeAttr(s){return String(s??"").replace(/[^0-9+()#*\-\s]/g,"")}
 function escapeHtml(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 async function loadInventory(){const snap=await getDocs(collection(db,"inventoryItems"));inventory=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"zh-Hant"));renderInventory()}
-function renderInventory(){const list=$("#inventoryList"),sel=$("#stockItem");list.replaceChildren();sel.innerHTML='<option value="">請選備品</option>';if(!inventory.length)list.innerHTML='<div class="inventory"><div>目前還沒有備品。</div></div>';for(const i of inventory){const qty=Number(i.quantity)||0,min=Number(i.minQuantity)||0;const el=document.createElement("article");el.className=`inventory${qty<=min&&min>0?" low":""}`;el.innerHTML=`<strong>${escapeHtml(i.name)}</strong><span class="qty">${qty} ${escapeHtml(i.unit||"")}</span><div class="meta">安全庫存 ${min} ${escapeHtml(i.unit||"")}${qty<=min&&min>0?" · ⚠️ 低庫存":""}</div>`;list.append(el);const o=document.createElement("option");o.value=i.id;o.textContent=`${i.name}（${qty} ${i.unit||""}）`;sel.append(o)}}
-async function saveMovement(e){e.preventDefault();const id=$("#stockItem").value,qty=Number($("#stockQty").value),action=$("#stockAction").value;if(!id||!(qty>0))return msg("#stockMessage","請選備品並輸入數量。","error");const item=inventory.find(x=>x.id===id);if(!item)return;const current=Number(item.quantity)||0,next=action==="in"?current+qty:current-qty;if(next<0)return msg("#stockMessage","庫存不足，請確認領用數量。","error");msg("#stockMessage","正在儲存…");await setDoc(doc(db,"inventoryItems",id),{...item,quantity:next,updatedAt:serverTimestamp(),updatedBy:user.uid},{merge:true});await setDoc(doc(collection(db,"inventoryTransactions")),{itemId:id,itemName:item.name,action,quantity:qty,beforeQuantity:current,afterQuantity:next,date:ymd(new Date()),note:$("#stockNote").value.trim(),createdBy:user.uid,createdAt:serverTimestamp()});e.target.reset();msg("#stockMessage","庫存已更新。","success");await loadInventory()}
-async function saveItem(e){e.preventDefault();const name=$("#itemName").value.trim(),unit=$("#itemUnit").value.trim(),quantity=Number($("#itemQty").value)||0,minQuantity=Number($("#itemMin").value)||0;if(!name||!unit)return msg("#itemMessage","請填寫備品名稱與單位。","error");await setDoc(doc(collection(db,"inventoryItems")),{name,unit,quantity,minQuantity,unitCost:0,createdBy:user.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});e.target.reset();msg("#itemMessage","備品已新增。","success");await loadInventory()}
+function renderInventory(){
+  const list=$('#inventoryList'),sel=$('#stockItem');list.replaceChildren();sel.innerHTML='<option value="">請選已分類備品</option>';
+  if(!inventory.length)list.innerHTML='<div class="inventory">目前還沒有備品。</div>';
+  for(const i of inventory){const el=document.createElement('article');el.className='inventory'+(lowInventory(i)?' low':'');
+    el.innerHTML='<strong>'+escapeHtml(i.name)+'</strong><span class="qty">'+(Number(i.quantity)||0)+' '+escapeHtml(i.unit||'')+'</span><div class="meta">'+(INVENTORY_TYPES[inventoryType(i)]||'待分類（請管理員核對）')+'・'+escapeHtml(inventorySummary(i))+'</div>';list.append(el);
+    if(inventoryType(i)!=='unclassified'){const o=document.createElement('option');o.value=i.id;o.textContent=i.name+'（'+i.unit+'）';sel.append(o);}
+  }fillMovementOptions();
+}
+function fillMovementOptions(){const item=inventory.find(i=>i.id===$('#stockItem').value);$('#stockAction').innerHTML=movementOptions(item||{}).map(x=>'<option value="'+x.id+'">'+x.label+'</option>').join('');$('#stockUnit').textContent=item?'單位：'+item.unit+'・'+inventorySummary(item):'待分類備品請由管理員分類後再操作。';$('#stockQty').step=inventoryType(item||{})==='consumable'?'0.01':'1';$('#stockQty').min=inventoryType(item||{})==='consumable'?'0.01':'1';}
+function syncItemType(){const type=$('#itemType').value;$('#itemInitialState').innerHTML='<option value="">請選起始狀態</option>'+(STATE_KEYS[type]||[]).filter(k=>k!=='retired').map(k=>'<option value="'+k+'">'+STATES[k]+'</option>').join('');$('#itemInitialState').closest('label').hidden=!STATE_KEYS[type];$('#itemInitialState').required=Boolean(STATE_KEYS[type]);document.querySelectorAll('[data-asset-field]').forEach(x=>x.hidden=type!=='asset');}
+async function saveMovement(e){
+  e.preventDefault();const item=inventory.find(i=>i.id===$('#stockItem').value);if(!item)throw new Error('請選已分類備品。');
+  const input={itemId:item.id,unit:item.unit,action:$('#stockAction').value,quantity:Number($('#stockQty').value),date:ymd(new Date()),note:$('#stockNote').value.trim()};
+  const id=movementAttempt(e.target,input);
+  try{await commitMovement(db,user.uid,input,id);}catch(error){if(!error.code||error.code==='permission-denied')delete e.target.inventoryAttempt;throw error;}
+  delete e.target.inventoryAttempt;e.target.reset();msg('#stockMessage','庫存與異動紀錄已保存。','success');
+  try{await loadInventory();}catch{msg('#stockMessage','已保存，清單刷新失敗，請重新整理，無須重送。','error');}
+}
+async function saveItem(e){
+  e.preventDefault();const name=$('#itemName').value.trim(),unit=$('#itemUnit').value.trim(),quantity=nonnegative($('#itemQty').value),minQuantity=nonnegative($('#itemMin').value,'安全庫存');
+  if(!name||!unit)throw new Error('請填寫品名與單位。');
+  const type=$('#itemType').value,classified=classifyInventory({quantity},type,$('#itemInitialState').value);
+  const data={name,unit,quantity,minQuantity,...classified,unitCost:0};
+  if(type==='asset'){data.location=$('#itemLocation').value.trim();data.purchasedDate=$('#itemPurchasedDate').value;}
+  const id=movementAttempt(e.target,data);
+  try{await commitNewInventory(db,user.uid,data,id);}catch(error){if(!error.code||error.code==='permission-denied')delete e.target.inventoryAttempt;throw error;}
+  delete e.target.inventoryAttempt;e.target.reset();syncItemType();msg('#itemMessage','備品已新增。','success');
+  try{await loadInventory();}catch{msg('#itemMessage','已新增，清單刷新失敗，請重新整理，無須重送。','error');}
+}
 function bind(){
+  $('#stockItem').addEventListener('change',fillMovementOptions);$('#itemType').addEventListener('change',syncItemType);syncItemType();
   $("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const email=$("#email").value.trim().toLowerCase();if(email!==STAFF_EMAIL)return msg("#loginMessage","此帳號沒有房務權限。","error");try{await signInWithEmailAndPassword(auth,email,$("#password").value);}catch{msg("#loginMessage","登入失敗，請確認帳號與密碼。","error");}});
   $("#logoutButton").addEventListener("click",()=>signOut(auth));$("#prevMonth").addEventListener("click",async()=>{monthCursor=new Date(monthCursor.getFullYear(),monthCursor.getMonth()-1,1);await fetchCalendar();});$("#nextMonth").addEventListener("click",async()=>{monthCursor=new Date(monthCursor.getFullYear(),monthCursor.getMonth()+1,1);await fetchCalendar();});$("#refreshCalendar").addEventListener("click",fetchCalendar);
   $("#refreshInventory").addEventListener("click",()=>loadInventory().catch(e=>msg("#stockMessage","庫存讀取失敗，請重試。","error")));$("#movementForm").addEventListener("submit",e=>withFormBusy(e,saveMovement,"#stockMessage"));$("#itemForm").addEventListener("submit",e=>withFormBusy(e,saveItem,"#itemMessage"));document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>switchWorkspace(b.dataset.tab)));document.querySelectorAll(".bottom-tab").forEach(b=>b.addEventListener("click",()=>switchWorkspace(b.dataset.go)));
 }
-function switchWorkspace(name){document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===name));document.querySelectorAll(".bottom-tab").forEach(x=>x.classList.toggle("active",x.dataset.go===name));$("#calendarPanel").classList.toggle("hidden",name!=="calendar");$("#inventoryPanel").classList.toggle("hidden",name!=="inventory");if(name==="inventory")loadInventory()}
+function switchWorkspace(name){document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===name));document.querySelectorAll(".bottom-tab").forEach(x=>x.classList.toggle("active",x.dataset.go===name));$("#calendarPanel").classList.toggle("hidden",name!=="calendar");$("#inventoryPanel").classList.toggle("hidden",name!=="inventory");if(name==="inventory")loadInventory().catch(()=>msg("#stockMessage","庫存讀取失敗，請重新整理。","error"))}
 async function init(){
   if(!isConfigured())return msg("#loginMessage","Firebase 尚未設定完成。","error");const app=initializeApp(firebaseConfig);auth=getAuth(app);db=getFirestore(app);await setPersistence(auth,browserLocalPersistence);bind();
   const params=new URLSearchParams(location.search),date=params.get("date");if(/^\d{4}-\d{2}-\d{2}$/.test(date||"")){selectedDay=date;const [y,m]=date.split("-").map(Number);monthCursor=new Date(y,m-1,1);}
@@ -55,4 +84,4 @@ async function init(){
 }
 init();
 
-async function withFormBusy(event,action,selector){event.preventDefault();const form=event.target;if(form.dataset.busy)return;form.dataset.busy="true";const controls=[...form.querySelectorAll("button")];controls.forEach(x=>x.disabled=true);try{await action(event);}catch{msg(selector,"儲存未完成，內容已保留，請再試一次。","error");}finally{delete form.dataset.busy;controls.forEach(x=>x.disabled=false);}}
+async function withFormBusy(event,action,selector){event.preventDefault();const form=event.target;if(form.dataset.busy)return;form.dataset.busy="true";const controls=[...form.querySelectorAll("button")];controls.forEach(x=>x.disabled=true);try{await action(event);}catch(error){msg(selector,inventoryError(error)+" 內容已保留。","error");}finally{delete form.dataset.busy;controls.forEach(x=>x.disabled=false);}}
